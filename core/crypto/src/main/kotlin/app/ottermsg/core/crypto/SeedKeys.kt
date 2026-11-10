@@ -11,4 +11,12 @@ object SeedKeys {
         val k = Hkdf.computeHkdf("HMACSHA256", seed, ByteArray(0), INFO_ACCOUNT.toByteArray(), 32)
         return Ed25519.keyPairFromSeed(k)
     }
+
+    const val INFO_IDENTITY = "otter/identity/v1"
+
+    /** 32-byte libsignal identity private key (Curve25519); public = 0x05 || X25519(priv). */
+    fun identityPrivate(seed: ByteArray): ByteArray {
+        require(seed.size == 32) { "seed must be 32 bytes" }
+        return Hkdf.computeHkdf("HMACSHA256", seed, ByteArray(0), INFO_IDENTITY.toByteArray(), 32)
+    }
 }

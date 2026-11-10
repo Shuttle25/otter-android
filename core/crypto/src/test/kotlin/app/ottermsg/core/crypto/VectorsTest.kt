@@ -37,6 +37,28 @@ class VectorsTest {
         assertEquals("chat.example.org", m.getNodes(0).getEndpoints(0).host)
     }
 
+    @Test fun authMessageMatchesGo() {
+        val m = AuthMessage.build(ByteArray(16) { (10 + it).toByte() }, ByteArray(32) { (20 + it).toByte() }, 1_800_000_000_000)
+        assertArrayEquals(hex(v.getValue("auth_message_hex")), m)
+    }
+
+    @Test fun inviteLinkFromGo() {
+        val link = v.getValue("invite_link")
+        val b = InviteLink.decode(link)
+        assertEquals("Мама", b.inviterName)
+        assertEquals(32, b.secret.size())
+        assertEquals(link, InviteLink.encode(b))
+        val m = ManifestVerifier.verify(b.manifest.toByteArray(), b.networkPub.toByteArray(), 0)
+        assertEquals(7L, m.version)
+    }
+
+    @Test fun identitySeedIsHkdf() {
+        val k = SeedKeys.identityPrivate(hex(v.getValue("seed_hex")))
+        assertEquals(32, k.size)
+        // a different info string than the account key
+        assertFalse(k.contentEquals(SeedKeys.accountKeyPair(hex(v.getValue("seed_hex"))).seed))
+    }
+
     @Test fun kotlinSignatureVerifiesWithKotlin() {
         val kp = SeedKeys.accountKeyPair(ByteArray(32) { it.toByte() })
         val rec = RecordCodec.sign(RecordCodec.body(
