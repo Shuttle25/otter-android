@@ -20,6 +20,6 @@ dependencies {
     implementation(libs.hilt.android); ksp(libs.hilt.compiler); implementation(libs.hilt.navigation.compose)
     implementation(libs.compose.material.icons); implementation(libs.androidx.activity.compose)
     testImplementation(libs.junit); testImplementation(libs.robolectric); testImplementation(libs.coroutines.test)
-    testImplementation(libs.compose.ui.test.junit4); debugImplementation(libs.compose.ui.test.manifest)
+    testImplementation(libs.compose.ui.test.junit4); testImplementation(libs.compose.ui.test.manifest)
     implementation(libs.zxing.embedded)
 }
