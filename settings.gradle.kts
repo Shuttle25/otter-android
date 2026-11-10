@@ -1,6 +1,9 @@
 pluginManagement {
     repositories { google(); mavenCentral(); gradlePluginPortal() }
 }
+plugins {
+    id("org.gradle.toolchains.foojay-resolver-convention") version "0.10.0"
+}
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
@@ -10,4 +13,8 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "otter-android"
-include(":app", ":core:proto", ":core:crypto", ":core:database", ":core:ui")
+include(
+    ":app",
+    ":core:proto", ":core:crypto", ":core:signal", ":core:network", ":core:database", ":core:data", ":core:ui",
+    ":feature:onboarding", ":feature:chats", ":feature:conversation",
+)

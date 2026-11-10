@@ -1,5 +1,5 @@
 plugins { alias(libs.plugins.kotlin.jvm) }
-kotlin { jvmToolchain(17) }
+kotlin { jvmToolchain(21) }
 dependencies {
     api(project(":core:proto"))
     implementation(libs.tink)

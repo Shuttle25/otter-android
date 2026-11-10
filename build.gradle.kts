@@ -10,11 +10,11 @@ plugins {
 }
 
 // Some JavaCompile tasks (e.g. Hilt's) default to the Gradle daemon JVM instead of the Kotlin
-// toolchain; pin them all to JDK 17 so builds work when JAVA_HOME is a JRE.
+// toolchain; pin them all to JDK 21 so builds work when JAVA_HOME is a JRE.
 subprojects {
     tasks.withType<JavaCompile>().configureEach {
         javaCompiler.set(project.extensions.getByType<JavaToolchainService>().compilerFor {
-            languageVersion.set(JavaLanguageVersion.of(17))
+            languageVersion.set(JavaLanguageVersion.of(21))
         })
     }
 }

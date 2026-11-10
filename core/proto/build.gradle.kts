@@ -2,7 +2,7 @@ plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.protobuf)
 }
-kotlin { jvmToolchain(17) }
+kotlin { jvmToolchain(21) }
 dependencies { api(libs.protobuf.javalite) }
 protobuf {
     protoc { artifact = libs.protobuf.protoc.get().toString() }
