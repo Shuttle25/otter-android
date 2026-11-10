@@ -19,18 +19,29 @@ import java.security.SecureRandom
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** What a conversation screen needs (seam for ViewModel tests). */
+interface ConversationStore {
+    fun observeMessages(conversationId: Long): Flow<List<MessageEntity>>
+    fun observeConversation(conversationId: Long): Flow<ConversationEntity?>
+    suspend fun sendText(conversationId: Long, text: String): Long?
+    suspend fun retry(localId: Long): Boolean
+    suspend fun deleteLocal(localId: Long)
+    suspend fun setDraft(conversationId: Long, draft: String)
+    suspend fun markConversationRead(conversationId: Long)
+}
+
 @Singleton
 class MessageRepository @Inject constructor(
     private val db: OtterDatabase, private val accounts: AccountRepository, private val outbox: Outbox, private val clock: Clock,
-) {
+) : ConversationStore {
     private val conversations = db.conversationDao()
     private val messages = db.messageDao()
     private val contacts = db.contactDao()
     private val rng = SecureRandom()
 
     fun observeSummaries(): Flow<List<ConversationSummary>> = conversations.observeSummaries()
-    fun observeMessages(conversationId: Long): Flow<List<MessageEntity>> = messages.observe(conversationId)
-    fun observeConversation(conversationId: Long): Flow<ConversationEntity?> = conversations.observe(conversationId)
+    override fun observeMessages(conversationId: Long): Flow<List<MessageEntity>> = messages.observe(conversationId)
+    override fun observeConversation(conversationId: Long): Flow<ConversationEntity?> = conversations.observe(conversationId)
 
     /** The direct conversation with a family member (created on first use). */
     suspend fun conversationWith(userId: ByteArray): Long {
@@ -39,7 +50,7 @@ class MessageRepository @Inject constructor(
     }
 
     /** Stores the message and its outbox item atomically; returns the local id, or null for blank text. */
-    suspend fun sendText(conversationId: Long, text: String): Long? {
+    override suspend fun sendText(conversationId: Long, text: String): Long? {
         val body = text.trim()
         if (body.isEmpty()) return null
         val me = accounts.require()
@@ -60,7 +71,7 @@ class MessageRepository @Inject constructor(
     }
 
     /** Re-queues a FAILED outgoing message with the same message_id. */
-    suspend fun retry(localId: Long): Boolean {
+    override suspend fun retry(localId: Long): Boolean {
         val now = clock.now()
         val ok = db.withTransaction {
             val m = messages.get(localId) ?: return@withTransaction false
@@ -75,11 +86,11 @@ class MessageRepository @Inject constructor(
         return ok
     }
 
-    suspend fun deleteLocal(localId: Long) = messages.delete(localId)
-    suspend fun setDraft(conversationId: Long, draft: String) = conversations.setDraft(conversationId, draft)
+    override suspend fun deleteLocal(localId: Long) { messages.delete(localId) }
+    override suspend fun setDraft(conversationId: Long, draft: String) { conversations.setDraft(conversationId, draft) }
 
     /** Clears unread and queues one READ receipt for incoming messages not yet reported as read. */
-    suspend fun markConversationRead(conversationId: Long) {
+    override suspend fun markConversationRead(conversationId: Long) {
         val queued = db.withTransaction {
             conversations.clearUnread(conversationId)
             val conv = conversations.get(conversationId) ?: return@withTransaction false

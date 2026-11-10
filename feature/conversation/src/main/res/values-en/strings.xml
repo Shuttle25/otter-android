@@ -1,0 +1,17 @@
+<resources>
+    <string name="conv_message_hint">Message</string>
+    <string name="conv_send">Send message</string>
+    <string name="conv_copy">Copy</string>
+    <string name="conv_delete">Delete for me</string>
+    <string name="conv_delete_confirm">The message will disappear only on this device.</string>
+    <string name="conv_delete_ok">Delete</string>
+    <string name="conv_cancel">Cancel</string>
+    <string name="conv_retry">Try again</string>
+    <string name="conv_undecryptable">Could not read the message. Trying to restore the connection</string>
+    <string name="conv_today">Today</string>
+    <string name="conv_yesterday">Yesterday</string>
+    <string name="conv_jump">Go to new messages</string>
+    <string name="conv_you">You</string>
+    <string name="conv_failed_hint">Not sent. Tap to try again</string>
+    <string name="conv_copied">Copied</string>
+</resources>

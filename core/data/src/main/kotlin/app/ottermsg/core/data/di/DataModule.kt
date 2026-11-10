@@ -3,6 +3,8 @@ package app.ottermsg.core.data.di
 import app.ottermsg.core.data.Clock
 import app.ottermsg.core.data.account.SeedVault
 import app.ottermsg.core.data.invite.OnlineApi
+import app.ottermsg.core.data.messaging.ConversationStore
+import app.ottermsg.core.data.messaging.MessageRepository
 import app.ottermsg.core.data.registration.NodeConnector
 import app.ottermsg.core.data.registration.Registrar
 import app.ottermsg.core.data.registration.Registration
@@ -32,4 +34,5 @@ object DataModule {
     @Provides @Singleton @ApplicationScope fun appScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     @Provides fun onlineApi(engine: SyncEngine): OnlineApi = engine
     @Provides fun registrar(r: Registration): Registrar = r
+    @Provides fun conversationStore(r: MessageRepository): ConversationStore = r
 }

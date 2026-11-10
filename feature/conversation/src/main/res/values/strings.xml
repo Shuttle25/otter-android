@@ -1,0 +1,17 @@
+<resources>
+    <string name="conv_message_hint">Сообщение</string>
+    <string name="conv_send">Отправить сообщение</string>
+    <string name="conv_copy">Копировать</string>
+    <string name="conv_delete">Удалить у меня</string>
+    <string name="conv_delete_confirm">Сообщение исчезнет только на этом устройстве.</string>
+    <string name="conv_delete_ok">Удалить</string>
+    <string name="conv_cancel">Отмена</string>
+    <string name="conv_retry">Повторить</string>
+    <string name="conv_undecryptable">Не удалось прочитать сообщение. Пробуем восстановить соединение</string>
+    <string name="conv_today">Сегодня</string>
+    <string name="conv_yesterday">Вчера</string>
+    <string name="conv_jump">Перейти к новым сообщениям</string>
+    <string name="conv_you">Вы</string>
+    <string name="conv_failed_hint">Не отправлено. Нажмите, чтобы повторить</string>
+    <string name="conv_copied">Скопировано</string>
+</resources>
