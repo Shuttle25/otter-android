@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.Flow
 /** The node's client API (docs/02 §4). Faked in core:data tests. */
 interface NodeApi {
     val events: Flow<Event>
+    /** node_id from this connection's hello (owner of one-time prekeys we upload here). */
+    suspend fun nodeId(): ByteArray
     suspend fun register(req: RegisterRequest)
     suspend fun login(userId: ByteArray, account: Ed25519.KeyPair)
     suspend fun manifest(): Record
@@ -32,6 +34,7 @@ interface NodeApi {
 
 class RemoteNodeApi(private val rpc: RpcClient, private val clock: () -> Long = System::currentTimeMillis) : NodeApi {
     override val events: Flow<Event> = rpc.events
+    override suspend fun nodeId(): ByteArray = rpc.hello.await().nodeId.toByteArray()
     private fun req(r: Record) = RecordRequest.newBuilder().setRecord(r).build()
 
     override suspend fun register(req: RegisterRequest) { rpc.call("register", req) }

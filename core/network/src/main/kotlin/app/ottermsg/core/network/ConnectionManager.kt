@@ -2,6 +2,8 @@ package app.ottermsg.core.network
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,14 +20,15 @@ sealed interface ConnectionState {
 }
 
 /**
- * Keeps one node connection alive while started. [onConnected] runs after hello (e.g. login + initial sync);
- * if it throws, the connection is dropped and retried.
+ * Keeps one node connection alive while started. [onConnected] runs after hello (e.g. login + initial sync)
+ * with a session scope as receiver that is cancelled when this connection ends; if it throws, the
+ * connection is dropped and retried.
  */
 class ConnectionManager(
     private val transport: Transport,
     private val urls: suspend () -> List<String>,
     private val scope: CoroutineScope,
-    private val onConnected: suspend (NodeApi) -> Unit,
+    private val onConnected: suspend CoroutineScope.(NodeApi) -> Unit,
     private val clock: () -> Long = System::currentTimeMillis,
     private val random: Random = Random.Default,
 ) {
@@ -58,10 +61,11 @@ class ConnectionManager(
                     val conn = transport.connect(url)
                     RpcClient(conn, scope).also { rpc = it }
                 } catch (e: Exception) { lastError = e.message ?: e.javaClass.simpleName; continue }
+                val session = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job]))
                 try {
                     withTimeout(10_000) { r.hello.await() }
                     val api = RemoteNodeApi(r, clock)
-                    onConnected(api)
+                    session.onConnected(api)
                     _state.value = ConnectionState.Online(api, url)
                     backoffMs = 1_000L
                     r.closed.await()
@@ -70,6 +74,7 @@ class ConnectionManager(
                     if (!scope.isActive) return
                     lastError = e.message ?: e.javaClass.simpleName
                 } finally {
+                    session.cancel()
                     r.close(); rpc = null
                 }
                 break // after a session ended (or failed after connect), restart from the first endpoint after backoff

@@ -16,9 +16,16 @@ import kotlinx.coroutines.flow.Flow
     @Query("""UPDATE messages SET status = :status WHERE message_id = :messageId AND outgoing = 1
               AND status < :status AND status != ${MessageStatus.FAILED}""")
     suspend fun advanceStatus(messageId: ByteArray, status: Int): Int
+    /** Like [advanceStatus] but only for an outgoing message in [conversationId] (receipts come from that peer). */
+    @Query("""UPDATE messages SET status = :status WHERE message_id = :messageId AND conversation_id = :conversationId
+              AND outgoing = 1 AND status < :status AND status != ${MessageStatus.FAILED}""")
+    suspend fun advanceStatusIn(conversationId: Long, messageId: ByteArray, status: Int): Int
+    @Query("SELECT * FROM messages WHERE message_id = :messageId") suspend fun byMessageId(messageId: ByteArray): MessageEntity?
     @Query("""UPDATE messages SET status = :status WHERE local_id = :localId AND status < :status AND status != ${MessageStatus.FAILED}""")
     suspend fun advanceStatusLocal(localId: Long, status: Int): Int
     @Query("UPDATE messages SET status = ${MessageStatus.FAILED} WHERE local_id = :localId") suspend fun markFailed(localId: Long)
+    @Query("UPDATE messages SET status = ${MessageStatus.PENDING} WHERE local_id = :localId AND status = ${MessageStatus.FAILED}")
+    suspend fun resetFailed(localId: Long): Int
     @Query("SELECT * FROM messages WHERE conversation_id = :cid AND outgoing = 0 AND kind = ${MessageKind.TEXT} AND read_receipt_sent = 0")
     suspend fun unreadReceiptsPending(cid: Long): List<MessageEntity>
     @Query("UPDATE messages SET read_receipt_sent = 1 WHERE local_id IN (:ids)") suspend fun markReadReceiptSent(ids: List<Long>)
