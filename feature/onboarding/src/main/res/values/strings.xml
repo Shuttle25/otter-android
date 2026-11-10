@@ -1,0 +1,37 @@
+<resources>
+    <string name="onb_welcome_title">Otter</string>
+    <string name="onb_welcome_text">Семейный мессенджер. Сообщения шифруются на телефоне и видны только участникам переписки.</string>
+    <string name="onb_welcome_join">Присоединиться по приглашению</string>
+    <string name="onb_invite_title">Приглашение</string>
+    <string name="onb_invite_text">Отсканируйте QR-код приглашения или вставьте ссылку, которую вам прислали.</string>
+    <string name="onb_invite_scan">Сканировать QR-код</string>
+    <string name="onb_invite_paste_label">Ссылка-приглашение</string>
+    <string name="onb_invite_continue">Продолжить</string>
+    <string name="onb_invite_invalid">Приглашение не распознано. Проверьте ссылку или попросите новую.</string>
+    <string name="onb_camera_denied">Для сканирования нужен доступ к камере. Можно вставить ссылку вручную.</string>
+    <string name="onb_invite_from">Вас приглашает %1$s</string>
+    <string name="onb_profile_title">Как вас называть</string>
+    <string name="onb_profile_name">Имя</string>
+    <string name="onb_profile_username">Имя пользователя</string>
+    <string name="onb_profile_username_hint">3–32 символа: латинские буквы, цифры и _</string>
+    <string name="onb_profile_name_required">Введите имя</string>
+    <string name="onb_profile_username_rule">Имя пользователя: 3–32 символа, латинские буквы, цифры и _</string>
+    <string name="onb_phrase_title">Фраза восстановления</string>
+    <string name="onb_phrase_text">Запишите эти 24 слова на бумаге и храните в надёжном месте. Они нужны, чтобы восстановить аккаунт на новом телефоне. Никому их не показывайте.</string>
+    <string name="onb_phrase_done">Я записал(а)</string>
+    <string name="onb_confirm_title">Проверка</string>
+    <string name="onb_confirm_text">Введите слова с указанными номерами.</string>
+    <string name="onb_confirm_word">Слово №%1$d</string>
+    <string name="onb_confirm_wrong">Слова не совпадают. Проверьте запись.</string>
+    <string name="onb_confirm_continue">Готово</string>
+    <string name="onb_registering">Создаём аккаунт…</string>
+    <string name="onb_err_username_taken">Это имя пользователя уже занято. Выберите другое.</string>
+    <string name="onb_err_invite_used">Это приглашение уже использовано. Попросите новое.</string>
+    <string name="onb_err_invite_expired">Срок приглашения истёк. Попросите новое.</string>
+    <string name="onb_err_network">Не удалось подключиться. Проверьте интернет и повторите.</string>
+    <string name="onb_err_unknown">Не получилось создать аккаунт. Повторите попытку.</string>
+    <string name="onb_retry">Повторить</string>
+    <string name="onb_back">Назад</string>
+    <string name="onb_welcome_privacy">Ваша учётная запись создаётся на этом телефоне. Номер телефона и почта не нужны.</string>
+    <string name="onb_scan_prompt">Наведите камеру на QR-код приглашения</string>
+</resources>

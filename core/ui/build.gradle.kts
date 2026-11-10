@@ -14,5 +14,6 @@ kotlin { jvmToolchain(21) }
 dependencies {
     api(platform(libs.compose.bom)); api(libs.compose.ui); api(libs.compose.material3)
     api(libs.compose.ui.tooling.preview); debugImplementation(libs.compose.ui.tooling)
+    api(libs.compose.material.icons)
     testImplementation(libs.junit)
 }

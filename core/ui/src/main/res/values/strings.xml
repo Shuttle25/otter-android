@@ -1,0 +1,8 @@
+<resources>
+    <string name="ui_back">Назад</string>
+    <string name="ui_status_pending">Ожидает отправки</string>
+    <string name="ui_status_sent">Отправлено</string>
+    <string name="ui_status_delivered">Доставлено</string>
+    <string name="ui_status_read">Прочитано</string>
+    <string name="ui_status_failed">Не отправлено</string>
+</resources>

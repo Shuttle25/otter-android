@@ -1,0 +1,37 @@
+<resources>
+    <string name="onb_welcome_title">Otter</string>
+    <string name="onb_welcome_text">A family messenger. Messages are encrypted on the phone and only the people in the conversation can read them.</string>
+    <string name="onb_welcome_join">Join with an invite</string>
+    <string name="onb_invite_title">Invite</string>
+    <string name="onb_invite_text">Scan the invite QR code or paste the link you were sent.</string>
+    <string name="onb_invite_scan">Scan QR code</string>
+    <string name="onb_invite_paste_label">Invite link</string>
+    <string name="onb_invite_continue">Continue</string>
+    <string name="onb_invite_invalid">This invite was not recognised. Check the link or ask for a new one.</string>
+    <string name="onb_camera_denied">Scanning needs camera access. You can paste the link instead.</string>
+    <string name="onb_invite_from">Invited by %1$s</string>
+    <string name="onb_profile_title">What should we call you</string>
+    <string name="onb_profile_name">Name</string>
+    <string name="onb_profile_username">Username</string>
+    <string name="onb_profile_username_hint">3–32 characters: Latin letters, digits and _</string>
+    <string name="onb_profile_name_required">Enter a name</string>
+    <string name="onb_profile_username_rule">Username: 3–32 characters, Latin letters, digits and _</string>
+    <string name="onb_phrase_title">Recovery phrase</string>
+    <string name="onb_phrase_text">Write these 24 words on paper and keep them somewhere safe. You need them to restore your account on a new phone. Never show them to anyone.</string>
+    <string name="onb_phrase_done">I have written it down</string>
+    <string name="onb_confirm_title">Check</string>
+    <string name="onb_confirm_text">Enter the words with these numbers.</string>
+    <string name="onb_confirm_word">Word #%1$d</string>
+    <string name="onb_confirm_wrong">The words do not match. Check what you wrote.</string>
+    <string name="onb_confirm_continue">Done</string>
+    <string name="onb_registering">Creating your account…</string>
+    <string name="onb_err_username_taken">This username is taken. Choose another one.</string>
+    <string name="onb_err_invite_used">This invite has already been used. Ask for a new one.</string>
+    <string name="onb_err_invite_expired">This invite has expired. Ask for a new one.</string>
+    <string name="onb_err_network">Could not connect. Check the internet and try again.</string>
+    <string name="onb_err_unknown">Could not create the account. Try again.</string>
+    <string name="onb_retry">Try again</string>
+    <string name="onb_back">Back</string>
+    <string name="onb_welcome_privacy">Your account is created on this phone. No phone number or email is needed.</string>
+    <string name="onb_scan_prompt">Point the camera at the invite QR code</string>
+</resources>
