@@ -1,14 +1,42 @@
 package app.ottermsg.core.database
 
+import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import app.ottermsg.core.database.dao.AccountDao
+import app.ottermsg.core.database.dao.ContactDao
+import app.ottermsg.core.database.dao.ConversationDao
 import app.ottermsg.core.database.dao.ManifestDao
+import app.ottermsg.core.database.dao.MessageDao
+import app.ottermsg.core.database.dao.OutboxDao
+import app.ottermsg.core.database.dao.SeenEnvelopeDao
+import app.ottermsg.core.database.dao.SettingsDao
+import app.ottermsg.core.database.dao.SignalKvDao
 import app.ottermsg.core.database.entity.AccountEntity
+import app.ottermsg.core.database.entity.ContactEntity
+import app.ottermsg.core.database.entity.ConversationEntity
 import app.ottermsg.core.database.entity.ManifestEntity
+import app.ottermsg.core.database.entity.MessageEntity
+import app.ottermsg.core.database.entity.OutboxEntity
+import app.ottermsg.core.database.entity.SeenEnvelopeEntity
+import app.ottermsg.core.database.entity.SettingEntity
+import app.ottermsg.core.database.entity.SignalKvEntity
 
-@Database(entities = [AccountEntity::class, ManifestEntity::class], version = 1, exportSchema = true)
+@Database(
+    entities = [AccountEntity::class, ManifestEntity::class, ContactEntity::class, ConversationEntity::class,
+        MessageEntity::class, OutboxEntity::class, SeenEnvelopeEntity::class, SignalKvEntity::class, SettingEntity::class],
+    version = 2,
+    exportSchema = true,
+    autoMigrations = [AutoMigration(from = 1, to = 2)],
+)
 abstract class OtterDatabase : RoomDatabase() {
     abstract fun accountDao(): AccountDao
     abstract fun manifestDao(): ManifestDao
+    abstract fun contactDao(): ContactDao
+    abstract fun conversationDao(): ConversationDao
+    abstract fun messageDao(): MessageDao
+    abstract fun outboxDao(): OutboxDao
+    abstract fun seenEnvelopeDao(): SeenEnvelopeDao
+    abstract fun signalKvDao(): SignalKvDao
+    abstract fun settingsDao(): SettingsDao
 }

@@ -27,4 +27,11 @@ object DatabaseModule {
     }
     @Provides fun accountDao(db: OtterDatabase) = db.accountDao()
     @Provides fun manifestDao(db: OtterDatabase) = db.manifestDao()
+    @Provides fun contactDao(db: OtterDatabase) = db.contactDao()
+    @Provides fun conversationDao(db: OtterDatabase) = db.conversationDao()
+    @Provides fun messageDao(db: OtterDatabase) = db.messageDao()
+    @Provides fun outboxDao(db: OtterDatabase) = db.outboxDao()
+    @Provides fun seenEnvelopeDao(db: OtterDatabase) = db.seenEnvelopeDao()
+    @Provides fun signalKvDao(db: OtterDatabase) = db.signalKvDao()
+    @Provides fun settingsDao(db: OtterDatabase) = db.settingsDao()
 }
