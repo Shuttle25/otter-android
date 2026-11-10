@@ -1,0 +1,29 @@
+<resources>
+    <string name="chats_title">Otter</string>
+    <string name="chats_settings">Settings</string>
+    <string name="chats_write">Write</string>
+    <string name="chats_empty">Your conversations will appear here. Tap “Write” to start.</string>
+    <string name="chats_offline">No connection. Messages will be sent automatically.</string>
+    <string name="chats_connecting">Connecting…</string>
+    <string name="chats_you">You: %1$s</string>
+    <string name="chats_undecryptable">Could not read the message</string>
+    <string name="chats_unread">%1$d unread</string>
+    <string name="newchat_title">New conversation</string>
+    <string name="newchat_empty">No one in the family yet. Invite your relatives and they will appear here.</string>
+    <string name="newchat_invite">Invite to the family</string>
+    <string name="invite_title">Invite</string>
+    <string name="invite_text">Show this QR code to a relative or send the link. They scan it when they first open Otter.</string>
+    <string name="invite_validity">Valid for 7 days, once</string>
+    <string name="invite_share">Share link</string>
+    <string name="invite_qr_description">Family invite QR code</string>
+    <string name="invite_error">Could not create an invite. Check the connection and try again.</string>
+    <string name="invite_retry">Try again</string>
+    <string name="settings_title">Settings</string>
+    <string name="settings_profile">Profile</string>
+    <string name="settings_family">Family</string>
+    <string name="settings_invite">Invite to the family</string>
+    <string name="settings_connection">Connection</string>
+    <string name="settings_online">Connected</string>
+    <string name="settings_connecting">Connecting…</string>
+    <string name="settings_offline">No connection</string>
+</resources>

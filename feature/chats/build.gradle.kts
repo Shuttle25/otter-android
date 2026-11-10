@@ -21,4 +21,5 @@ dependencies {
     implementation(libs.compose.material.icons); implementation(libs.androidx.activity.compose)
     testImplementation(libs.junit); testImplementation(libs.robolectric); testImplementation(libs.coroutines.test)
     testImplementation(libs.compose.ui.test.junit4); debugImplementation(libs.compose.ui.test.manifest)
+    implementation(libs.zxing.embedded)
 }

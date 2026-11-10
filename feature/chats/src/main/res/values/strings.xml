@@ -1,0 +1,29 @@
+<resources>
+    <string name="chats_title">Otter</string>
+    <string name="chats_settings">Настройки</string>
+    <string name="chats_write">Написать</string>
+    <string name="chats_empty">Здесь появятся ваши переписки. Нажмите «Написать», чтобы начать.</string>
+    <string name="chats_offline">Нет подключения. Сообщения отправятся автоматически.</string>
+    <string name="chats_connecting">Подключаемся…</string>
+    <string name="chats_you">Вы: %1$s</string>
+    <string name="chats_undecryptable">Не удалось прочитать сообщение</string>
+    <string name="chats_unread">%1$d непрочитанных</string>
+    <string name="newchat_title">Новая переписка</string>
+    <string name="newchat_empty">В семье пока никого нет. Пригласите родных — они появятся здесь.</string>
+    <string name="newchat_invite">Пригласить в семью</string>
+    <string name="invite_title">Приглашение</string>
+    <string name="invite_text">Покажите этот QR-код родственнику или отправьте ссылку. Он отсканирует код при первом запуске Otter.</string>
+    <string name="invite_validity">Действует 7 дней, один раз</string>
+    <string name="invite_share">Поделиться ссылкой</string>
+    <string name="invite_qr_description">QR-код приглашения в семью</string>
+    <string name="invite_error">Не удалось создать приглашение. Проверьте подключение и повторите.</string>
+    <string name="invite_retry">Повторить</string>
+    <string name="settings_title">Настройки</string>
+    <string name="settings_profile">Профиль</string>
+    <string name="settings_family">Семья</string>
+    <string name="settings_invite">Пригласить в семью</string>
+    <string name="settings_connection">Подключение</string>
+    <string name="settings_online">Подключено</string>
+    <string name="settings_connecting">Подключаемся…</string>
+    <string name="settings_offline">Нет подключения</string>
+</resources>
