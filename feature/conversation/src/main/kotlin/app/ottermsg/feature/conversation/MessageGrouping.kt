@@ -15,9 +15,16 @@ data class MessageUi(
     val event: GroupEvent? = null,
     /** Incoming message in a group: the author's name is shown at the start of a series. */
     val inGroup: Boolean = false,
+    /** Photo message (text = caption). */
+    val photo: PhotoUi? = null,
 ) {
     val isEvent: Boolean get() = event != null
 }
+
+/** What a photo bubble shows (guide §8–§9). */
+enum class PhotoState { Uploading, Ready, Remote, Downloading, Failed, Gone }
+
+data class PhotoUi(val width: Int, val height: Int, val state: PhotoState, val progress: Float? = null)
 
 sealed interface ConversationItem {
     val key: String

@@ -3,8 +3,13 @@ package app.ottermsg.feature.conversation
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.net.Uri
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import app.ottermsg.core.data.media.PhotoStore
 import app.ottermsg.core.data.messaging.ConversationStore
 import app.ottermsg.core.data.messaging.GroupView
+import app.ottermsg.core.database.entity.AttachmentEntity
 import app.ottermsg.core.database.entity.ContactEntity
 import app.ottermsg.core.database.entity.ConversationEntity
 import app.ottermsg.core.database.entity.MessageEntity
@@ -26,6 +31,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.io.File
 import java.time.ZoneId
 import javax.inject.Inject
 
@@ -45,11 +51,14 @@ data class ConversationUi(
     fun nameOf(id: ByteArray): String = names[id.hex()] ?: "?"
 }
 
+enum class PhotoEvent { Unreadable, Saved, SaveFailed }
+
 internal fun ByteArray.hex() = joinToString("") { "%02x".format(it) }
 
 /** Pure mapping, unit-tested. */
 fun conversationUi(
     conv: ConversationEntity?, msgs: List<MessageEntity>, group: GroupView?, contacts: List<ContactEntity>, me: ByteArray, zone: ZoneId,
+    attachments: Map<Long, AttachmentEntity> = emptyMap(),
 ): ConversationUi {
     val title = conv?.title.orEmpty()
     val names = contacts.associate { it.userId.hex() to it.displayName }
@@ -63,7 +72,8 @@ fun conversationUi(
         MessageUi(it.localId, it.outgoing, it.body, it.sentMs, it.status, it.kind == MessageKind.SYSTEM_UNDECRYPTABLE, author,
             authorKey = if (it.outgoing) "me" else it.senderId.hex(),
             event = if (it.kind == MessageKind.SYSTEM_GROUP) parseGroupEvent(it.systemData) else null,
-            inGroup = isGroup && !it.outgoing)
+            inGroup = isGroup && !it.outgoing,
+            photo = if (it.kind == MessageKind.PHOTO) attachments[it.localId]?.let(::photoUi) else null)
     }
     return ConversationUi(true, title, conv?.peerUserId ?: conv?.groupId ?: ByteArray(0), groupMessages(list, zone),
         msgs.lastOrNull { !it.outgoing && it.kind != MessageKind.SYSTEM_GROUP }?.localId,
@@ -76,16 +86,36 @@ fun conversationUi(
 @OptIn(FlowPreview::class)
 @HiltViewModel
 class ConversationViewModel @Inject constructor(
-    private val store: ConversationStore, savedState: SavedStateHandle,
+    private val store: ConversationStore, private val photos: PhotoStore, private val savedState: SavedStateHandle,
 ) : ViewModel() {
     val conversationId: Long = checkNotNull(savedState.get<Long>(ARG_ID)) { "conversation id missing" }
     var zone: ZoneId = ZoneId.systemDefault()
 
+    private class Parts(val conv: ConversationEntity?, val msgs: List<MessageEntity>, val group: GroupView?,
+                        val contacts: List<ContactEntity>, val me: ByteArray)
+
     val ui: StateFlow<ConversationUi> = combine(
-        store.observeConversation(conversationId), store.observeMessages(conversationId), store.observeGroup(conversationId),
-        store.observeContacts(), flow { emit(store.myId()) },
-    ) { conv, msgs, group, contacts, me -> conversationUi(conv, msgs, group, contacts, me, zone) }
+        combine(
+            store.observeConversation(conversationId), store.observeMessages(conversationId), store.observeGroup(conversationId),
+            store.observeContacts(), flow { emit(store.myId()) },
+        ) { conv, msgs, group, contacts, me -> Parts(conv, msgs, group, contacts, me) },
+        photos.observe(conversationId),
+    ) { p, att -> conversationUi(p.conv, p.msgs, p.group, p.contacts, p.me, zone, att) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ConversationUi())
+
+    /** Decoded images for the bubbles (no Room or crypto in composables). */
+    val photoSource: PhotoSource = object : PhotoSource {
+        override suspend fun load(localId: Long, maxPx: Int): ImageBitmap? = photos.load(localId, maxPx)?.asImageBitmap()
+        override suspend fun thumb(localId: Long): ImageBitmap? = photos.thumb(localId)?.asImageBitmap()
+    }
+
+    /** Path of the picked/taken photo shown in the preview (survives process death). */
+    val pendingPhoto: StateFlow<String?> = savedState.getStateFlow(KEY_PENDING, null)
+    private val _photoSending = MutableStateFlow(false)
+    val photoSending: StateFlow<Boolean> = _photoSending
+    private val _events = MutableSharedFlow<PhotoEvent>(extraBufferCapacity = 4)
+    /** One-off messages for a snackbar. */
+    val events: SharedFlow<PhotoEvent> = _events
 
     private val _text = MutableStateFlow("")
     val text: StateFlow<String> = _text
@@ -123,11 +153,62 @@ class ConversationViewModel @Inject constructor(
         }
     }
 
+    fun onPicked(uri: Uri?) {
+        if (uri == null) return
+        viewModelScope.launch {
+            val f = photos.importPicked(uri)
+            if (f == null) _events.tryEmit(PhotoEvent.Unreadable) else savedState[KEY_PENDING] = f.path
+        }
+    }
+
+    /** A file for the camera app; remembered so the result survives process death. */
+    fun newCameraFile(): File = photos.newCameraFile().also { savedState[KEY_CAMERA] = it.path }
+
+    fun onCameraResult(taken: Boolean) {
+        val p = savedState.get<String>(KEY_CAMERA) ?: return
+        savedState[KEY_CAMERA] = null
+        if (taken && File(p).length() > 0) savedState[KEY_PENDING] = p else photos.discard(File(p))
+    }
+
+    /** One send per tap; on success the preview closes and the draft is cleared. */
+    fun sendPhoto(caption: String) {
+        val path = pendingPhoto.value ?: return
+        if (_photoSending.value) return
+        _photoSending.value = true
+        viewModelScope.launch {
+            try {
+                val id = store.sendPhoto(conversationId, File(path), caption)
+                if (id == null) _events.tryEmit(PhotoEvent.Unreadable)
+                else {
+                    savedState[KEY_PENDING] = null
+                    _text.value = ""
+                    _sent.tryEmit(id)
+                }
+            } finally {
+                _photoSending.value = false
+            }
+        }
+    }
+
+    /** Closes the preview; the draft stays. */
+    fun cancelPhoto() {
+        pendingPhoto.value?.let { photos.discard(File(it)) }
+        savedState[KEY_PENDING] = null
+    }
+
+    fun download(localId: Long) = viewModelScope.launch { photos.download(localId) }
+    fun galleryNeedsPermission() = photos.galleryNeedsPermission()
+    fun saveToGallery(localId: Long) = viewModelScope.launch {
+        _events.tryEmit(if (photos.saveToGallery(localId)) PhotoEvent.Saved else PhotoEvent.SaveFailed)
+    }
+
     fun retry(localId: Long) = viewModelScope.launch { store.retry(localId) }
     fun delete(localId: Long) = viewModelScope.launch { store.deleteLocal(localId) }
     fun markRead() = viewModelScope.launch { store.markConversationRead(conversationId) }
 
     companion object {
+        const val KEY_PENDING = "pending_photo"
+        const val KEY_CAMERA = "camera_photo"
         const val ARG_ID = "id"
         const val DRAFT_DEBOUNCE_MS = 500L
     }

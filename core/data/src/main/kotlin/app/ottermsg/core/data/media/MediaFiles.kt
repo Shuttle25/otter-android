@@ -13,6 +13,8 @@ import javax.inject.Singleton
  */
 @Singleton
 open class MediaFiles @Inject constructor(@ApplicationContext private val context: Context) {
+    val resolver: android.content.ContentResolver get() = context.contentResolver
+
     open val mediaDir: File get() = File(context.filesDir, "media").also { it.mkdirs() }
 
     fun newName(): String = ByteArray(12).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) } + ".otb"

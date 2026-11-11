@@ -31,4 +31,21 @@
     <string name="info_state_delivered">Доставлено, %1$s</string>
     <string name="info_state_read">Прочитано, %1$s</string>
     <string name="info_not_in_group">не в группе</string>
+    <string name="conv_pick_photo">Выбрать фото</string>
+    <string name="conv_take_photo">Сделать снимок</string>
+    <string name="conv_photo_caption">Подпись</string>
+    <string name="conv_photo_send">Отправить</string>
+    <string name="conv_photo_cancel">Отмена</string>
+    <string name="conv_photo_unreadable">Не удалось открыть фото</string>
+    <string name="conv_photo_download">Загрузить фото</string>
+    <string name="conv_photo_failed">Не удалось загрузить</string>
+    <string name="conv_photo_gone">Фото недоступно</string>
+    <string name="conv_photo_save">Сохранить в галерею</string>
+    <string name="conv_photo_saved">Сохранено в галерею</string>
+    <string name="conv_photo_save_failed">Не удалось сохранить</string>
+    <string name="conv_photo_label">Фото</string>
+    <string name="conv_photo_loading">Фото загружается</string>
+    <string name="conv_camera_denied">Для снимка нужен доступ к камере</string>
+    <string name="conv_camera_settings">Настройки</string>
+    <string name="conv_camera_gallery">Выбрать из галереи</string>
 </resources>

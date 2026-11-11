@@ -76,7 +76,7 @@ class TestGraph(
     val gallery = GallerySaver(ApplicationProvider.getApplicationContext(), photoLoader)
     val media = MediaTransfers(db, accounts, files, settings, NetworkInfo { unmetered }, gallery, outbox, clock)
     val incomingPhotos = IncomingPhotos(db, files, settings, media)
-    val photos = MediaRepository(db, photoLoader, gallery, media)
+    val photos = MediaRepository(db, photoLoader, gallery, media, files)
     val applier = GroupApplier(db, accounts, directory, clock)
     val groupReceiver = GroupReceiver(db, accounts, signal, applier, outbox, clock, incomingPhotos)
     val receiver = MailboxReceiver(db, accounts, signal, directory, outbox, clock, groupReceiver, incomingPhotos)

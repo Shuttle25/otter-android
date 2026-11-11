@@ -69,4 +69,14 @@ class ChatListViewModelTest {
         assertEquals(app.ottermsg.proto.v1.GroupEvent.Type.LEFT, rows[1].event!!.type)
         assertNull(rows[1].authorName)
     }
+
+    @Test fun photoRowsAreMarked() {
+        val now = System.currentTimeMillis()
+        val rows = chatRows(listOf(
+            ConversationSummary(1, "Мама", ByteArray(16), 0, now, "Дача", MessageStatus.DELIVERED, false, MessageKind.PHOTO),
+            ConversationSummary(2, "Папа", ByteArray(16), 0, now, "текст", MessageStatus.DELIVERED, false, MessageKind.TEXT),
+        ), now, java.time.ZoneId.of("UTC"), java.util.Locale.ROOT)
+        assertEquals(true, rows[0].photo); assertEquals("Дача", rows[0].preview)
+        assertEquals(false, rows[1].photo)
+    }
 }

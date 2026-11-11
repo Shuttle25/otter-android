@@ -1,7 +1,13 @@
 package app.ottermsg.feature.conversation
 
 import androidx.lifecycle.SavedStateHandle
+import android.graphics.Bitmap
+import android.net.Uri
+import app.ottermsg.core.data.media.PhotoStore
 import app.ottermsg.core.data.messaging.ConversationStore
+import app.ottermsg.core.database.entity.AttachmentEntity
+import kotlinx.coroutines.flow.flowOf
+import java.io.File
 import app.ottermsg.core.database.entity.ConversationEntity
 import app.ottermsg.core.database.entity.MessageEntity
 import app.ottermsg.core.database.model.MessageStatus
@@ -23,8 +29,11 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(RobolectricTestRunner::class)
 class ConversationViewModelTest {
     private class FakeStore : ConversationStore {
         val conv = MutableStateFlow<ConversationEntity?>(ConversationEntity(7, ByteArray(16), "Мама", 0, draft = "черновик"))
@@ -38,13 +47,72 @@ class ConversationViewModelTest {
         override suspend fun deleteLocal(localId: Long) {}
         override suspend fun setDraft(conversationId: Long, draft: String) { drafts += draft }
         override suspend fun markConversationRead(conversationId: Long) { reads++ }
+        val photos = mutableListOf<String>(); var photoGate: CompletableDeferred<Unit>? = null; var photoResult: Long? = 1
+        override suspend fun sendPhoto(conversationId: Long, source: File, caption: String): Long? {
+            photoGate?.await(); photos += "${source.name}:$caption"; return photoResult
+        }
     }
+
+    private class FakePhotos : PhotoStore {
+        val discarded = mutableListOf<String>()
+        override fun observe(conversationId: Long) = flowOf(emptyMap<Long, AttachmentEntity>())
+        override fun observeOne(localId: Long) = flowOf<AttachmentEntity?>(null)
+        override suspend fun download(localId: Long) {}
+        override suspend fun load(localId: Long, maxPx: Int): Bitmap? = null
+        override suspend fun thumb(localId: Long): Bitmap? = null
+        override fun galleryNeedsPermission() = false
+        override suspend fun saveToGallery(localId: Long) = true
+        override suspend fun importPicked(uri: Uri): File? = File("picked.jpg")
+        override fun newCameraFile() = File("camera.jpg")
+        override fun discard(file: File) { discarded += file.name }
+    }
+    private val photos = FakePhotos()
 
     private val dispatcher = StandardTestDispatcher()
     private val store = FakeStore()
     private lateinit var vm: ConversationViewModel
 
-    @Before fun setUp() { Dispatchers.setMain(dispatcher); vm = ConversationViewModel(store, SavedStateHandle(mapOf("id" to 7L))) }
+    @Before fun setUp() { Dispatchers.setMain(dispatcher); vm = ConversationViewModel(store, photos, SavedStateHandle(mapOf("id" to 7L))) }
+
+    @Test fun photoIsSentOnceForTwoTapsAndClearsTheDraft() = runTest(dispatcher) {
+        runCurrent()
+        vm.onPicked(Uri.parse("content://x/1")); runCurrent()
+        assertEquals("picked.jpg", vm.pendingPhoto.value)
+        store.photoGate = CompletableDeferred()
+        vm.sendPhoto("подпись"); vm.sendPhoto("подпись")
+        runCurrent()
+        assertEquals(true, vm.photoSending.value)
+        store.photoGate!!.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(listOf("picked.jpg:подпись"), store.photos)
+        assertEquals(null, vm.pendingPhoto.value)
+        assertEquals("", vm.text.value)
+    }
+
+    @Test fun unreadablePhotoKeepsThePreview() = runTest(dispatcher) {
+        runCurrent()
+        vm.onPicked(Uri.parse("content://x/1")); runCurrent()
+        store.photoResult = null
+        vm.sendPhoto(""); advanceUntilIdle()
+        assertEquals("picked.jpg", vm.pendingPhoto.value)
+    }
+
+    @Test fun cancelKeepsTheDraftAndDiscardsTheCopy() = runTest(dispatcher) {
+        runCurrent()
+        vm.onPicked(Uri.parse("content://x/1")); runCurrent()
+        vm.cancelPhoto()
+        assertEquals(null, vm.pendingPhoto.value)
+        assertEquals("черновик", vm.text.value)
+        assertEquals(listOf("picked.jpg"), photos.discarded)
+    }
+
+    @Test fun cameraCancelledDiscardsTheFile() = runTest(dispatcher) {
+        runCurrent()
+        vm.newCameraFile()
+        vm.onCameraResult(false)
+        assertEquals(null, vm.pendingPhoto.value)
+        assertEquals(listOf("camera.jpg"), photos.discarded)
+    }
     @After fun tearDown() = Dispatchers.resetMain()
 
     @Test fun restoresDraftAndSavesDebounced() = runTest(dispatcher) {

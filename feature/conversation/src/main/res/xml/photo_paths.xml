@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- TakePicture writes here (MediaFiles.tempDir("camera")); cleared with the cache -->
+    <cache-path name="camera" path="camera/" />
+</paths>

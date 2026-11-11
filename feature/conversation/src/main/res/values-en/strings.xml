@@ -29,4 +29,21 @@
     <string name="info_state_delivered">Delivered, %1$s</string>
     <string name="info_state_read">Read, %1$s</string>
     <string name="info_not_in_group">not in the group</string>
+    <string name="conv_pick_photo">Choose photo</string>
+    <string name="conv_take_photo">Take photo</string>
+    <string name="conv_photo_caption">Caption</string>
+    <string name="conv_photo_send">Send</string>
+    <string name="conv_photo_cancel">Cancel</string>
+    <string name="conv_photo_unreadable">Couldn\'t open the photo</string>
+    <string name="conv_photo_download">Download photo</string>
+    <string name="conv_photo_failed">Couldn\'t download</string>
+    <string name="conv_photo_gone">Photo unavailable</string>
+    <string name="conv_photo_save">Save to gallery</string>
+    <string name="conv_photo_saved">Saved to gallery</string>
+    <string name="conv_photo_save_failed">Couldn\'t save</string>
+    <string name="conv_photo_label">Photo</string>
+    <string name="conv_photo_loading">Photo is loading</string>
+    <string name="conv_camera_denied">Camera access is needed to take a photo</string>
+    <string name="conv_camera_settings">Settings</string>
+    <string name="conv_camera_gallery">Choose from gallery</string>
 </resources>

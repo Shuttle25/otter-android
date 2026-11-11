@@ -39,6 +39,8 @@ data class ChatRow(
     val authorName: String? = null,
     /** Last item is a group system event (rendered as short text). */
     val event: GroupEvent? = null,
+    /** Last message is a photo: «Фото» / «Фото: подпись». */
+    val photo: Boolean = false,
 )
 
 /** Display names by user id (hex), for group previews and events. */
@@ -66,9 +68,10 @@ fun chatRows(list: List<ConversationSummary>, nowMs: Long, zone: ZoneId, locale:
             time = if (t.toLocalDate() == today) hm.format(t) else dm.format(t),
             unread = s.unread,
             isGroup = s.groupId != null, family = s.family,
-            authorName = if (s.groupId != null && s.lastOutgoing == false && s.lastKind == MessageKind.TEXT)
+            authorName = if (s.groupId != null && s.lastOutgoing == false && (s.lastKind == MessageKind.TEXT || s.lastKind == MessageKind.PHOTO))
                 s.lastSenderId?.let(names::of) else null,
             event = if (s.lastKind == MessageKind.SYSTEM_GROUP) parseGroupEvent(s.lastSystemData) else null,
+            photo = s.lastKind == MessageKind.PHOTO,
         )
     }
 }

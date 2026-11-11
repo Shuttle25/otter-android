@@ -1,6 +1,20 @@
 package app.ottermsg.feature.conversation
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Column
@@ -59,19 +73,86 @@ import app.ottermsg.core.ui.components.OtterTopBar
 import app.ottermsg.core.ui.theme.Dimens
 import kotlinx.coroutines.launch
 
+/** Photo callbacks of the conversation screen. */
+class PhotoActions(
+    val onPick: () -> Unit = {}, val onCamera: () -> Unit = {}, val onOpen: (Long) -> Unit = {},
+    val onDownload: (Long) -> Unit = {}, val onSave: (Long) -> Unit = {},
+)
+
 @Composable
 fun ConversationRoute(
     onBack: () -> Unit, onOpenGroupInfo: (String) -> Unit = {}, onMessageInfo: (Long) -> Unit = {},
+    onOpenPhoto: (Long) -> Unit = {},
     vm: ConversationViewModel = hiltViewModel(),
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val text by vm.text.collectAsStateWithLifecycle()
     val sending by vm.sending.collectAsStateWithLifecycle()
+    val pending by vm.pendingPhoto.collectAsStateWithLifecycle()
+    val photoSending by vm.photoSending.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val snackbar = remember { SnackbarHostState() }
+    var cameraDenied by remember { mutableStateOf(false) }
+    var saveAfterPermission by remember { mutableStateOf<Long?>(null) }
     // Visible conversation = read: on enter and whenever new incoming messages arrive while resumed.
     LaunchedEffect(ui.lastIncomingId) { lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { vm.markRead() } }
-    ConversationScreen(ui, text, sending, onBack, vm::onText, vm::send, { vm.retry(it) }, { vm.delete(it) }, vm.sent,
-        onOpenGroupInfo = { if (ui.isGroup) onOpenGroupInfo(ui.groupIdHex) }, onMessageInfo = onMessageInfo)
+    val unreadable = stringResource(R.string.conv_photo_unreadable)
+    val saved = stringResource(R.string.conv_photo_saved)
+    val saveFailed = stringResource(R.string.conv_photo_save_failed)
+    LaunchedEffect(Unit) {
+        vm.events.collect { e ->
+            snackbar.showSnackbar(when (e) { PhotoEvent.Unreadable -> unreadable; PhotoEvent.Saved -> saved; PhotoEvent.SaveFailed -> saveFailed })
+        }
+    }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { vm.onPicked(it) }
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { vm.onCameraResult(it) }
+    fun launchCamera() {
+        val f = vm.newCameraFile()
+        val uri = FileProvider.getUriForFile(context, context.packageName + ".photos", f)
+        runCatching { camera.launch(uri) }.onFailure { vm.onCameraResult(false) }
+    }
+    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) launchCamera() else cameraDenied = true
+    }
+    val storagePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val id = saveAfterPermission
+        saveAfterPermission = null
+        if (granted && id != null) vm.saveToGallery(id)
+    }
+    val pickImage = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+    val actions = PhotoActions(
+        onPick = pickImage,
+        onCamera = {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) launchCamera()
+            else cameraPermission.launch(Manifest.permission.CAMERA)
+        },
+        onOpen = onOpenPhoto,
+        onDownload = { vm.download(it) },
+        onSave = { id ->
+            if (vm.galleryNeedsPermission()) { saveAfterPermission = id; storagePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE) }
+            else vm.saveToGallery(id)
+        },
+    )
+    CompositionLocalProvider(LocalPhotoSource provides vm.photoSource) {
+        ConversationScreen(ui, text, sending, onBack, vm::onText, vm::send, { vm.retry(it) }, { vm.delete(it) }, vm.sent,
+            onOpenGroupInfo = { if (ui.isGroup) onOpenGroupInfo(ui.groupIdHex) }, onMessageInfo = onMessageInfo,
+            photoActions = actions, snackbar = snackbar)
+    }
+    pending?.let { path -> PhotoPreview(path, text, photoSending, onCancel = vm::cancelPhoto, onSend = vm::sendPhoto) }
+    if (cameraDenied) {
+        AlertDialog(
+            onDismissRequest = { cameraDenied = false },
+            text = { Text(stringResource(R.string.conv_camera_denied)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    cameraDenied = false
+                    context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)))
+                }) { Text(stringResource(R.string.conv_camera_settings)) }
+            },
+            dismissButton = { TextButton(onClick = { cameraDenied = false; pickImage() }) { Text(stringResource(R.string.conv_camera_gallery)) } },
+        )
+    }
 }
 
 @Composable
@@ -81,6 +162,7 @@ fun ConversationScreen(
     onRetry: (Long) -> Unit, onDelete: (Long) -> Unit,
     sentEvents: kotlinx.coroutines.flow.Flow<Long> = kotlinx.coroutines.flow.emptyFlow(),
     onOpenGroupInfo: () -> Unit = {}, onMessageInfo: (Long) -> Unit = {},
+    photoActions: PhotoActions = PhotoActions(), snackbar: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -105,9 +187,11 @@ fun ConversationScreen(
     val deleteLabel = stringResource(R.string.conv_delete)
     val retryLabel = stringResource(R.string.conv_retry)
     val infoLabel = stringResource(R.string.conv_info)
+    val saveLabel = stringResource(R.string.conv_photo_save)
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             OtterTopBar(ui.title, onBack = onBack, leading = {
                 OtterAvatar(ui.title, ui.seed, Dimens.avatarTopBar, family = ui.family); Spacer(Modifier.width(Dimens.s12))
@@ -115,7 +199,8 @@ fun ConversationScreen(
                 subtitle = if (ui.isGroup) pluralStringResource(R.plurals.conv_members, ui.memberCount, ui.memberCount) else null)
         },
         bottomBar = {
-            if (ui.canWrite) MessageComposer(text, sending, onText, onSend, Modifier.navigationBarsPadding().imePadding())
+            if (ui.canWrite) MessageComposer(text, sending, onText, onSend, Modifier.navigationBarsPadding().imePadding(),
+                onPickPhoto = photoActions.onPick, onTakePhoto = photoActions.onCamera)
             else NotMemberNotice(Modifier.navigationBarsPadding())
         },
     ) { padding ->
@@ -136,13 +221,23 @@ fun ConversationScreen(
                         } else {
                             val m = item.message
                             val failed = m.outgoing && m.status == DeliveryStatus.FAILED
+                            val photoReady = m.photo?.state == PhotoState.Ready
+                            val canCopy = !m.system && m.text.isNotEmpty()
                             MessageBubble(
                                 m, item.firstInGroup,
                                 onLongPress = { menuFor = m },
-                                onTap = { if (failed) menuFor = m },
+                                onTap = {
+                                    when {
+                                        failed -> menuFor = m
+                                        photoReady -> photoActions.onOpen(m.localId)
+                                        m.photo?.state == PhotoState.Remote || m.photo?.state == PhotoState.Failed -> photoActions.onDownload(m.localId)
+                                    }
+                                },
+                                onPhotoDownload = { photoActions.onDownload(m.localId) },
                                 actions = buildList {
                                     if (failed) add(CustomAccessibilityAction(retryLabel) { onRetry(m.localId); true })
-                                    if (!m.system) add(CustomAccessibilityAction(copyLabel) { clipboard.setText(AnnotatedString(m.text)); true })
+                                    if (photoReady) add(CustomAccessibilityAction(saveLabel) { photoActions.onSave(m.localId); true })
+                                    if (canCopy) add(CustomAccessibilityAction(copyLabel) { clipboard.setText(AnnotatedString(m.text)); true })
                                     if (ui.isGroup && m.outgoing) add(CustomAccessibilityAction(infoLabel) { onMessageInfo(m.localId); true })
                                     add(CustomAccessibilityAction(deleteLabel) { confirmDelete = m; true })
                                 },
@@ -151,7 +246,8 @@ fun ConversationScreen(
                                         expanded = menuFor?.localId == m.localId, alignEnd = m.outgoing,
                                         actions = buildList {
                                             if (failed) add(MenuAction(retryLabel) { onRetry(m.localId) })
-                                            if (!m.system) add(MenuAction(copyLabel) { clipboard.setText(AnnotatedString(m.text)) })
+                                            if (photoReady) add(MenuAction(saveLabel) { photoActions.onSave(m.localId) })
+                                            if (canCopy) add(MenuAction(copyLabel) { clipboard.setText(AnnotatedString(m.text)) })
                                             if (ui.isGroup && m.outgoing) add(MenuAction(infoLabel) { onMessageInfo(m.localId) })
                                             add(MenuAction(deleteLabel) { confirmDelete = m })
                                         },

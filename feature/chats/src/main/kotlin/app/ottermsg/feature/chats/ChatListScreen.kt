@@ -84,13 +84,18 @@ fun ChatListRoute(myName: String, mySeed: ByteArray, onOpen: (Long) -> Unit, onN
 
 @Composable
 internal fun ChatRowItem(row: ChatRow, me: ByteArray, names: Names, onClick: () -> Unit) {
+    val body = when {
+        !row.photo -> row.preview
+        row.preview.isNullOrBlank() -> stringResource(R.string.chats_preview_photo)
+        else -> stringResource(R.string.chats_preview_photo_caption, row.preview)
+    }
     val preview = when {
         row.event != null -> groupEventText(row.event, me, names::of)
         row.previewIsSystem -> stringResource(R.string.chats_undecryptable)
-        row.preview == null -> ""
-        row.outgoing -> stringResource(R.string.chats_you, row.preview)
-        row.authorName != null -> stringResource(R.string.chats_author, row.authorName, row.preview)
-        else -> row.preview
+        body == null -> ""
+        row.outgoing -> stringResource(R.string.chats_you, body)
+        row.authorName != null -> stringResource(R.string.chats_author, row.authorName, body)
+        else -> body
     }
     val statusLabel = row.status?.let { stringResource(deliveryStatusLabel(it)) }
     val unreadLabel = if (row.unread > 0) stringResource(R.string.chats_unread, row.unread) else null

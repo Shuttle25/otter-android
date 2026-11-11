@@ -21,4 +21,6 @@
     <string name="chats_empty_title">Пока нет чатов</string>
     <string name="chats_author">%1$s: %2$s</string>
     <string name="newchat_group">Новая группа</string>
+    <string name="chats_preview_photo">Фото</string>
+    <string name="chats_preview_photo_caption">Фото: %1$s</string>
 </resources>
