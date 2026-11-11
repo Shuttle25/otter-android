@@ -29,5 +29,9 @@ private object FakeApi : NodeApi {
     override suspend fun ack(ack: app.ottermsg.proto.v1.Record) = TODO()
     override suspend fun createInvite(invite: app.ottermsg.proto.v1.Record) = TODO()
     override suspend fun updateDirectory(entry: app.ottermsg.proto.v1.Record) = TODO()
+    override suspend fun blobCreate(meta: app.ottermsg.proto.v1.Record) = TODO()
+    override suspend fun blobPut(key: ByteArray, index: Int, data: ByteArray) = TODO()
+    override suspend fun blobGet(key: ByteArray, index: Int) = TODO()
+    override suspend fun blobAck(record: app.ottermsg.proto.v1.Record) = TODO()
     override suspend fun ping() = TODO()
 }

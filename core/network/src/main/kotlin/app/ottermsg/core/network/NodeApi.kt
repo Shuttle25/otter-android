@@ -2,6 +2,10 @@ package app.ottermsg.core.network
 
 import app.ottermsg.core.crypto.AuthMessage
 import app.ottermsg.core.crypto.Ed25519
+import app.ottermsg.proto.v1.BlobChunk
+import app.ottermsg.proto.v1.BlobGetRequest
+import app.ottermsg.proto.v1.BlobPutRequest
+import app.ottermsg.proto.v1.BlobStatus
 import app.ottermsg.proto.v1.Empty
 import app.ottermsg.proto.v1.Event
 import app.ottermsg.proto.v1.Hello
@@ -33,6 +37,12 @@ interface NodeApi {
     suspend fun createInvite(invite: Record)
     /** Publishes a newer version of our own DIRECTORY_ENTRY (profile edit). */
     suspend fun updateDirectory(entry: Record)
+    /** Announces a blob (signed BLOB_META); returns the chunk count and the indexes the node still needs. */
+    suspend fun blobCreate(meta: Record): BlobStatus
+    suspend fun blobPut(key: ByteArray, index: Int, data: ByteArray)
+    suspend fun blobGet(key: ByteArray, index: Int): ByteArray
+    /** BLOB_FETCHED after a verified download, so nodes can delete the blob (D45). */
+    suspend fun blobAck(record: Record)
     suspend fun ping()
 }
 
@@ -60,5 +70,14 @@ class RemoteNodeApi(private val rpc: RpcClient, private val clock: () -> Long = 
     override suspend fun ack(ack: Record) { rpc.call("msg.ack", req(ack)) }
     override suspend fun createInvite(invite: Record) { rpc.call("invite.create", req(invite)) }
     override suspend fun updateDirectory(entry: Record) { rpc.call("directory.update", req(entry)) }
+    override suspend fun blobCreate(meta: Record): BlobStatus = BlobStatus.parseFrom(rpc.call("blob.create", req(meta)))
+    override suspend fun blobPut(key: ByteArray, index: Int, data: ByteArray) {
+        rpc.call("blob.put", BlobPutRequest.newBuilder().setBlobKey(ByteString.copyFrom(key)).setIndex(index)
+            .setData(ByteString.copyFrom(data)).build())
+    }
+    override suspend fun blobGet(key: ByteArray, index: Int): ByteArray =
+        BlobChunk.parseFrom(rpc.call("blob.get", BlobGetRequest.newBuilder().setBlobKey(ByteString.copyFrom(key)).setIndex(index).build()))
+            .data.toByteArray()
+    override suspend fun blobAck(record: Record) { rpc.call("blob.ack", req(record)) }
     override suspend fun ping() { rpc.call("ping", Empty.getDefaultInstance()) }
 }

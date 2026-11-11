@@ -7,6 +7,7 @@ import app.ottermsg.core.crypto.RecordCodec
 import app.ottermsg.core.network.NodeApi
 import app.ottermsg.core.network.RpcException
 import app.ottermsg.proto.v1.Ack
+import app.ottermsg.proto.v1.BlobMeta
 import app.ottermsg.proto.v1.DirectoryEntry
 import app.ottermsg.proto.v1.Endpoint
 import app.ottermsg.proto.v1.Envelope
@@ -106,6 +107,23 @@ class FakeNode(private val clock: () -> Long) {
     private val directoryUpdateCount = HashMap<String, Int>()
     /** Accepted directory.update calls of [user]. */
     fun directoryUpdates(user: ByteArray): Int = synchronized(lock) { directoryUpdateCount[user.hex()] ?: 0 }
+    // ---- blobs (D44/D45): same rules as the Go service, chunks kept in memory ----
+    private class FakeBlob(val meta: BlobMeta, val author: String, val chunks: MutableMap<Int, ByteArray> = HashMap(),
+                           val fetched: MutableSet<String> = HashSet())
+    private val blobs = HashMap<String, FakeBlob>()
+    private val goneBlobs = HashSet<String>()
+    /** If set, blob.create and blob.put fail with this status (e.g. QUOTA). */
+    @Volatile var failBlobPut: Status? = null
+    /** If set, blob.get fails with this status. */
+    @Volatile var failBlobGet: Status? = null
+    /** Delay per blob.get (lets tests observe download progress). */
+    @Volatile var blobGetDelayMs = 0L
+    var blobPuts = 0; private set
+    fun blobChunks(key: ByteArray): Int = synchronized(lock) { blobs[key.hex()]?.chunks?.size ?: 0 }
+    fun blobGone(key: ByteArray): Boolean = synchronized(lock) { key.hex() in goneBlobs }
+    fun blobReaders(key: ByteArray): Int = synchronized(lock) { blobs[key.hex()]?.meta?.readersCount ?: 0 }
+    fun blobKeys(): List<String> = synchronized(lock) { blobs.keys.toList() }
+
     /** Replaces a user's entry without the update rules (tests: an entry published elsewhere). */
     fun putDirectoryEntry(rec: Record) = synchronized(lock) {
         val e = DirectoryEntry.parseFrom(body(rec).payload)
@@ -253,6 +271,56 @@ class FakeNode(private val clock: () -> Long) {
             users[b.author.hex()] = User(entry, e)
             directoryUpdateCount.merge(b.author.hex(), 1, Int::plus)
             sessions.filter { it.user != null }.forEach { it.emit("directory", app.ottermsg.proto.v1.Empty.getDefaultInstance()) }
+        } }
+
+        override suspend fun blobCreate(meta: Record): app.ottermsg.proto.v1.BlobStatus { check(); synchronized(lock) {
+            failBlobPut?.let { fail(it, "blob refused") }
+            val b = verifyUser(meta)
+            if (b.type != RecordType.BLOB_META) fail(Status.STATUS_INVALID, "not a blob meta")
+            if (!b.author.toByteArray().contentEquals(me())) fail(Status.STATUS_UNAUTHORIZED, "author")
+            val m = BlobMeta.parseFrom(b.payload)
+            val n = ((m.size + m.chunkSize - 1) / m.chunkSize).toInt()
+            if (m.chunkSize != 262144 || m.chunkSha256Count != n || m.readersCount == 0 || b.expiresMs == 0L)
+                fail(Status.STATUS_INVALID, "meta")
+            val key = keyOf(b).hex()
+            if (key in goneBlobs) fail(Status.STATUS_NOT_FOUND, "deleted")
+            val blob = blobs.getOrPut(key) { FakeBlob(m, b.author.hex()) }
+            return app.ottermsg.proto.v1.BlobStatus.newBuilder().setChunks(n)
+                .addAllMissing((0 until n).filter { it !in blob.chunks }).build()
+        } }
+
+        override suspend fun blobPut(key: ByteArray, index: Int, data: ByteArray) { check(); synchronized(lock) {
+            failBlobPut?.let { fail(it, "blob refused") }
+            if (!key.copyOf(16).contentEquals(me())) fail(Status.STATUS_UNAUTHORIZED, "only the author uploads")
+            val blob = blobs[key.hex()] ?: fail(Status.STATUS_NOT_FOUND, "unknown blob")
+            val m = blob.meta
+            val expected = minOf(m.chunkSize.toLong(), m.size - index.toLong() * m.chunkSize)
+            if (index < 0 || index >= m.chunkSha256Count || data.size.toLong() != expected ||
+                !sha(data).contentEquals(m.getChunkSha256(index).toByteArray())) fail(Status.STATUS_INVALID, "chunk")
+            blob.chunks[index] = data
+            blobPuts++
+        } }
+
+        override suspend fun blobGet(key: ByteArray, index: Int): ByteArray {
+            check()
+            if (blobGetDelayMs > 0) kotlinx.coroutines.delay(blobGetDelayMs)
+            synchronized(lock) {
+                failBlobGet?.let { fail(it, "get refused") }
+                val u = me().hex()
+                if (key.hex() in goneBlobs) fail(Status.STATUS_NOT_FOUND, "deleted")
+                val blob = blobs[key.hex()] ?: fail(Status.STATUS_RETRY_LATER, "not here yet")
+                if (blob.author != u && blob.meta.readersList.none { it.hex() == u }) fail(Status.STATUS_UNAUTHORIZED, "not a reader")
+                return blob.chunks[index] ?: fail(Status.STATUS_RETRY_LATER, "chunk not here yet")
+            }
+        }
+
+        override suspend fun blobAck(record: Record) { check(); synchronized(lock) {
+            val b = verifyUser(record)
+            if (b.type != RecordType.BLOB_FETCHED || !b.author.toByteArray().contentEquals(me())) fail(Status.STATUS_INVALID, "ack")
+            val key = app.ottermsg.proto.v1.BlobFetched.parseFrom(b.payload).blobKey.hex()
+            val blob = blobs[key] ?: return
+            if (blob.meta.readersList.any { it.hex() == b.author.hex() }) blob.fetched += b.author.hex()
+            if (blob.meta.readersList.all { it.hex() in blob.fetched }) { blobs.remove(key); goneBlobs += key }
         } }
 
         override suspend fun ping() { check() }
