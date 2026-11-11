@@ -106,7 +106,7 @@ class Registration @Inject constructor(
             .setInviteUsed(rec(RecordType.INVITE_USED, used)).build()
 
         try {
-            connector.withNode(Endpoints.urls(manifest, allowPlaintext)) { it.register(req) }
+            connector.withNode(Endpoints.candidates(manifest, allowPlaintext)) { it.register(req) }
         } catch (e: RpcException) {
             throw map(e)
         } catch (e: IOException) {

@@ -3,8 +3,8 @@ package app.ottermsg.core.network
 import kotlinx.coroutines.channels.ReceiveChannel
 
 interface Transport {
-    /** Opens a connection or throws. */
-    suspend fun connect(url: String): Connection
+    /** Opens a connection to [candidate] (pinned TLS when it has pins) or throws. */
+    suspend fun connect(candidate: Candidate): Connection
 }
 
 interface Connection {

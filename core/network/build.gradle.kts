@@ -5,4 +5,5 @@ dependencies {
     api(libs.okhttp)
     api(libs.coroutines.core)
     testImplementation(libs.junit); testImplementation(libs.coroutines.test)
+    testImplementation(libs.okhttp.tls); testImplementation(libs.mockwebserver3)
 }

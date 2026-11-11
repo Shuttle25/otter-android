@@ -15,7 +15,7 @@ import java.io.IOException
 class RpcClientTest {
     @Test fun callAndHello() = runTest {
         val t = FakeTransport { r -> if (r.method == "ping") ok() else err(Status.STATUS_INVALID, "nope") }
-        val rpc = RpcClient(t.connect("x"), backgroundScope)
+        val rpc = RpcClient(t.connect(cand("x")), backgroundScope)
         assertEquals(1, rpc.hello.await().protocolVersion)
         rpc.call("ping", Empty.getDefaultInstance())
         val e = runCatching { rpc.call("bogus", Empty.getDefaultInstance()) }.exceptionOrNull() as RpcException
@@ -24,7 +24,7 @@ class RpcClientTest {
 
     @Test fun eventsAndClose() = runTest {
         val t = FakeTransport { ok() }
-        val conn = t.connect("x") as FakeTransport.FakeConnection
+        val conn = t.connect(cand("x")) as FakeTransport.FakeConnection
         val rpc = RpcClient(conn, backgroundScope)
         val ev = async { rpc.events.first() }
         rpc.hello.await()

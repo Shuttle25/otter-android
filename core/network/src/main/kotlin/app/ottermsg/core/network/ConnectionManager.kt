@@ -26,7 +26,7 @@ sealed interface ConnectionState {
  */
 class ConnectionManager(
     private val transport: Transport,
-    private val urls: suspend () -> List<String>,
+    private val candidates: suspend () -> List<Candidate>,
     private val scope: CoroutineScope,
     private val onConnected: suspend CoroutineScope.(NodeApi) -> Unit,
     private val clock: () -> Long = System::currentTimeMillis,
@@ -56,9 +56,9 @@ class ConnectionManager(
         while (scope.isActive) {
             _state.value = ConnectionState.Connecting
             var lastError = "no endpoints"
-            for (url in urls()) {
+            for (cand in candidates()) {
                 val r = try {
-                    val conn = transport.connect(url)
+                    val conn = transport.connect(cand)
                     RpcClient(conn, scope).also { rpc = it }
                 } catch (e: Exception) { lastError = e.message ?: e.javaClass.simpleName; continue }
                 val session = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job]))
@@ -66,7 +66,7 @@ class ConnectionManager(
                     withTimeout(10_000) { r.hello.await() }
                     val api = RemoteNodeApi(r, clock)
                     session.onConnected(api)
-                    _state.value = ConnectionState.Online(api, url)
+                    _state.value = ConnectionState.Online(api, cand.url)
                     backoffMs = 1_000L
                     r.closed.await()
                     lastError = "connection lost"

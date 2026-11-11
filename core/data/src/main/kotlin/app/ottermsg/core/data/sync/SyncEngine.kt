@@ -12,6 +12,7 @@ import app.ottermsg.core.data.messaging.Outbox
 import app.ottermsg.core.data.settings.Settings
 import app.ottermsg.core.data.signal.PrekeyRefill
 import app.ottermsg.core.database.dao.ManifestDao
+import app.ottermsg.core.network.Candidate
 import app.ottermsg.core.network.ConnectionManager
 import app.ottermsg.core.network.ConnectionState
 import app.ottermsg.core.network.Endpoints
@@ -41,7 +42,7 @@ class SyncEngine @Inject constructor(
     private val prekeys: PrekeyRefill,
     @ApplicationScope scope: CoroutineScope, @param:AllowPlaintext private val allowPlaintext: Boolean, clock: Clock,
 ) : OnlineApi {
-    private val manager = ConnectionManager(transport, ::urls, scope, { api -> runSession(api, this) }, clock::now)
+    private val manager = ConnectionManager(transport, ::candidates, scope, { api -> runSession(api, this) }, clock::now)
     val connection: StateFlow<ConnectionState> = manager.state
 
     fun start() = manager.start()
@@ -49,9 +50,9 @@ class SyncEngine @Inject constructor(
     fun retryNow() = manager.retryNow()
     override fun current(): NodeApi? = (connection.value as? ConnectionState.Online)?.api
 
-    private suspend fun urls(): List<String> {
+    private suspend fun candidates(): List<Candidate> {
         val m = manifests.latest() ?: return emptyList()
-        return Endpoints.urls(ManifestVerifier.verify(m.raw, settings.networkPub(), 0), allowPlaintext)
+        return Endpoints.candidates(ManifestVerifier.verify(m.raw, settings.networkPub(), 0), allowPlaintext)
     }
 
     /** One connected session; [session] is cancelled by the ConnectionManager when the connection ends. */

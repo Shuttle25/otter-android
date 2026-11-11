@@ -57,14 +57,14 @@ class TestGraph(val node: FakeNode, val clock: TestClock) {
     private var sessionScope: CoroutineScope? = null
     val invites = InviteRepository(accounts, settings, db.manifestDao(), { session }, clock)
     var connector: NodeConnector = object : NodeConnector {
-        override suspend fun <T> withNode(urls: List<String>, block: suspend (NodeApi) -> T): T {
-            if (urls.isEmpty()) throw IOException("no endpoints")
+        override suspend fun <T> withNode(candidates: List<app.ottermsg.core.network.Candidate>, block: suspend (NodeApi) -> T): T {
+            if (candidates.isEmpty()) throw IOException("no endpoints")
             val s = node.connect()
             try { return block(s) } finally { s.close() }
         }
     }
     val registration get() = Registration(db, connector, SeedVault(XorWrapper), accounts, settings, clock, allowPlaintext = true)
-    private val noTransport = object : Transport { override suspend fun connect(url: String) = throw IOException("unused") }
+    private val noTransport = object : Transport { override suspend fun connect(candidate: app.ottermsg.core.network.Candidate) = throw IOException("unused") }
     val engine = SyncEngine(noTransport, accounts, settings, db.manifestDao(), directory, receiver, outbox, prekeys, scope, true, clock)
     val seed = ByteArray(32).also(SecureRandom()::nextBytes)
     val me get() = accounts.require()

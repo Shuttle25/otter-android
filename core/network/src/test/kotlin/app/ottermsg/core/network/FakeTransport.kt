@@ -13,7 +13,8 @@ import java.io.IOException
 /** In-memory "node": answers requests with [handler], can push events and drop the connection. */
 class FakeTransport(var failUrls: Set<String> = emptySet(), val handler: (Request) -> Response) : Transport {
     val connections = mutableListOf<FakeConnection>()
-    override suspend fun connect(url: String): Connection {
+    override suspend fun connect(candidate: Candidate): Connection {
+        val url = candidate.url
         if (url in failUrls) throw IOException("refused $url")
         return FakeConnection(handler).also { connections += it; it.push(helloEvent()) }
     }
@@ -38,3 +39,6 @@ class FakeTransport(var failUrls: Set<String> = emptySet(), val handler: (Reques
 
 fun ok(body: ByteString = ByteString.EMPTY): Response = Response.newBuilder().setStatus(Status.STATUS_OK).setBody(body).build()
 fun err(s: Status, msg: String): Response = Response.newBuilder().setStatus(s).setError(msg).build()
+
+/** Candidate for tests: url doubles as label. */
+fun cand(url: String, priority: Int = 0) = Candidate(url.toByteArray(), url, url, url, emptyList(), priority)

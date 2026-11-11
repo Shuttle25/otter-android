@@ -13,7 +13,7 @@ class ConnectionManagerTest {
     @Test fun failsOverAndReconnects() = runTest {
         val t = FakeTransport(failUrls = setOf("bad")) { ok() }
         var logins = 0
-        val cm = ConnectionManager(t, { listOf("bad", "good") }, backgroundScope, { logins++ }, { currentTime }, Random(1))
+        val cm = ConnectionManager(t, { listOf(cand("bad"), cand("good")) }, backgroundScope, { logins++ }, { currentTime }, Random(1))
         cm.start()
         val online = cm.state.first { it is ConnectionState.Online } as ConnectionState.Online
         assertEquals("good", online.url)
@@ -29,7 +29,7 @@ class ConnectionManagerTest {
 
     @Test fun backoffWhenAllFail() = runTest {
         val t = FakeTransport(failUrls = setOf("a")) { ok() }
-        val cm = ConnectionManager(t, { listOf("a") }, backgroundScope, {}, { currentTime }, Random(1))
+        val cm = ConnectionManager(t, { listOf(cand("a")) }, backgroundScope, {}, { currentTime }, Random(1))
         cm.start()
         val w1 = cm.state.first { it is ConnectionState.Waiting } as ConnectionState.Waiting
         assertTrue(w1.retryAtMs - currentTime in 800..1200)

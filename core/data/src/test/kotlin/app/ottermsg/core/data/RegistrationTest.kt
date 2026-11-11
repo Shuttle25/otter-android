@@ -72,14 +72,14 @@ class RegistrationTest {
         val unknown = other.bootstrapLink()
         val g = graph()
         g.connector = object : NodeConnector {
-            override suspend fun <T> withNode(urls: List<String>, block: suspend (NodeApi) -> T): T = block(node.connect())
+            override suspend fun <T> withNode(candidates: List<app.ottermsg.core.network.Candidate>, block: suspend (NodeApi) -> T): T = block(node.connect())
         }
         // other's manifest is signed by the same deterministic network key, so the link verifies but the invite is unknown here
         assertEquals(RegistrationError.InviteUnknown, g.register(unknown, "Боря", "borya").exceptionOrNull())
 
         val offline = graph()
         offline.connector = object : NodeConnector {
-            override suspend fun <T> withNode(urls: List<String>, block: suspend (NodeApi) -> T): T = throw IOException("down")
+            override suspend fun <T> withNode(candidates: List<app.ottermsg.core.network.Candidate>, block: suspend (NodeApi) -> T): T = throw IOException("down")
         }
         assertEquals(RegistrationError.Network, offline.register(node.bootstrapLink(), "Боря", "borya").exceptionOrNull())
         assertNothingPersisted(offline)
