@@ -19,4 +19,15 @@
     <string name="edit_name_empty">Введите имя</string>
     <string name="edit_name_too_long">Не длиннее 64 символов</string>
     <string name="edit_name_save">Сохранить</string>
+    <string name="settings_photos">Фото и память</string>
+    <string name="photos_auto">Автозагрузка фото</string>
+    <string name="photos_auto_wifi">Только по Wi-Fi</string>
+    <string name="photos_auto_any">Wi-Fi и мобильная сеть</string>
+    <string name="photos_auto_manual">Вручную</string>
+    <string name="photos_save">Сохранять в галерею</string>
+    <string name="photos_save_sub">Новые фото из чатов</string>
+    <string name="photos_cache">Временные файлы</string>
+    <string name="photos_cache_clear">Очистить</string>
+    <string name="photos_cache_note">Фото в чатах не удаляются</string>
+    <string name="photos_stored">Фото на телефоне</string>
 </resources>

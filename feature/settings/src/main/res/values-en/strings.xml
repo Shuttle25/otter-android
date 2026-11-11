@@ -19,4 +19,15 @@
     <string name="edit_name_empty">Enter a name</string>
     <string name="edit_name_too_long">64 characters at most</string>
     <string name="edit_name_save">Save</string>
+    <string name="settings_photos">Photos &amp; storage</string>
+    <string name="photos_auto">Auto-download photos</string>
+    <string name="photos_auto_wifi">Wi-Fi only</string>
+    <string name="photos_auto_any">Wi-Fi and mobile data</string>
+    <string name="photos_auto_manual">Manually</string>
+    <string name="photos_save">Save to gallery</string>
+    <string name="photos_save_sub">New photos from chats</string>
+    <string name="photos_cache">Temporary files</string>
+    <string name="photos_cache_clear">Clear</string>
+    <string name="photos_cache_note">Photos in chats are kept</string>
+    <string name="photos_stored">Photos on this phone</string>
 </resources>

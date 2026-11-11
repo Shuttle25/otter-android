@@ -21,7 +21,10 @@ import app.ottermsg.feature.groups.GroupInfoRoute
 import app.ottermsg.feature.groups.GroupInfoViewModel
 import app.ottermsg.feature.groups.NewGroupRoute
 import app.ottermsg.feature.onboarding.OnboardingRoute
+import app.ottermsg.feature.conversation.PhotoViewerRoute
+import app.ottermsg.feature.conversation.PhotoViewerViewModel
 import app.ottermsg.feature.settings.EditNameRoute
+import app.ottermsg.feature.settings.PhotoStorageRoute
 import app.ottermsg.feature.settings.ProfileRoute
 import app.ottermsg.feature.settings.SettingsRoute
 import kotlinx.coroutines.flow.StateFlow
@@ -35,6 +38,9 @@ object Routes {
     const val SETTINGS = "settings"
     const val PROFILE = "settings/profile"
     const val EDIT_NAME = "settings/profile/name"
+    const val PHOTOS = "settings/photos"
+    const val PHOTO = "photo/{${PhotoViewerViewModel.ARG_LOCAL_ID}}"
+    fun photo(localId: Long) = "photo/$localId"
     const val NEW_GROUP = "newGroup"
     const val GROUP_INFO = "groupInfo/{${GroupInfoViewModel.ARG_GROUP}}"
     const val ADD_MEMBERS = "addMembers/{${GroupInfoViewModel.ARG_GROUP}}"
@@ -81,7 +87,7 @@ fun AppNavHost(hasAccount: Boolean, account: StateFlow<LocalAccount?>) {
         }
         composable(Routes.CONVERSATION, arguments = listOf(navArgument(ConversationViewModel.ARG_ID) { type = NavType.LongType })) {
             ConversationRoute(onBack = { nav.popBackStack() }, onOpenGroupInfo = { nav.navigate(Routes.groupInfo(it)) },
-                onMessageInfo = { nav.navigate(Routes.messageInfo(it)) })
+                onMessageInfo = { nav.navigate(Routes.messageInfo(it)) }, onOpenPhoto = { nav.navigate(Routes.photo(it)) })
         }
         composable(Routes.MESSAGE_INFO, arguments = listOf(navArgument(MessageInfoViewModel.ARG_LOCAL_ID) { type = NavType.LongType })) {
             MessageInfoRoute(onBack = { nav.popBackStack() })
@@ -89,11 +95,15 @@ fun AppNavHost(hasAccount: Boolean, account: StateFlow<LocalAccount?>) {
         composable(Routes.INVITE) { InviteRoute(onBack = { nav.popBackStack() }) }
         composable(Routes.SETTINGS) {
             SettingsRoute(onBack = { nav.popBackStack() }, onInvite = { nav.navigate(Routes.INVITE) },
-                onProfile = { nav.navigate(Routes.PROFILE) })
+                onProfile = { nav.navigate(Routes.PROFILE) }, onPhotos = { nav.navigate(Routes.PHOTOS) })
         }
         composable(Routes.PROFILE) {
             ProfileRoute(onBack = { nav.popBackStack() }, onEditName = { nav.navigate(Routes.EDIT_NAME) })
         }
         composable(Routes.EDIT_NAME) { EditNameRoute(onBack = { nav.popBackStack() }) }
+        composable(Routes.PHOTOS) { PhotoStorageRoute(onBack = { nav.popBackStack() }) }
+        composable(Routes.PHOTO, arguments = listOf(navArgument(PhotoViewerViewModel.ARG_LOCAL_ID) { type = NavType.LongType })) {
+            PhotoViewerRoute(onBack = { nav.popBackStack() })
+        }
     }
 }
