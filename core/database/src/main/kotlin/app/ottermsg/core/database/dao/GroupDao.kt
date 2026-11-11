@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.Flow
     @Query("SELECT * FROM group_members WHERE group_id = :groupId") fun observeMembers(groupId: ByteArray): Flow<List<GroupMemberEntity>>
     @Query("SELECT COUNT(*) FROM group_members WHERE group_id = :groupId AND user_id = :userId") suspend fun isMember(groupId: ByteArray, userId: ByteArray): Int
     @Query("DELETE FROM group_members WHERE group_id = :groupId") suspend fun clearMembers(groupId: ByteArray)
+    @Query("SELECT group_id FROM group_members WHERE user_id = :userId") suspend fun groupsWithMember(userId: ByteArray): List<ByteArray>
     @Insert suspend fun insertMembers(m: List<GroupMemberEntity>)
     @Transaction suspend fun replaceMembers(groupId: ByteArray, m: List<GroupMemberEntity>) { clearMembers(groupId); insertMembers(m) }
 
@@ -35,6 +36,7 @@ import kotlinx.coroutines.flow.Flow
     @Query("DELETE FROM pending_group_updates WHERE received_ms < :cutoff") suspend fun prunePendingUpdates(cutoff: Long): Int
 
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertPendingEnvelope(p: PendingGroupEnvelopeEntity): Long
+    @Upsert suspend fun upsertPendingEnvelope(p: PendingGroupEnvelopeEntity)
     @Query("SELECT * FROM pending_group_envelopes WHERE sender = :sender ORDER BY received_ms") suspend fun pendingEnvelopesFrom(sender: ByteArray): List<PendingGroupEnvelopeEntity>
     @Query("SELECT * FROM pending_group_envelopes WHERE group_id = :groupId ORDER BY received_ms") suspend fun pendingEnvelopesFor(groupId: ByteArray): List<PendingGroupEnvelopeEntity>
     @Query("SELECT * FROM pending_group_envelopes WHERE received_ms < :cutoff") suspend fun pendingEnvelopesBefore(cutoff: Long): List<PendingGroupEnvelopeEntity>
@@ -43,6 +45,7 @@ import kotlinx.coroutines.flow.Flow
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertShared(s: List<SenderKeySharedEntity>)
     @Query("SELECT member FROM sender_key_shared WHERE group_id = :groupId AND distribution_id = :distId") suspend fun sharedWith(groupId: ByteArray, distId: ByteArray): List<ByteArray>
     @Query("DELETE FROM sender_key_shared WHERE group_id = :groupId") suspend fun clearShared(groupId: ByteArray)
+    @Query("DELETE FROM sender_key_shared WHERE group_id = :groupId AND member = :member") suspend fun deleteShared(groupId: ByteArray, member: ByteArray)
 
     @Query("SELECT * FROM my_distribution WHERE group_id = :groupId") suspend fun myDistribution(groupId: ByteArray): MyDistributionEntity?
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertMyDistribution(d: MyDistributionEntity): Long

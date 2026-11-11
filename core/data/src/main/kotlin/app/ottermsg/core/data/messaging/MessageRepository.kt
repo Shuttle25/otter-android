@@ -7,12 +7,14 @@ import app.ottermsg.core.data.bs
 import app.ottermsg.core.database.OtterDatabase
 import app.ottermsg.core.database.entity.ConversationEntity
 import app.ottermsg.core.database.entity.MessageEntity
+import app.ottermsg.core.database.entity.MessageRecipientEntity
 import app.ottermsg.core.database.entity.OutboxEntity
 import app.ottermsg.core.database.model.ConversationSummary
 import app.ottermsg.core.database.model.MessageKind
 import app.ottermsg.core.database.model.MessageStatus
 import app.ottermsg.proto.v1.Content
 import app.ottermsg.proto.v1.DataMessage
+import app.ottermsg.proto.v1.GroupContext
 import app.ottermsg.proto.v1.ReceiptMessage
 import kotlinx.coroutines.flow.Flow
 import java.security.SecureRandom
@@ -58,14 +60,27 @@ class MessageRepository @Inject constructor(
         val messageId = ByteArray(16).also(rng::nextBytes)
         val localId = db.withTransaction {
             val conv = checkNotNull(conversations.get(conversationId)) { "no conversation $conversationId" }
+            val gid = conv.groupId
+            val recipients = if (gid != null) {
+                val g = db.groupDao().get(gid)
+                if (g == null || !g.iAmMember) return@withTransaction null // read-only: no longer a member
+                db.groupDao().members(gid).map { it.userId }.filterNot { it.contentEquals(me.userId) }
+            } else null
             val localId = messages.insert(MessageEntity(messageId = messageId, conversationId = conversationId, senderId = me.userId,
                 outgoing = true, sentMs = now, receivedMs = now, body = body, status = MessageStatus.PENDING))
-            db.outboxDao().insert(OutboxEntity(recipientUserId = checkNotNull(conv.peerUserId),
-                contentBytes = dataContent(messageId, body, now).toByteArray(), messageLocalId = localId, urgent = true, createdMs = now))
+            if (gid != null) {
+                // D23: the recipient set is frozen now (current members except me); one outbox item, one envelope.
+                db.messageRecipientDao().insertAll(recipients.orEmpty().map { MessageRecipientEntity(localId, it) })
+                db.outboxDao().insert(OutboxEntity(recipientUserId = ByteArray(0), groupId = gid,
+                    contentBytes = dataContent(messageId, body, now, gid).toByteArray(), messageLocalId = localId, urgent = true, createdMs = now))
+            } else {
+                db.outboxDao().insert(OutboxEntity(recipientUserId = checkNotNull(conv.peerUserId),
+                    contentBytes = dataContent(messageId, body, now).toByteArray(), messageLocalId = localId, urgent = true, createdMs = now))
+            }
             conversations.setDraft(conversationId, "")
             conversations.touch(conversationId, now)
             localId
-        }
+        } ?: return null
         outbox.kick()
         return localId
     }
@@ -77,8 +92,15 @@ class MessageRepository @Inject constructor(
             val m = messages.get(localId) ?: return@withTransaction false
             if (!m.outgoing || m.status != MessageStatus.FAILED || m.kind != MessageKind.TEXT) return@withTransaction false
             val conv = conversations.get(m.conversationId) ?: return@withTransaction false
-            db.outboxDao().insert(OutboxEntity(recipientUserId = checkNotNull(conv.peerUserId),
-                contentBytes = dataContent(m.messageId, m.body, m.sentMs).toByteArray(), messageLocalId = localId, urgent = true, createdMs = now))
+            val gid = conv.groupId
+            if (gid != null) {
+                if (db.groupDao().get(gid)?.iAmMember != true) return@withTransaction false
+                db.outboxDao().insert(OutboxEntity(recipientUserId = ByteArray(0), groupId = gid,
+                    contentBytes = dataContent(m.messageId, m.body, m.sentMs, gid).toByteArray(), messageLocalId = localId, urgent = true, createdMs = now))
+            } else {
+                db.outboxDao().insert(OutboxEntity(recipientUserId = checkNotNull(conv.peerUserId),
+                    contentBytes = dataContent(m.messageId, m.body, m.sentMs).toByteArray(), messageLocalId = localId, urgent = true, createdMs = now))
+            }
             messages.resetFailed(localId)
             true
         }
@@ -96,16 +118,20 @@ class MessageRepository @Inject constructor(
             val conv = conversations.get(conversationId) ?: return@withTransaction false
             val pending = messages.unreadReceiptsPending(conversationId)
             if (pending.isEmpty()) return@withTransaction false
-            val receipt = Content.newBuilder().setReceipt(ReceiptMessage.newBuilder().setType(ReceiptMessage.Type.READ)
-                .addAllMessageIds(pending.map { bs(it.messageId) })).setSentMs(clock.now()).build()
-            db.outboxDao().insert(OutboxEntity(recipientUserId = checkNotNull(conv.peerUserId),
-                contentBytes = receipt.toByteArray(), messageLocalId = null, urgent = false, createdMs = clock.now()))
+            // One READ receipt per author (in a group: one per sender), always 1:1 to that author.
+            for ((_, ms) in pending.groupBy { it.senderId.toList() }) {
+                val receipt = Content.newBuilder().setReceipt(ReceiptMessage.newBuilder().setType(ReceiptMessage.Type.READ)
+                    .addAllMessageIds(ms.map { bs(it.messageId) })).setSentMs(clock.now()).build()
+                db.outboxDao().insert(OutboxEntity(recipientUserId = if (conv.groupId != null) ms[0].senderId else checkNotNull(conv.peerUserId),
+                    contentBytes = receipt.toByteArray(), messageLocalId = null, urgent = false, createdMs = clock.now()))
+            }
             messages.markReadReceiptSent(pending.map { it.localId })
             true
         }
         if (queued) outbox.kick()
     }
 
-    private fun dataContent(messageId: ByteArray, text: String, sentMs: Long): Content =
-        Content.newBuilder().setData(DataMessage.newBuilder().setMessageId(bs(messageId)).setText(text)).setSentMs(sentMs).build()
+    private fun dataContent(messageId: ByteArray, text: String, sentMs: Long, groupId: ByteArray? = null): Content =
+        Content.newBuilder().setData(DataMessage.newBuilder().setMessageId(bs(messageId)).setText(text)
+            .apply { if (groupId != null) setGroup(GroupContext.newBuilder().setGroupId(bs(groupId))) }).setSentMs(sentMs).build()
 }

@@ -204,6 +204,10 @@ class FakeNode(private val clock: () -> Long) {
             val b = verifyUser(envelope)
             if (!b.author.toByteArray().contentEquals(me())) fail(Status.STATUS_UNAUTHORIZED, "author")
             val env = Envelope.parseFrom(b.payload)
+            // Same rule as the Go validator: SENDER_KEY ⇔ one shared ciphertext and no per-recipient content.
+            val group = env.kind == Envelope.Kind.SENDER_KEY
+            if (env.recipientsCount == 0 || group != !env.sharedContent.isEmpty ||
+                env.recipientsList.any { group != it.content.isEmpty }) fail(Status.STATUS_INVALID, "envelope shape")
             env.recipientsList.forEach { r -> if (!users.containsKey(r.user.hex())) fail(Status.STATUS_NOT_FOUND, "recipient") }
             sends++
             val key = keyOf(b).hex()

@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 4,
-    "identityHash": "cc5a1fe053aece6e3c58fdb5ae311f7c",
+    "identityHash": "d8fe4fedba180932fcaad4dd45dfccbb",
     "entities": [
       {
         "tableName": "account",
@@ -684,7 +684,7 @@
       },
       {
         "tableName": "pending_group_envelopes",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`record_key` BLOB NOT NULL, `group_id` BLOB, `sender` BLOB NOT NULL, `record` BLOB NOT NULL, `received_ms` INTEGER NOT NULL, PRIMARY KEY(`record_key`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`record_key` BLOB NOT NULL, `group_id` BLOB, `sender` BLOB NOT NULL, `record` BLOB NOT NULL, `received_ms` INTEGER NOT NULL, `decrypted` INTEGER NOT NULL DEFAULT 0, `sent_ms` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`record_key`))",
         "fields": [
           {
             "fieldPath": "recordKey",
@@ -714,6 +714,20 @@
             "columnName": "received_ms",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "decrypted",
+            "columnName": "decrypted",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "sentMs",
+            "columnName": "sent_ms",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
           }
         ],
         "primaryKey": {
@@ -843,7 +857,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'cc5a1fe053aece6e3c58fdb5ae311f7c')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'd8fe4fedba180932fcaad4dd45dfccbb')"
     ]
   }
 }

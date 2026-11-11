@@ -6,6 +6,10 @@ import app.ottermsg.core.data.account.AccountRepository
 import app.ottermsg.core.data.account.SeedVault
 import app.ottermsg.core.data.directory.DirectorySync
 import app.ottermsg.core.data.invite.InviteRepository
+import app.ottermsg.core.data.group.GroupApplier
+import app.ottermsg.core.data.group.GroupRepository
+import app.ottermsg.core.data.messaging.GroupReceiver
+import app.ottermsg.core.data.messaging.GroupSender
 import app.ottermsg.core.data.messaging.MailboxReceiver
 import app.ottermsg.core.data.messaging.MessageRepository
 import app.ottermsg.core.data.messaging.Outbox
@@ -49,8 +53,11 @@ class TestGraph(val node: FakeNode, val clock: TestClock) {
     val accounts = AccountRepository(db.accountDao(), settings, SeedVault(XorWrapper))
     val signal = SignalService(accounts, db.signalKvDao(), db.contactDao(), scope)
     val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao())
-    val outbox = Outbox(db, accounts, signal, clock)
-    val receiver = MailboxReceiver(db, accounts, signal, directory, outbox, clock)
+    val outbox = Outbox(db, accounts, signal, clock, GroupSender(db, signal, clock))
+    val applier = GroupApplier(db, accounts, directory, clock)
+    val groupReceiver = GroupReceiver(db, accounts, signal, applier, outbox, clock)
+    val receiver = MailboxReceiver(db, accounts, signal, directory, outbox, clock, groupReceiver)
+    val groups = GroupRepository(db, accounts, applier, outbox, clock)
     val messages = MessageRepository(db, accounts, outbox, clock)
     val prekeys = PrekeyRefill(accounts, settings, signal, clock)
     @Volatile var session: FakeNode.Session? = null

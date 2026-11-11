@@ -33,6 +33,7 @@ import kotlin.time.Duration.Companion.days
 class MailboxReceiver @Inject constructor(
     private val db: OtterDatabase, private val accounts: AccountRepository, private val signal: SignalService,
     private val directory: DirectorySync, private val outbox: Outbox, private val clock: Clock,
+    private val groups: GroupReceiver,
 ) {
     private val seen = db.seenEnvelopeDao()
     private val contacts = db.contactDao()
@@ -42,6 +43,7 @@ class MailboxReceiver @Inject constructor(
 
     suspend fun handle(api: NodeApi, records: List<Record>) = mutex.withLock {
         val me = accounts.require()
+        groups.expirePending()
         val acks = mutableListOf<ByteArray>()
         var directorySynced = false
         for (rec in records) {
@@ -60,6 +62,11 @@ class MailboxReceiver @Inject constructor(
             val env = runCatching { Envelope.parseFrom(body.payload) }.getOrNull()
             val mine = env?.recipientsList?.firstOrNull { it.user.toByteArray().contentEquals(me.userId) && it.device == 1 }
             if (env == null || mine == null) { acks += key; continue }
+            if (env.kind == Envelope.Kind.SENDER_KEY) {
+                groups.onEnvelope(sender.userId, key, rec, body, env) // shown, parked or dropped: the node copy is not needed
+                acks += key
+                continue
+            }
             val plain = try {
                 signal.withSessions { _, s -> s.decrypt(s.address(sender.userId), env.kind, mine.content.toByteArray()) }
             } catch (e: CancellationException) {
@@ -67,9 +74,17 @@ class MailboxReceiver @Inject constructor(
             } catch (e: Exception) {
                 null
             }
+            val content = plain?.let { runCatching { Content.parseFrom(it) }.getOrNull() }
+            // Group control content touches libsignal state and may sync the directory: outside any DB transaction.
+            when (content?.bodyCase) {
+                Content.BodyCase.GROUP_UPDATE -> { groups.onGroupUpdate(sender.userId, content.groupUpdate.state, api); acks += key; continue }
+                Content.BodyCase.SENDER_KEY -> { groups.onSenderKey(sender.userId, content.senderKey); acks += key; continue }
+                else -> {}
+            }
             db.withTransaction {
-                val cid = conversations.getOrCreateDirect(sender.userId, sender.displayName, clock.now())
-                val content = plain?.let { runCatching { Content.parseFrom(it) }.getOrNull() }
+                // A receipt never creates a chat (group members we never wrote to send receipts too).
+                val cid = if (content?.bodyCase == Content.BodyCase.RECEIPT) conversations.byPeer(sender.userId)?.id ?: -1L
+                    else conversations.getOrCreateDirect(sender.userId, sender.displayName, clock.now())
                 if (content == null) {
                     messages.insert(MessageEntity(messageId = key.copyOf(16), conversationId = cid, senderId = sender.userId, outgoing = false,
                         sentMs = body.createdMs, receivedMs = clock.now(), body = "", status = MessageStatus.DELIVERED,
@@ -106,6 +121,7 @@ class MailboxReceiver @Inject constructor(
             Content.BodyCase.RECEIPT -> {
                 val status = if (content.receipt.type == ReceiptMessage.Type.READ) MessageStatus.READ else MessageStatus.DELIVERED
                 content.receipt.messageIdsList.forEach { id ->
+                    if (groups.onGroupReceipt(sender.userId, id.toByteArray(), content.receipt.type)) return@forEach
                     messages.advanceStatusIn(cid, id.toByteArray(), status)
                     // delivered or read: no 24 h resend needed any more
                     messages.byMessageId(id.toByteArray())?.takeIf { it.outgoing && it.conversationId == cid }

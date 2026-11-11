@@ -28,10 +28,14 @@ import kotlin.coroutines.cancellation.CancellationException
 
 class PermanentFailure(msg: String) : Exception(msg)
 
-/** Persistent queue of encrypted 1:1 sends. Processed serially while a session is online. */
+/**
+ * Persistent queue of encrypted sends: 1:1 items and group items (one SENDER_KEY envelope each). Processed serially
+ * while a session is online.
+ */
 @Singleton
 class Outbox @Inject constructor(
     private val db: OtterDatabase, private val accounts: AccountRepository, private val signal: SignalService, private val clock: Clock,
+    private val groupSender: GroupSender,
 ) {
     private val outbox = db.outboxDao()
     private val messages = db.messageDao()
@@ -60,29 +64,55 @@ class Outbox @Inject constructor(
     suspend fun drainOnce(api: NodeApi) = mutex.withLock {
         val me = accounts.require()
         outbox.deleteSentBefore(clock.now() - KEEP_SENT_MS)
-        for (item in outbox.due(clock.now())) {
-            try {
-                process(api, item, me)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                if (item.sentMs != null) { // the one 24 h resend failed: the message itself was delivered to a node before
-                    outbox.markResent(item.id)
-                    continue
+        for (item in outbox.due(clock.now())) attempt(api, item, me)
+    }
+
+    /** One send attempt with the retry/failure policy. */
+    private suspend fun attempt(api: NodeApi, item: OutboxEntity, me: LocalAccount) {
+        try {
+            if (item.groupId != null && item.recipientUserId.isEmpty()) processGroup(api, item, me) else process(api, item, me)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (item.sentMs != null) { // the one 24 h resend failed: the message itself was delivered to a node before
+                outbox.markResent(item.id)
+                return
+            }
+            val permanent = e is PermanentFailure || (e is RpcException &&
+                e.status in setOf(Status.STATUS_INVALID, Status.STATUS_NOT_FOUND, Status.STATUS_REVOKED))
+            if (permanent) {
+                if (item.groupId != null && item.recipientUserId.isNotEmpty()) groupSender.forgetShare(item)
+                db.withTransaction {
+                    item.messageLocalId?.let { messages.markFailed(it) }
+                    outbox.delete(item.id)
                 }
-                val permanent = e is PermanentFailure || (e is RpcException &&
-                    e.status in setOf(Status.STATUS_INVALID, Status.STATUS_NOT_FOUND, Status.STATUS_REVOKED))
-                if (permanent) {
-                    db.withTransaction {
-                        item.messageLocalId?.let { messages.markFailed(it) }
-                        outbox.delete(item.id)
-                    }
-                } else {
-                    val delay = minOf((1L shl minOf(item.attempts, 20)) * 1000, MAX_BACKOFF_MS)
-                    outbox.reschedule(item.id, item.attempts + 1, clock.now() + delay)
-                }
+            } else {
+                val delay = minOf((1L shl minOf(item.attempts, 20)) * 1000, MAX_BACKOFF_MS)
+                outbox.reschedule(item.id, item.attempts + 1, clock.now() + delay)
             }
         }
+    }
+
+    /**
+     * Group item: on first processing make sure every current member has our sender key (SKDMs are queued and sent right
+     * here, ahead of the message), then encrypt once and persist the record, like 1:1.
+     */
+    private suspend fun processGroup(api: NodeApi, item: OutboxEntity, me: LocalAccount) {
+        val record = item.recordBytes?.let { Record.parseFrom(it) } ?: run {
+            val (dist, skdms) = groupSender.ensureShared(checkNotNull(item.groupId), me.userId)
+            // A failing SKDM stays queued with its own backoff; that member parks the message until the key arrives.
+            for (id in skdms) outbox.get(id)?.let { attempt(api, it, me) }
+            val rec = groupSender.buildRecord(item, me, dist) ?: run {
+                db.withTransaction { // nobody left to send to
+                    item.messageLocalId?.let { messages.advanceStatusLocal(it, MessageStatus.SENT) }
+                    outbox.delete(item.id)
+                }
+                return
+            }
+            rec.also { outbox.setRecord(item.id, it.toByteArray()) }
+        }
+        api.send(record)
+        afterSend(item)
     }
 
     private suspend fun process(api: NodeApi, item: OutboxEntity, me: LocalAccount) {
@@ -105,6 +135,10 @@ class Outbox @Inject constructor(
                 .also { outbox.setRecord(item.id, it.toByteArray()) }
         }
         api.send(record) // the same record every time: nodes deduplicate by author‖id
+        afterSend(item)
+    }
+
+    private suspend fun afterSend(item: OutboxEntity) {
         val localId = item.messageLocalId
         db.withTransaction {
             when {

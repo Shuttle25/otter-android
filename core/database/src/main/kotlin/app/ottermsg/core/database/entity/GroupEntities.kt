@@ -35,7 +35,11 @@ data class PendingGroupUpdateEntity(
     @ColumnInfo(name = "received_ms") val receivedMs: Long,
 )
 
-/** A SENDER_KEY envelope we could not decrypt yet (missing SKDM or unknown group). The node copy is already acked. */
+/**
+ * A group message we could not show yet; the node copy is already acked.
+ * Not [decrypted]: [record] is the ENVELOPE Record (sender key missing). [decrypted]: [record] is the plaintext Content
+ * (a sender key decrypts each message only once) waiting for a group state that makes the sender a member.
+ */
 @Entity(tableName = "pending_group_envelopes", indices = [Index("sender"), Index("group_id")])
 data class PendingGroupEnvelopeEntity(
     @PrimaryKey @ColumnInfo(name = "record_key") val recordKey: ByteArray,
@@ -43,6 +47,8 @@ data class PendingGroupEnvelopeEntity(
     val sender: ByteArray,
     val record: ByteArray,
     @ColumnInfo(name = "received_ms") val receivedMs: Long,
+    @ColumnInfo(defaultValue = "0") val decrypted: Boolean = false,
+    @ColumnInfo(name = "sent_ms", defaultValue = "0") val sentMs: Long = 0,
 )
 
 /** Members that already have our sender key for [distributionId]. */
