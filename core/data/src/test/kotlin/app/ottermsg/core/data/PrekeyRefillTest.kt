@@ -34,8 +34,9 @@ class PrekeyRefillTest {
         val other = ByteArray(16) { 0x33 }
         val otherHex = other.joinToString("") { "%02x".format(it) }
         a.session!!.emit("prekeys_low", app.ottermsg.proto.v1.PrekeysLow.newBuilder().setRemaining(2).setOwnerNode(bs(other)).build())
-        eventually(what = "keys for the other node uploaded") { node.uploadedByOwner[otherHex] == 50 }
-        assertTrue(a.settings.pendingRefills().isEmpty())
+        eventually(what = "keys for the other node uploaded") { synchronized(node) { node.uploadedByOwner[otherHex] } == 50 }
+        // the marker is cleared right after the upload returns, on the event coroutine: wait for it too
+        eventually(what = "pending marker cleared") { a.settings.pendingRefills().isEmpty() }
 
         // an interrupted refill is remembered per owner and completed at the next login
         node.reachable = false
