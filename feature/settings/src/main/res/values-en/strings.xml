@@ -30,4 +30,5 @@
     <string name="photos_cache_clear">Clear</string>
     <string name="photos_cache_note">Photos in chats are kept</string>
     <string name="photos_stored">Photos on this phone</string>
+    <string name="settings_media">Media</string>
 </resources>

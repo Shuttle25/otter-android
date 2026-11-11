@@ -1,7 +1,11 @@
 package app.ottermsg.feature.conversation
 
 import android.graphics.BitmapFactory
-import androidx.activity.compose.BackHandler
+import android.graphics.Bitmap
+import android.graphics.Matrix
+import androidx.exifinterface.media.ExifInterface
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,11 +59,16 @@ fun PhotoPreview(path: String, draft: String, sending: Boolean, onCancel: () -> 
                 BitmapFactory.decodeFile(path, b)
                 var s = 1
                 while (max(b.outWidth, b.outHeight) / (s * 2) >= 2048) s *= 2
-                BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = s })?.asImageBitmap()
+                val raw = BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = s }) ?: return@runCatching null
+                // show it the way it will be sent (PhotoPrep applies the EXIF orientation)
+                val deg = runCatching { ExifInterface(path).rotationDegrees }.getOrDefault(0)
+                (if (deg == 0) raw else Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, Matrix().apply { postRotate(deg.toFloat()) }, true))
+                    .asImageBitmap()
             }.getOrNull()
         }
     }
-    BackHandler(onBack = onCancel)
+    // A full-screen dialog: the chat behind it gets no touches and no TalkBack focus.
+    Dialog(onDismissRequest = onCancel, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
     Column(Modifier.fillMaxSize().background(Color.Black).statusBarsPadding().navigationBarsPadding().imePadding().testTag(PHOTO_PREVIEW_TAG)) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             image?.let { Image(it, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()) }
@@ -66,7 +76,11 @@ fun PhotoPreview(path: String, draft: String, sending: Boolean, onCancel: () -> 
         Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(Dimens.s8)) {
             TextField(value = caption, onValueChange = { caption = it }, minLines = 1, maxLines = 5,
                 placeholder = { Text(stringResource(R.string.conv_photo_caption)) },
-                shape = RoundedCornerShape(Dimens.inputRadius), modifier = Modifier.fillMaxWidth())
+                shape = RoundedCornerShape(Dimens.inputRadius), modifier = Modifier.fillMaxWidth(),
+                colors = TextFieldDefaults.colors(
+                    focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant, unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                ))
             Row(Modifier.fillMaxWidth().padding(top = Dimens.s8), horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onCancel, modifier = Modifier.heightIn(min = Dimens.minTouch)) { Text(stringResource(R.string.conv_photo_cancel)) }
@@ -75,5 +89,6 @@ fun PhotoPreview(path: String, draft: String, sending: Boolean, onCancel: () -> 
                 }
             }
         }
+    }
     }
 }

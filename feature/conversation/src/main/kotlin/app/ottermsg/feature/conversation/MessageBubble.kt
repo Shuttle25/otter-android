@@ -4,6 +4,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Arrangement
@@ -119,7 +120,7 @@ fun MessageBubble(
                                     }
                                 }
                             })
-                        if (text.isNotEmpty()) Column(Modifier.padding(horizontal = Dimens.s12, vertical = Dimens.s8)) {
+                        if (text.isNotEmpty()) Column(Modifier.fillMaxWidth().padding(horizontal = Dimens.s12, vertical = Dimens.s8)) {
                             Text(text, style = MaterialTheme.typography.bodyLarge, color = onContainer)
                             MessageMeta(time, status, color = metaColor, modifier = Modifier.align(Alignment.End))
                         }

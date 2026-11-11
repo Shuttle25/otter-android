@@ -65,7 +65,7 @@ fun SettingsRoute(onBack: () -> Unit, onInvite: () -> Unit, onProfile: () -> Uni
             account?.let { ProfileRow(it.displayName, it.username, it.userId, onProfile) }
             Section(stringResource(R.string.settings_family))
             OtterSettingsRow(stringResource(R.string.settings_invite), icon = Icons.Outlined.PersonAdd, onClick = onInvite)
-            Section(stringResource(R.string.settings_photos))
+            Section(stringResource(R.string.settings_media))
             OtterSettingsRow(stringResource(R.string.settings_photos), icon = Icons.Outlined.PhotoLibrary, onClick = onPhotos)
             Section(stringResource(R.string.settings_connection))
             val online = connection as? ConnectionState.Online

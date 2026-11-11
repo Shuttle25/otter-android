@@ -30,4 +30,5 @@
     <string name="photos_cache_clear">Очистить</string>
     <string name="photos_cache_note">Фото в чатах не удаляются</string>
     <string name="photos_stored">Фото на телефоне</string>
+    <string name="settings_media">Медиа</string>
 </resources>

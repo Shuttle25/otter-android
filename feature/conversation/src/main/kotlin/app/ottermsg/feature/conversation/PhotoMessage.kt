@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
@@ -70,10 +71,12 @@ fun PhotoContent(localId: Long, p: PhotoUi, width: Dp, onDownload: () -> Unit, m
                 if (progress != null && progress > 0f) CircularProgressIndicator(progress = { progress }, color = Color.White, modifier = Modifier.size(32.dp))
                 else CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp))
             }
-            PhotoState.Remote -> FilledTonalButton(onClick = onDownload) { Text(stringResource(R.string.conv_photo_download)) }
+            PhotoState.Remote -> FilledTonalButton(onClick = onDownload, colors = photoButtonColors()) { Text(stringResource(R.string.conv_photo_download)) }
             PhotoState.Failed -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Label(stringResource(R.string.conv_photo_failed))
-                FilledTonalButton(onClick = onDownload, modifier = Modifier.padding(top = Dimens.s8)) { Text(stringResource(R.string.conv_retry)) }
+                FilledTonalButton(onClick = onDownload, colors = photoButtonColors(), modifier = Modifier.padding(top = Dimens.s8)) {
+                    Text(stringResource(R.string.conv_retry))
+                }
             }
             PhotoState.Gone -> Label(stringResource(R.string.conv_photo_gone))
             PhotoState.Ready -> {}
@@ -81,6 +84,11 @@ fun PhotoContent(localId: Long, p: PhotoUi, width: Dp, onDownload: () -> Unit, m
         overlay()
     }
 }
+
+/** Otter surface with primary text (not Material's default tonal lavender). */
+@Composable
+private fun photoButtonColors() = ButtonDefaults.filledTonalButtonColors(
+    containerColor = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.primary)
 
 @Composable
 private fun Label(text: String) {

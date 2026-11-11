@@ -37,4 +37,15 @@ class SmokeTest {
             assertEquals(p, PackageManager.PERMISSION_GRANTED, ctx.packageManager.checkPermission(p, ctx.packageName))
         }
     }
+
+    /** M4: the camera FileProvider from feature:conversation is merged and serves cacheDir/camera; CAMERA is declared. */
+    @Test fun cameraFileProviderAndPermissionDeclared() {
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        val f = java.io.File(java.io.File(ctx.cacheDir, "camera").apply { mkdirs() }, "smoke.jpg").apply { writeText("x") }
+        val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".photos", f)
+        assertEquals("content", uri.scheme)
+        val requested = ctx.packageManager.getPackageInfo(ctx.packageName, PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty()
+        assert(Manifest.permission.CAMERA in requested)
+        f.delete()
+    }
 }
