@@ -17,6 +17,7 @@ dependencies {
     implementation(libs.room.runtime); implementation(libs.room.ktx)
     implementation(libs.hilt.android); ksp(libs.hilt.compiler)
     implementation(libs.androidx.lifecycle.process)
+    implementation(libs.androidx.exifinterface)
     testImplementation(libs.junit); testImplementation(libs.robolectric); testImplementation(libs.androidx.test.core)
     testImplementation(libs.coroutines.test)
 }
