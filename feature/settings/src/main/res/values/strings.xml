@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_title">Настройки</string>
+    <string name="settings_profile">Профиль</string>
+    <string name="settings_family">Семья</string>
+    <string name="settings_invite">Пригласить в семью</string>
+    <string name="settings_connection">Подключение</string>
+    <string name="settings_online">Подключено</string>
+    <string name="settings_connecting">Подключаемся…</string>
+    <string name="settings_offline">Нет подключения</string>
+    <string name="profile_title">Профиль</string>
+    <string name="profile_name">Имя</string>
+    <string name="profile_username">Имя пользователя</string>
+    <string name="profile_username_fixed">нельзя изменить</string>
+    <string name="profile_pending">Имя обновится у близких, когда появится подключение</string>
+    <string name="edit_name_title">Изменить имя</string>
+    <string name="edit_name_label">Имя</string>
+    <string name="edit_name_hint">Так вас видят близкие</string>
+    <string name="edit_name_empty">Введите имя</string>
+    <string name="edit_name_too_long">Не длиннее 64 символов</string>
+    <string name="edit_name_save">Сохранить</string>
+</resources>

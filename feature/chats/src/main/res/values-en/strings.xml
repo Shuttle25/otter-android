@@ -18,14 +18,6 @@
     <string name="invite_qr_description">Family invite QR code</string>
     <string name="invite_error">Could not create an invite. Check the connection and try again.</string>
     <string name="invite_retry">Try again</string>
-    <string name="settings_title">Settings</string>
-    <string name="settings_profile">Profile</string>
-    <string name="settings_family">Family</string>
-    <string name="settings_invite">Invite to the family</string>
-    <string name="settings_connection">Connection</string>
-    <string name="settings_online">Connected</string>
-    <string name="settings_connecting">Connecting…</string>
-    <string name="settings_offline">No connection</string>
     <string name="chats_empty_title">No chats yet</string>
     <string name="chats_author">%1$s: %2$s</string>
     <string name="newchat_group">New group</string>

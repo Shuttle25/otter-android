@@ -28,6 +28,8 @@ private fun scheme(p: OtterPalette, dark: Boolean) = (if (dark) darkColorScheme(
     surface = Color(p.surface), onSurface = Color(p.onSurface),
     surfaceVariant = Color(p.surfaceVariant), onSurfaceVariant = Color(p.onSurfaceVariant),
     primary = Color(p.primary), onPrimary = Color(p.onPrimary),
+    // FABs and tonal buttons use the outgoing-bubble pair (M3: Material's default lavender showed through)
+    primaryContainer = Color(p.outgoingContainer), onPrimaryContainer = Color(p.onOutgoingContainer),
     outline = Color(p.outline), outlineVariant = Color(p.divider),
     error = Color(p.error), errorContainer = Color(p.errorContainer), onErrorContainer = Color(p.error),
 )

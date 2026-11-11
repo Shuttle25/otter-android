@@ -46,7 +46,7 @@ kotlin { jvmToolchain(21) }
 dependencies {
     implementation(project(":core:ui")); implementation(project(":core:database")); implementation(project(":core:crypto"))
     implementation(project(":core:data"))
-    implementation(project(":feature:onboarding")); implementation(project(":feature:chats")); implementation(project(":feature:conversation")); implementation(project(":feature:groups"))
+    implementation(project(":feature:onboarding")); implementation(project(":feature:chats")); implementation(project(":feature:conversation")); implementation(project(":feature:groups")); implementation(project(":feature:settings"))
     implementation(libs.libsignal.android)
     coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(libs.androidx.core.ktx); implementation(libs.androidx.activity.compose)

@@ -1,4 +1,4 @@
-package app.ottermsg.feature.chats
+package app.ottermsg.feature.settings
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -6,7 +6,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Person
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material3.Icon
+import androidx.compose.ui.Alignment
+import app.ottermsg.core.ui.components.OtterAvatar
 import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material3.MaterialTheme
@@ -42,16 +51,16 @@ fun connectionLabel(state: ConnectionState): Int = when (state) {
     else -> R.string.settings_offline
 }
 
-/** M1 settings: profile, family invite, connection. Other sections of guide §10 arrive with their features. */
+/** Settings: profile, family invite, connection. Other sections of guide §10 arrive with their features. */
 @Composable
-fun SettingsRoute(onBack: () -> Unit, onInvite: () -> Unit, vm: SettingsViewModel = hiltViewModel()) {
+fun SettingsRoute(onBack: () -> Unit, onInvite: () -> Unit, onProfile: () -> Unit, vm: SettingsViewModel = hiltViewModel()) {
     val account by vm.account.collectAsStateWithLifecycle()
     val connection by vm.connection.collectAsStateWithLifecycle()
     Scaffold(containerColor = MaterialTheme.colorScheme.background,
         topBar = { OtterTopBar(stringResource(R.string.settings_title), onBack = onBack) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())) {
             Section(stringResource(R.string.settings_profile))
-            OtterSettingsRow(account?.displayName.orEmpty(), subtitle = account?.username?.let { "@$it" }, icon = Icons.Outlined.Person)
+            account?.let { ProfileRow(it.displayName, it.username, it.userId, onProfile) }
             Section(stringResource(R.string.settings_family))
             OtterSettingsRow(stringResource(R.string.settings_invite), icon = Icons.Outlined.PersonAdd, onClick = onInvite)
             Section(stringResource(R.string.settings_connection))
@@ -59,6 +68,24 @@ fun SettingsRoute(onBack: () -> Unit, onInvite: () -> Unit, vm: SettingsViewMode
             OtterSettingsRow(stringResource(connectionLabel(connection)), subtitle = online?.let { "${it.nodeLabel} · ${it.url}" },
                 icon = Icons.Outlined.Wifi)
         }
+    }
+}
+
+/** Avatar 48 dp, name, @username and a chevron; the whole row opens Profile. */
+@Composable
+private fun ProfileRow(name: String, username: String, userId: ByteArray, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = Dimens.settingsRowWithCaptionMin).clickable(onClick = onClick)
+            .padding(horizontal = Dimens.screenGutter, vertical = Dimens.s8),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        OtterAvatar(name, seed = userId, size = Dimens.avatarList)
+        Spacer(Modifier.width(Dimens.s16))
+        Column(Modifier.weight(1f)) {
+            Text(name, style = MaterialTheme.typography.titleMedium)
+            Text("@$username", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

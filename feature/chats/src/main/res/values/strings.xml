@@ -18,14 +18,6 @@
     <string name="invite_qr_description">QR-код приглашения в семью</string>
     <string name="invite_error">Не удалось создать приглашение. Проверьте подключение и повторите.</string>
     <string name="invite_retry">Повторить</string>
-    <string name="settings_title">Настройки</string>
-    <string name="settings_profile">Профиль</string>
-    <string name="settings_family">Семья</string>
-    <string name="settings_invite">Пригласить в семью</string>
-    <string name="settings_connection">Подключение</string>
-    <string name="settings_online">Подключено</string>
-    <string name="settings_connecting">Подключаемся…</string>
-    <string name="settings_offline">Нет подключения</string>
     <string name="chats_empty_title">Пока нет чатов</string>
     <string name="chats_author">%1$s: %2$s</string>
     <string name="newchat_group">Новая группа</string>

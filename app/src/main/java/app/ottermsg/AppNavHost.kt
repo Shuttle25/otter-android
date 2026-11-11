@@ -12,7 +12,6 @@ import app.ottermsg.core.data.account.LocalAccount
 import app.ottermsg.feature.chats.ChatListRoute
 import app.ottermsg.feature.chats.InviteRoute
 import app.ottermsg.feature.chats.NewChatRoute
-import app.ottermsg.feature.chats.SettingsRoute
 import app.ottermsg.feature.conversation.ConversationRoute
 import app.ottermsg.feature.conversation.ConversationViewModel
 import app.ottermsg.feature.conversation.MessageInfoRoute
@@ -22,6 +21,9 @@ import app.ottermsg.feature.groups.GroupInfoRoute
 import app.ottermsg.feature.groups.GroupInfoViewModel
 import app.ottermsg.feature.groups.NewGroupRoute
 import app.ottermsg.feature.onboarding.OnboardingRoute
+import app.ottermsg.feature.settings.EditNameRoute
+import app.ottermsg.feature.settings.ProfileRoute
+import app.ottermsg.feature.settings.SettingsRoute
 import kotlinx.coroutines.flow.StateFlow
 
 object Routes {
@@ -31,6 +33,8 @@ object Routes {
     const val CONVERSATION = "conversation/{${ConversationViewModel.ARG_ID}}"
     const val INVITE = "invite"
     const val SETTINGS = "settings"
+    const val PROFILE = "settings/profile"
+    const val EDIT_NAME = "settings/profile/name"
     const val NEW_GROUP = "newGroup"
     const val GROUP_INFO = "groupInfo/{${GroupInfoViewModel.ARG_GROUP}}"
     const val ADD_MEMBERS = "addMembers/{${GroupInfoViewModel.ARG_GROUP}}"
@@ -83,6 +87,13 @@ fun AppNavHost(hasAccount: Boolean, account: StateFlow<LocalAccount?>) {
             MessageInfoRoute(onBack = { nav.popBackStack() })
         }
         composable(Routes.INVITE) { InviteRoute(onBack = { nav.popBackStack() }) }
-        composable(Routes.SETTINGS) { SettingsRoute(onBack = { nav.popBackStack() }, onInvite = { nav.navigate(Routes.INVITE) }) }
+        composable(Routes.SETTINGS) {
+            SettingsRoute(onBack = { nav.popBackStack() }, onInvite = { nav.navigate(Routes.INVITE) },
+                onProfile = { nav.navigate(Routes.PROFILE) })
+        }
+        composable(Routes.PROFILE) {
+            ProfileRoute(onBack = { nav.popBackStack() }, onEditName = { nav.navigate(Routes.EDIT_NAME) })
+        }
+        composable(Routes.EDIT_NAME) { EditNameRoute(onBack = { nav.popBackStack() }) }
     }
 }

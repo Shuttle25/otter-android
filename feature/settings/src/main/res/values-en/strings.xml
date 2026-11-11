@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_title">Settings</string>
+    <string name="settings_profile">Profile</string>
+    <string name="settings_family">Family</string>
+    <string name="settings_invite">Invite to the family</string>
+    <string name="settings_connection">Connection</string>
+    <string name="settings_online">Connected</string>
+    <string name="settings_connecting">Connecting…</string>
+    <string name="settings_offline">No connection</string>
+    <string name="profile_title">Profile</string>
+    <string name="profile_name">Name</string>
+    <string name="profile_username">Username</string>
+    <string name="profile_username_fixed">can\'t be changed</string>
+    <string name="profile_pending">Your name will update for others once you\'re online</string>
+    <string name="edit_name_title">Edit name</string>
+    <string name="edit_name_label">Name</string>
+    <string name="edit_name_hint">This is how others see you</string>
+    <string name="edit_name_empty">Enter a name</string>
+    <string name="edit_name_too_long">64 characters at most</string>
+    <string name="edit_name_save">Save</string>
+</resources>
