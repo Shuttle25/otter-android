@@ -18,4 +18,16 @@ class MigrationTest {
             db.query("SELECT COUNT(*) FROM manifest").use { c -> c.moveToFirst(); assertEquals(1, c.getInt(0)) }
         }
     }
+
+    @Test fun migrate2To3() {
+        helper.createDatabase("m3.db", 2).use {
+            it.execSQL("INSERT INTO manifest(version, raw) VALUES (4, x'04')")
+            it.execSQL("INSERT INTO outbox(recipient_user_id, content_bytes, message_local_id, urgent, record_bytes, attempts, next_attempt_ms, created_ms) VALUES (x'01', x'02', 1, 1, NULL, 0, 0, 5)")
+        }
+        helper.runMigrationsAndValidate("m3.db", 3, true).use { db ->
+            db.query("SELECT received_ms FROM manifest").use { c -> c.moveToFirst(); assertEquals(0, c.getInt(0)) }
+            db.query("SELECT resent, sent_ms IS NULL FROM outbox").use { c -> c.moveToFirst(); assertEquals(0, c.getInt(0)); assertEquals(1, c.getInt(1)) }
+            db.query("SELECT COUNT(*) FROM endpoint_stats").use { c -> c.moveToFirst(); assertEquals(0, c.getInt(0)) }
+        }
+    }
 }

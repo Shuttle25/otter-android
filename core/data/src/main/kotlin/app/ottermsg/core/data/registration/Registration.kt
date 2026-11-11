@@ -119,7 +119,7 @@ class Registration @Inject constructor(
             settings.setRegistrationId(registrationId)
             settings.setNextOneTimeId(nextId)
             settings.setNetworkPub(networkPub)
-            db.manifestDao().insert(ManifestEntity(manifest.version, bundle.manifest.toByteArray()))
+            db.manifestDao().insert(ManifestEntity(manifest.version, bundle.manifest.toByteArray(), receivedMs = now))
             mem.copyInto(RoomSignalKeyValue(db.signalKvDao()))
             if (!bundle.inviterUserId.isEmpty) db.contactDao().upsert(ContactEntity(
                 bundle.inviterUserId.toByteArray(), "", bundle.inviterName, bundle.inviterAccountPub.toByteArray(),

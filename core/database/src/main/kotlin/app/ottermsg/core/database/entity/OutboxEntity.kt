@@ -17,4 +17,7 @@ data class OutboxEntity(
     val attempts: Int = 0,
     @ColumnInfo(name = "next_attempt_ms") val nextAttemptMs: Long = 0,
     @ColumnInfo(name = "created_ms") val createdMs: Long,
+    /** Set once a data message was accepted by a node; kept until a receipt arrives (resend after 24 h). */
+    @ColumnInfo(name = "sent_ms") val sentMs: Long? = null,
+    @ColumnInfo(defaultValue = "0") val resent: Boolean = false,
 )

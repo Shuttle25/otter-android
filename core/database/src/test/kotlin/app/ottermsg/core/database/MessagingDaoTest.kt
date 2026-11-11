@@ -139,4 +139,40 @@ class MessagingDaoTest {
         db.settingsDao().put(SettingEntity("x", byteArrayOf(4)))
         assertArrayEquals(byteArrayOf(4), db.settingsDao().get("x"))
     }
+
+    @Test fun outboxResendRule() = runTest {
+        val o = db.outboxDao()
+        val day = app.ottermsg.core.database.dao.OutboxDao.RESEND_AFTER_MS
+        val msg = o.insert(OutboxEntity(recipientUserId = bob, contentBytes = byteArrayOf(1), messageLocalId = 7, urgent = true, createdMs = 1))
+        o.markSent(msg, 1_000)
+        assertTrue(o.due(1_000 + day - 1).isEmpty()) // sent, receipt not yet overdue
+        assertEquals(1_000 + day, o.nextAttemptAt())
+        assertEquals(listOf(msg), o.due(1_000 + day).map { it.id })
+        o.markResent(msg)
+        assertTrue(o.due(Long.MAX_VALUE / 2).isEmpty()) // resent once only
+        assertNull(o.nextAttemptAt())
+        o.deleteSentBefore(1_001)
+        assertNull(o.due(0).firstOrNull())
+        assertEquals(0, o.due(Long.MAX_VALUE / 2).size)
+
+        val again = o.insert(OutboxEntity(recipientUserId = bob, contentBytes = byteArrayOf(2), messageLocalId = 8, urgent = true, createdMs = 2))
+        o.deleteForMessage(8)
+        assertTrue(o.due(Long.MAX_VALUE / 2).none { it.id == again })
+    }
+
+    @Test fun manifestsAndEndpointStats() = runTest {
+        val m = db.manifestDao()
+        m.insert(app.ottermsg.core.database.entity.ManifestEntity(1, byteArrayOf(1), receivedMs = 10))
+        m.insert(app.ottermsg.core.database.entity.ManifestEntity(3, byteArrayOf(3), receivedMs = 30))
+        m.insert(app.ottermsg.core.database.entity.ManifestEntity(2, byteArrayOf(2), receivedMs = 20))
+        assertEquals(listOf(3L, 2L), m.latestTwo().map { it.version })
+        assertEquals(30L, m.latestTwo()[0].receivedMs)
+
+        val e = db.endpointStatDao()
+        assertNull(e.get("k"))
+        e.upsert(app.ottermsg.core.database.entity.EndpointStatEntity("k", lastSuccessMs = 5, rttMs = 40))
+        e.upsert(app.ottermsg.core.database.entity.EndpointStatEntity("k", lastSuccessMs = 6, rttMs = 30, failures = 1))
+        assertEquals(30L, e.get("k")!!.rttMs)
+        assertEquals(1, e.all().size)
+    }
 }
