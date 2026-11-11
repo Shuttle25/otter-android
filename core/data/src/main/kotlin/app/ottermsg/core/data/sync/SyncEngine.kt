@@ -58,13 +58,7 @@ class SyncEngine @Inject constructor(
     private suspend fun candidates(): List<Candidate> = manifests.candidates(allowPlaintext)
 
     /** Default network switched (Wi-Fi ↔ mobile): a live connection may be stale, a waiting one may work now. */
-    fun onNetworkChanged() {
-        when (connection.value) {
-            is ConnectionState.Online -> reconnect()
-            is ConnectionState.Waiting -> retryNow()
-            else -> {}
-        }
-    }
+    fun onNetworkChanged() = manager.networkChanged()
 
     /** One connected session; [session] is cancelled by the ConnectionManager when the connection ends. */
     suspend fun runSession(api: NodeApi, session: CoroutineScope) {

@@ -87,4 +87,31 @@ class ConnectionManagerTest {
         assertTrue(t.connections.first().closed)
         cm.stop()
     }
+
+    @Test fun networkChangeWhileConnectingRacesAgainWithoutBackoff() = runTest {
+        // Old network: connects hang 10 s and fail (LAN node unreachable over mobile data).
+        val t = FakeTransport(failUrls = setOf("a"), delays = mapOf("a" to 10_000)) { ok() }
+        val cm = manager(t, listOf(cand("a")), backgroundScope, { currentTime })
+        cm.start()
+        repeat(4) { advanceTimeBy(20_000) } // backoff grown well past 1 s
+        cm.state.first { it is ConnectionState.Connecting }
+        t.failUrls = emptySet(); t.delays = emptyMap() // Wi-Fi is back
+        val before = currentTime
+        cm.networkChanged()
+        cm.state.first { it is ConnectionState.Online }
+        assertTrue("only the in-flight attempt is waited out, no backoff", currentTime - before <= 10_000)
+        cm.stop()
+    }
+
+    @Test fun networkChangeResetsBackoff() = runTest {
+        val t = FakeTransport(failUrls = setOf("a")) { ok() }
+        val cm = manager(t, listOf(cand("a")), backgroundScope, { currentTime })
+        cm.start()
+        repeat(6) { advanceTimeBy(70_000) }
+        cm.state.first { it is ConnectionState.Waiting }
+        cm.networkChanged() // still unreachable on the new network
+        val w = cm.state.first { it is ConnectionState.Waiting && it.retryAtMs - currentTime < 2_000 } as ConnectionState.Waiting
+        assertTrue(w.retryAtMs - currentTime in 800..1200)
+        cm.stop()
+    }
 }

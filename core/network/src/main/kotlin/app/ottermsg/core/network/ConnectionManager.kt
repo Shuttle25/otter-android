@@ -39,6 +39,7 @@ class ConnectionManager(
     private var job: Job? = null
     @Volatile private var rpc: RpcClient? = null
     @Volatile private var raceNow = false
+    @Volatile private var resetBackoff = false
     private val wake = Channel<Unit>(Channel.CONFLATED)
 
     @Synchronized fun start() {
@@ -62,10 +63,21 @@ class ConnectionManager(
         wake.trySend(Unit)
     }
 
+    /**
+     * The default network changed (Wi-Fi ↔ mobile, Wi-Fi back on): whatever the state, race again at once with the
+     * backoff reset. A connection on the old network is dropped; a race already in flight on the old network
+     * finishes (≤ connect timeout) and is followed straight away by a fresh one instead of a backoff wait.
+     */
+    fun networkChanged() {
+        resetBackoff = true
+        reconnect()
+    }
+
     private suspend fun loop() {
         var backoffMs = 1_000L
         while (scope.isActive) {
             raceNow = false
+            if (resetBackoff) { resetBackoff = false; backoffMs = 1_000L }
             _state.value = ConnectionState.Connecting
             var remaining = candidates()
             var lastError = if (remaining.isEmpty()) "no endpoints" else "unreachable"

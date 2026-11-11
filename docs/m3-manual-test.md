@@ -25,12 +25,15 @@ with two scripted members (JVM clients that greet every group they join and read
 | 12 | Write after the removal | Remaining members read it; the removed member gets nothing (sender keys rotated) | pass (remaining member read it; removal covered by LiveGroupTest) |
 | 13 | Create a normal group (switch off) | Coloured initials avatar (colour stays after renaming) | pass ("D", mint) |
 | 14 | Leave as the last admin | Dialog asks for a new admin first; afterwards "Вы покинули группу" and the composer is replaced by "Вы больше не участник этой группы"; group info read-only | pass |
-| 15 | Rename (admin) on phone A; check phone B | Title and chip update on both | — |
-| 16 | Add a member on phone A; the new member writes | New member sees only messages after joining; others read the new member | — (covered by GroupFlowTest) |
-| 17 | Phone B offline; A changes the group and writes; B back online | B catches up: state, events and messages in order | — |
+| 15 | Rename (admin) on phone A; check phone B | Title and chip update on both | pass (phones) |
+| 16 | Add a member on phone A; the new member writes | New member sees only messages after joining; others read the new member | pass (phones) |
+| 17 | Phone B offline; A changes the group and writes; B back online | B catches up: state, events and messages in order | pass (phones) after reopening the app; Wi-Fi back while the app stayed open did not reconnect → fixed (network change during a connect attempt was ignored), retest with the app open |
 | 18 | Launcher icon: circle and squircle shapes; themed icons on (Wallpaper & style → Themed icons) | Otter head fully inside the mask; monochrome head readable | circle pass on the Pixel launcher; squircle/rounded checked by rendering the masks; themed — |
 | 19 | Android 12+ splash | Adaptive icon on the app background (light and dark) | — |
 | 20 | Empty conversation (direct chat with no messages) | Empty-chat art + "Пока нет сообщений" / "Напишите первое сообщение"; hidden when the keyboard is open | — |
 | 21 | TalkBack on group info and a group conversation | Rows read "name, админ"; admin actions in the actions menu; event chips read as text | — |
+
+Phone run (2026-11-11, phone A + phone B, dev mesh): rows 5, 9, 12, 15, 16, 17 checked on the phones. Row 5
+by design: a group message stays ✓ until **every** member has it (✓✓) and turns read only when every member has read it.
 
 Record pass/fail per line and any crash from `adb logcat -b crash`.
