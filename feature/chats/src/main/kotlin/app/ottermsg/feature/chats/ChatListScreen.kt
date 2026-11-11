@@ -63,7 +63,8 @@ fun ChatListRoute(myName: String, mySeed: ByteArray, onOpen: (Long) -> Unit, onN
             }
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(onClick = onNewChat, icon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
+            // The empty state has its own "Написать" button: no second one.
+            if (state != ChatListState.Empty) ExtendedFloatingActionButton(onClick = onNewChat, icon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
                 text = { Text(stringResource(R.string.chats_write)) })
         },
     ) { padding ->

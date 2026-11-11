@@ -175,7 +175,7 @@ private fun MemberRow(m: MemberUi, actions: List<MenuAction>, menuOpen: Boolean,
                 .padding(horizontal = Dimens.screenGutter, vertical = Dimens.s4),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            OtterAvatar(m.name, m.id, size = 40.dp)
+            OtterAvatar(m.avatarName, m.id, size = 40.dp)
             Spacer(Modifier.width(Dimens.s12))
             Text(m.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             if (m.admin) Surface(shape = RoundedCornerShape(Dimens.s8), color = MaterialTheme.colorScheme.surfaceVariant) {

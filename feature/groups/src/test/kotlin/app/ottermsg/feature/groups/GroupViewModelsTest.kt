@@ -40,6 +40,7 @@ class GroupViewModelsTest {
         override fun observeMembers(groupId: ByteArray) = members
         override fun observeContacts() = contacts
         override suspend fun myId() = me
+        override suspend fun myName() = "Анна"
         override suspend fun conversationOf(groupId: ByteArray) = 5L
         private fun call(s: String) { if (refuse) throw GroupChangeRefused("no"); calls += s }
         override suspend fun create(name: String, family: Boolean, members: List<ByteArray>): Long { call("create:$name:$family:${members.size}"); return 42 }
@@ -96,6 +97,7 @@ class GroupViewModelsTest {
         val ui = vm.ui.value
         assertEquals(3, ui.memberCount)
         assertEquals(listOf("Вы", "Борис", "Вера"), ui.members.map { it.name })
+        assertEquals("Анна", ui.members[0].avatarName)
         assertTrue(ui.iAmAdmin); assertTrue(ui.mustPickAdminBeforeLeaving)
         vm.leaveAfterPromoting(vera); runCurrent()
         assertEquals(listOf("admin:3:true", "leave"), store.calls)

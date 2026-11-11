@@ -60,7 +60,14 @@ class LiveClient {
     suspend fun register(link: String, name: String, username: String) =
         registration.register(link, name, username, ByteArray(32).also(SecureRandom()::nextBytes)).getOrThrow()
 
-    suspend fun online(): ConnectionState.Online {
+    /**
+     * Connects; with [prefer] the race starts at that node (seeded stats: others recently failed), so a test can put
+     * clients on different nodes of the mesh.
+     */
+    suspend fun online(prefer: String? = null): ConnectionState.Online {
+        if (prefer != null) for (c in manifests.candidates(true)) {
+            if (c.label == prefer) stats.success(c.key, 1, clock.now()) else stats.failure(c.key, clock.now())
+        }
         engine.start()
         return engine.connection.first { it is ConnectionState.Online } as ConnectionState.Online
     }

@@ -33,6 +33,7 @@ interface GroupStore {
     /** Family members (pickers, names). */
     fun observeContacts(): Flow<List<ContactEntity>>
     suspend fun myId(): ByteArray
+    suspend fun myName(): String
 }
 
 /**
@@ -53,6 +54,7 @@ class GroupRepository @Inject constructor(
     override suspend fun conversationOf(groupId: ByteArray): Long? = db.conversationDao().byGroup(groupId)?.id
     override fun observeContacts(): Flow<List<ContactEntity>> = db.contactDao().observeAll()
     override suspend fun myId(): ByteArray = accounts.require().userId
+    override suspend fun myName(): String = accounts.require().displayName
 
     override suspend fun create(name: String, family: Boolean, members: List<ByteArray>): Long {
         val me = accounts.require().userId

@@ -18,7 +18,8 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
 
-data class MemberUi(val id: ByteArray, val name: String, val admin: Boolean, val isMe: Boolean)
+/** [name] is "Вы" for the local user; [avatarName] is always the real name (initials). */
+data class MemberUi(val id: ByteArray, val name: String, val admin: Boolean, val isMe: Boolean, val avatarName: String = name)
 
 data class GroupInfoUi(
     val loaded: Boolean = false, val groupId: ByteArray = ByteArray(0), val name: String = "", val family: Boolean = false,
@@ -31,12 +32,13 @@ data class GroupInfoUi(
 }
 
 /** Pure mapping, unit-tested: me first, then admins, then by name. */
-fun groupInfoUi(g: GroupEntity?, members: List<GroupMemberEntity>, contacts: List<ContactEntity>, me: ByteArray, meLabel: String): GroupInfoUi {
+fun groupInfoUi(g: GroupEntity?, members: List<GroupMemberEntity>, contacts: List<ContactEntity>, me: ByteArray, meLabel: String, myName: String = meLabel): GroupInfoUi {
     if (g == null) return GroupInfoUi(loaded = true, iAmMember = false)
     val names = contacts.associate { it.userId.toList() to it.displayName }
     val list = members.map { m ->
         val isMe = m.userId.contentEquals(me)
-        MemberUi(m.userId, if (isMe) meLabel else names[m.userId.toList()] ?: "?", m.admin, isMe)
+        val real = if (isMe) myName else names[m.userId.toList()] ?: "?"
+        MemberUi(m.userId, if (isMe) meLabel else real, m.admin, isMe, real)
     }.sortedWith(compareBy<MemberUi>({ !it.isMe }, { !it.admin }, { it.name.lowercase() }))
     val mine = list.firstOrNull { it.isMe }
     return GroupInfoUi(true, g.groupId, g.name, g.family, if (g.iAmMember) list else list.filterNot { it.isMe },
@@ -53,8 +55,9 @@ class GroupInfoViewModel @Inject constructor(private val groups: GroupStore, sav
     val error: StateFlow<Boolean> = _error
 
     val ui: StateFlow<GroupInfoUi> = combine(
-        groups.observeGroup(groupId), groups.observeMembers(groupId), groups.observeContacts(), flow { emit(groups.myId()) }, meLabel,
-    ) { g, ms, cs, me, label -> groupInfoUi(g, ms, cs, me, label) }
+        groups.observeGroup(groupId), groups.observeMembers(groupId), groups.observeContacts(),
+        flow { emit(groups.myId() to groups.myName()) }, meLabel,
+    ) { g, ms, cs, me, label -> groupInfoUi(g, ms, cs, me.first, label, me.second) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), GroupInfoUi())
 
     fun rename(name: String) = act { groups.rename(groupId, name) }
