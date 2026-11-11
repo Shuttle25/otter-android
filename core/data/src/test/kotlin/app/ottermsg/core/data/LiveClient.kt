@@ -13,6 +13,13 @@ import app.ottermsg.core.data.messaging.GroupSender
 import app.ottermsg.core.data.messaging.MailboxReceiver
 import app.ottermsg.core.data.messaging.MessageRepository
 import app.ottermsg.core.data.messaging.Outbox
+import app.ottermsg.core.data.media.GallerySaver
+import app.ottermsg.core.data.media.IncomingPhotos
+import app.ottermsg.core.data.media.MediaFiles
+import app.ottermsg.core.data.media.MediaTransfers
+import app.ottermsg.core.data.media.NetworkInfo
+import app.ottermsg.core.data.media.PhotoLoader
+import app.ottermsg.core.data.media.PhotoPrep
 import app.ottermsg.core.data.profile.ProfileRepository
 import app.ottermsg.core.data.registration.Registration
 import app.ottermsg.core.data.registration.TransportConnector
@@ -45,16 +52,24 @@ class LiveClient {
     val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao(), settings, db.accountDao())
     val profile = ProfileRepository(accounts, db, settings, clock)
     val outbox = Outbox(db, accounts, signal, clock, GroupSender(db, signal, clock))
+    private val clientId = java.util.UUID.randomUUID().toString()
+    val files = object : MediaFiles(ApplicationProvider.getApplicationContext()) {
+        override val mediaDir get() = java.io.File(ApplicationProvider.getApplicationContext<android.content.Context>().filesDir, "media-$clientId").also { it.mkdirs() }
+    }
+    val photoLoader = PhotoLoader(db, files)
+    val media = MediaTransfers(db, accounts, files, settings, NetworkInfo { true },
+        GallerySaver(ApplicationProvider.getApplicationContext(), photoLoader), outbox, clock)
+    val incomingPhotos = IncomingPhotos(db, files, settings, media)
     val applier = GroupApplier(db, accounts, directory, clock)
-    val groupReceiver = GroupReceiver(db, accounts, signal, applier, outbox, clock)
-    val receiver = MailboxReceiver(db, accounts, signal, directory, outbox, clock, groupReceiver)
+    val groupReceiver = GroupReceiver(db, accounts, signal, applier, outbox, clock, incomingPhotos)
+    val receiver = MailboxReceiver(db, accounts, signal, directory, outbox, clock, groupReceiver, incomingPhotos)
     val groups = GroupRepository(db, accounts, applier, outbox, clock)
-    val messages = MessageRepository(db, accounts, outbox, clock)
+    val messages = MessageRepository(db, accounts, outbox, clock, files, PhotoPrep(), media)
     val prekeys = PrekeyRefill(accounts, settings, signal, clock)
     val stats = InMemoryEndpointStats()
     val selector = NodeSelector(transport, stats, clock::now)
     val manifests = ManifestUpdater(db.manifestDao(), settings, clock)
-    val engine = SyncEngine(stats, selector, accounts, settings, manifests, directory, receiver, outbox, prekeys, profile, scope, true, clock)
+    val engine = SyncEngine(stats, selector, accounts, settings, manifests, directory, receiver, outbox, prekeys, profile, media, scope, true, clock)
     val invites = InviteRepository(accounts, settings, db.manifestDao(), engine, clock)
     val registration = Registration(db, TransportConnector(selector), SeedVault(XorWrapper), accounts, settings, clock, allowPlaintext = true)
     val me get() = accounts.require()

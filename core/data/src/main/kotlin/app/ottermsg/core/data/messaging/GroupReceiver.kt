@@ -5,6 +5,8 @@ import app.ottermsg.core.data.Clock
 import app.ottermsg.core.data.account.AccountRepository
 import app.ottermsg.core.data.bs
 import app.ottermsg.core.data.group.GroupApplier
+import app.ottermsg.core.data.media.IncomingAttachments
+import app.ottermsg.core.data.media.IncomingPhotos
 import app.ottermsg.core.data.signal.SignalService
 import app.ottermsg.core.database.OtterDatabase
 import app.ottermsg.core.database.entity.ConversationType
@@ -39,6 +41,7 @@ import kotlin.time.Duration.Companion.days
 class GroupReceiver @Inject constructor(
     private val db: OtterDatabase, private val accounts: AccountRepository, private val signal: SignalService,
     private val applier: GroupApplier, private val outbox: Outbox, private val clock: Clock,
+    private val photos: IncomingPhotos,
 ) {
     private val groups = db.groupDao()
     private val conversations = db.conversationDao()
@@ -173,12 +176,18 @@ class GroupReceiver @Inject constructor(
         val inserted = db.withTransaction {
             val cid = conversations.getOrCreateGroupConversation(gid, g.name, clock.now())
             val sent = if (content.sentMs > 0) content.sentMs else clock.now()
+            val photo = IncomingAttachments.photoOrNull(d)
             val id = messages.insert(MessageEntity(messageId = d.messageId.toByteArray(), conversationId = cid, senderId = sender,
-                outgoing = false, sentMs = sent, receivedMs = clock.now(), body = d.text, status = MessageStatus.DELIVERED))
-            if (id != -1L) { conversations.incrementUnread(cid); conversations.touch(cid, sent) }
+                outgoing = false, sentMs = sent, receivedMs = clock.now(), body = d.text, status = MessageStatus.DELIVERED,
+                kind = if (photo != null) MessageKind.PHOTO else MessageKind.TEXT))
+            if (id != -1L) {
+                if (photo != null) photos.store(id, photo)
+                conversations.incrementUnread(cid); conversations.touch(cid, sent)
+            }
             id != -1L
         }
         if (inserted) {
+            photos.kick()
             val receipt = Content.newBuilder().setReceipt(ReceiptMessage.newBuilder().setType(ReceiptMessage.Type.DELIVERED)
                 .addMessageIds(d.messageId)).setSentMs(clock.now()).build()
             outbox.enqueue(sender, receipt, messageLocalId = null, urgent = false)

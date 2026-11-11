@@ -6,6 +6,8 @@ import app.ottermsg.core.data.Clock
 import app.ottermsg.core.data.account.AccountRepository
 import app.ottermsg.core.data.bs
 import app.ottermsg.core.data.directory.DirectorySync
+import app.ottermsg.core.data.media.IncomingAttachments
+import app.ottermsg.core.data.media.IncomingPhotos
 import app.ottermsg.core.data.signal.SignalService
 import app.ottermsg.core.database.OtterDatabase
 import app.ottermsg.core.database.entity.ContactEntity
@@ -33,7 +35,7 @@ import kotlin.time.Duration.Companion.days
 class MailboxReceiver @Inject constructor(
     private val db: OtterDatabase, private val accounts: AccountRepository, private val signal: SignalService,
     private val directory: DirectorySync, private val outbox: Outbox, private val clock: Clock,
-    private val groups: GroupReceiver,
+    private val groups: GroupReceiver, private val photos: IncomingPhotos,
 ) {
     private val seen = db.seenEnvelopeDao()
     private val contacts = db.contactDao()
@@ -101,6 +103,7 @@ class MailboxReceiver @Inject constructor(
             api.ack(RecordCodec.sign(RecordCodec.body(RecordType.ACK, me.userId, ack.toByteArray(), createdMs = clock.now()), me.accountKey))
         }
         outbox.kick()
+        photos.kick()
     }
 
     private suspend fun handleContent(cid: Long, sender: ContactEntity, content: Content) {
@@ -108,9 +111,12 @@ class MailboxReceiver @Inject constructor(
             Content.BodyCase.DATA -> {
                 val d = content.data
                 val sent = if (content.sentMs > 0) content.sentMs else clock.now()
+                val photo = IncomingAttachments.photoOrNull(d)
                 val id = messages.insert(MessageEntity(messageId = d.messageId.toByteArray(), conversationId = cid, senderId = sender.userId,
-                    outgoing = false, sentMs = sent, receivedMs = clock.now(), body = d.text, status = MessageStatus.DELIVERED))
+                    outgoing = false, sentMs = sent, receivedMs = clock.now(), body = d.text, status = MessageStatus.DELIVERED,
+                    kind = if (photo != null) MessageKind.PHOTO else MessageKind.TEXT))
                 if (id != -1L) {
+                    if (photo != null) photos.store(id, photo)
                     conversations.incrementUnread(cid)
                     conversations.touch(cid, sent)
                     val receipt = Content.newBuilder().setReceipt(ReceiptMessage.newBuilder()

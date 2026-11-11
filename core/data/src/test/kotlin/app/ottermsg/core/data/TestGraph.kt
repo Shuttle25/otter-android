@@ -13,6 +13,14 @@ import app.ottermsg.core.data.messaging.GroupSender
 import app.ottermsg.core.data.messaging.MailboxReceiver
 import app.ottermsg.core.data.messaging.MessageRepository
 import app.ottermsg.core.data.messaging.Outbox
+import app.ottermsg.core.data.media.GallerySaver
+import app.ottermsg.core.data.media.IncomingPhotos
+import app.ottermsg.core.data.media.MediaFiles
+import app.ottermsg.core.data.media.MediaRepository
+import app.ottermsg.core.data.media.MediaTransfers
+import app.ottermsg.core.data.media.NetworkInfo
+import app.ottermsg.core.data.media.PhotoLoader
+import app.ottermsg.core.data.media.PhotoPrep
 import app.ottermsg.core.data.profile.ProfileRepository
 import app.ottermsg.core.data.registration.NodeConnector
 import app.ottermsg.core.data.registration.Registration
@@ -50,6 +58,8 @@ object XorWrapper : KeyWrapper {
 class TestGraph(
     val node: FakeNode, val clock: TestClock,
     val db: OtterDatabase = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), OtterDatabase::class.java).build(),
+    /** Media directory name; a restarted graph keeps it (same filesDir, like a real app restart). */
+    private val graphId: String = java.util.UUID.randomUUID().toString(),
 ) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val settings = Settings(db.settingsDao())
@@ -58,11 +68,20 @@ class TestGraph(
     val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao(), settings, db.accountDao())
     val profile = ProfileRepository(accounts, db, settings, clock)
     val outbox = Outbox(db, accounts, signal, clock, GroupSender(db, signal, clock))
+    val files = object : MediaFiles(ApplicationProvider.getApplicationContext()) {
+        override val mediaDir get() = java.io.File(ApplicationProvider.getApplicationContext<android.content.Context>().filesDir, "media-$graphId").also { it.mkdirs() }
+    }
+    @Volatile var unmetered = true
+    val photoLoader = PhotoLoader(db, files)
+    val gallery = GallerySaver(ApplicationProvider.getApplicationContext(), photoLoader)
+    val media = MediaTransfers(db, accounts, files, settings, NetworkInfo { unmetered }, gallery, outbox, clock)
+    val incomingPhotos = IncomingPhotos(db, files, settings, media)
+    val photos = MediaRepository(db, photoLoader, gallery, media)
     val applier = GroupApplier(db, accounts, directory, clock)
-    val groupReceiver = GroupReceiver(db, accounts, signal, applier, outbox, clock)
-    val receiver = MailboxReceiver(db, accounts, signal, directory, outbox, clock, groupReceiver)
+    val groupReceiver = GroupReceiver(db, accounts, signal, applier, outbox, clock, incomingPhotos)
+    val receiver = MailboxReceiver(db, accounts, signal, directory, outbox, clock, groupReceiver, incomingPhotos)
     val groups = GroupRepository(db, accounts, applier, outbox, clock)
-    val messages = MessageRepository(db, accounts, outbox, clock)
+    val messages = MessageRepository(db, accounts, outbox, clock, files, PhotoPrep(), media)
     val prekeys = PrekeyRefill(accounts, settings, signal, clock)
     @Volatile var session: FakeNode.Session? = null
     private var sessionScope: CoroutineScope? = null
@@ -79,7 +98,7 @@ class TestGraph(
     val manifests = app.ottermsg.core.data.sync.ManifestUpdater(db.manifestDao(), settings, clock)
     val engine = SyncEngine(app.ottermsg.core.network.InMemoryEndpointStats(),
         app.ottermsg.core.network.NodeSelector(noTransport, app.ottermsg.core.network.InMemoryEndpointStats(), clock::now),
-        accounts, settings, manifests, directory, receiver, outbox, prekeys, profile, scope, true, clock)
+        accounts, settings, manifests, directory, receiver, outbox, prekeys, profile, media, scope, true, clock)
     val seed = ByteArray(32).also(SecureRandom()::nextBytes)
     val me get() = accounts.require()
 
@@ -105,7 +124,7 @@ class TestGraph(
     /** Simulates an app restart: this graph stops (database kept), a new graph opens on the same database. */
     suspend fun restart(): TestGraph {
         offline(); scope.cancel(); closeDb = false
-        return TestGraph(node, clock, db).also { it.accounts.load() }
+        return TestGraph(node, clock, db, graphId).also { it.accounts.load() }
     }
 
     fun close() { offline(); scope.cancel(); if (closeDb) db.close() }

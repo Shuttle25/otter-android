@@ -6,7 +6,9 @@ import app.ottermsg.core.data.invite.OnlineApi
 import app.ottermsg.core.data.group.GroupRepository
 import app.ottermsg.core.data.group.GroupStore
 import app.ottermsg.core.data.media.AndroidNetworkInfo
+import app.ottermsg.core.data.media.MediaRepository
 import app.ottermsg.core.data.media.NetworkInfo
+import app.ottermsg.core.data.media.PhotoStore
 import app.ottermsg.core.data.messaging.ConversationStore
 import app.ottermsg.core.data.messaging.MessageRepository
 import app.ottermsg.core.data.registration.NodeConnector
@@ -47,4 +49,5 @@ object DataModule {
     @Provides fun conversationStore(r: MessageRepository): ConversationStore = r
     @Provides fun groupStore(r: GroupRepository): GroupStore = r
     @Provides fun networkInfo(n: AndroidNetworkInfo): NetworkInfo = n
+    @Provides fun photoStore(r: MediaRepository): PhotoStore = r
 }

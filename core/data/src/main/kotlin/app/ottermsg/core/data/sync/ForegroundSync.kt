@@ -3,6 +3,7 @@ package app.ottermsg.core.data.sync
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import app.ottermsg.core.data.di.ApplicationScope
+import app.ottermsg.core.data.media.MediaTransfers
 import app.ottermsg.core.network.ConnectionState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -20,8 +21,8 @@ class ForegroundSync internal constructor(
     private val start: () -> Unit, private val stop: () -> Unit, private val scope: CoroutineScope,
     private val retryIfWaiting: () -> Unit = {},
 ) : DefaultLifecycleObserver {
-    @Inject constructor(engine: SyncEngine, network: NetworkMonitor, @ApplicationScope scope: CoroutineScope) : this(
-        { engine.start(); network.start(engine::onNetworkChanged) },
+    @Inject constructor(engine: SyncEngine, network: NetworkMonitor, media: MediaTransfers, @ApplicationScope scope: CoroutineScope) : this(
+        { engine.start(); network.start(engine::onNetworkChanged); media.kick() /* Wi-Fi may have changed: auto-download */ },
         { engine.stop(); network.stop() },
         scope,
         { if (engine.connection.value is ConnectionState.Waiting) engine.retryNow() },
