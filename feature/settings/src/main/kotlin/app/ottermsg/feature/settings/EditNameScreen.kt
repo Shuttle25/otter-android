@@ -21,7 +21,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -38,13 +42,15 @@ import app.ottermsg.core.ui.theme.Dimens
 fun EditNameRoute(onBack: () -> Unit, vm: EditNameViewModel = hiltViewModel()) {
     val s by vm.state.collectAsStateWithLifecycle()
     val focus = remember { FocusRequester() }
+    // cursor at the end of the current name, not before it
+    var field by remember { mutableStateOf(TextFieldValue(s.text, TextRange(s.text.length))) }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     Scaffold(containerColor = MaterialTheme.colorScheme.background,
         topBar = { OtterTopBar(stringResource(R.string.edit_name_title), onBack = onBack) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).imePadding().verticalScroll(rememberScrollState())
             .padding(horizontal = Dimens.screenGutter, vertical = Dimens.s16)) {
             OutlinedTextField(
-                value = s.text, onValueChange = vm::onText, singleLine = true,
+                value = field, onValueChange = { field = it; vm.onText(it.text) }, singleLine = true,
                 label = { Text(stringResource(R.string.edit_name_label)) },
                 isError = s.error != null,
                 supportingText = {
