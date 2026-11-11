@@ -3,6 +3,7 @@ package app.ottermsg.feature.conversation
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -46,6 +47,7 @@ fun MessageBubble(
     m: MessageUi, firstInGroup: Boolean,
     onLongPress: () -> Unit = {}, onTap: () -> Unit = {},
     actions: List<CustomAccessibilityAction> = emptyList(),
+    menu: @Composable () -> Unit = {},
 ) {
     val extra = OtterTheme.extraColors
     val container = if (m.system) MaterialTheme.colorScheme.surfaceVariant else if (m.outgoing) extra.outgoingContainer else MaterialTheme.colorScheme.surface
@@ -63,22 +65,26 @@ fun MessageBubble(
         .padding(top = if (firstInGroup) Dimens.groupGap else Dimens.sameAuthorGap)) {
         val maxW = min(maxWidth * (if (large) Dimens.bubbleMaxFractionLargeFont else Dimens.bubbleMaxFraction), Dimens.bubbleMaxWidth)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = if (m.outgoing) Arrangement.End else if (m.system) Arrangement.Center else Arrangement.Start) {
-            Surface(
-                color = container, shape = RoundedCornerShape(Dimens.bubbleRadius),
-                modifier = Modifier.widthIn(max = maxW)
-                    .combinedClickable(onClick = onTap, onLongClick = onLongPress)
-                    .clearAndSetSemantics {
-                        contentDescription = description
-                        onClick(label = null) { onTap(); true }
-                        customActions = actions
-                    },
-            ) {
-                Column(Modifier.padding(horizontal = Dimens.s12, vertical = Dimens.s8)) {
-                    Text(text, style = MaterialTheme.typography.bodyLarge, color = onContainer,
-                        fontStyle = if (m.system) FontStyle.Italic else FontStyle.Normal)
-                    MessageMeta(time, status, color = if (m.outgoing) onContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.align(Alignment.End))
+            // The Box hugs the Surface, so a popup placed in [menu] anchors to the bubble itself, not the row.
+            Box {
+                Surface(
+                    color = container, shape = RoundedCornerShape(Dimens.bubbleRadius),
+                    modifier = Modifier.widthIn(max = maxW)
+                        .combinedClickable(onClick = onTap, onLongClick = onLongPress)
+                        .clearAndSetSemantics {
+                            contentDescription = description
+                            onClick(label = null) { onTap(); true }
+                            customActions = actions
+                        },
+                ) {
+                    Column(Modifier.padding(horizontal = Dimens.s12, vertical = Dimens.s8)) {
+                        Text(text, style = MaterialTheme.typography.bodyLarge, color = onContainer,
+                            fontStyle = if (m.system) FontStyle.Italic else FontStyle.Normal)
+                        MessageMeta(time, status, color = if (m.outgoing) onContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.align(Alignment.End))
+                    }
                 }
+                menu()
             }
         }
     }

@@ -17,6 +17,7 @@ protobuf = "4.32.1"
 protobufPlugin = "0.9.5"
 coroutines = "1.10.2"
 junit = "4.13.2"
+espresso = "3.6.1"
 robolectric = "4.16"
 androidxTestCore = "1.7.0"
 libsignal = "0.106.2"
@@ -64,6 +65,7 @@ mockwebserver3 = { module = "com.squareup.okhttp3:mockwebserver3", version.ref =
 zxing-embedded = { module = "com.journeyapps:zxing-android-embedded", version.ref = "zxingEmbedded" }
 androidx-lifecycle-process = { module = "androidx.lifecycle:lifecycle-process", version.ref = "lifecycle" }
 androidx-test-ext-junit = { module = "androidx.test.ext:junit", version.ref = "androidxTestExt" }
+androidx-test-espresso = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso" }
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTestRunner" }
 compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
 compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }

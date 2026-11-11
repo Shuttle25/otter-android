@@ -17,8 +17,6 @@ import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -46,7 +44,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import app.ottermsg.core.ui.components.AnchoredMenu
 import app.ottermsg.core.ui.components.DeliveryStatus
+import app.ottermsg.core.ui.components.MenuAction
 import app.ottermsg.core.ui.components.OtterAvatar
 import app.ottermsg.core.ui.components.OtterTopBar
 import app.ottermsg.core.ui.theme.Dimens
@@ -111,24 +111,27 @@ fun ConversationScreen(
                         is ConversationItem.Bubble -> {
                             val m = item.message
                             val failed = m.outgoing && m.status == DeliveryStatus.FAILED
-                            Box {
-                                MessageBubble(
-                                    m, item.firstInGroup,
-                                    onLongPress = { menuFor = m },
-                                    onTap = { if (failed) menuFor = m },
-                                    actions = buildList {
-                                        if (failed) add(CustomAccessibilityAction(retryLabel) { onRetry(m.localId); true })
-                                        if (!m.system) add(CustomAccessibilityAction(copyLabel) { clipboard.setText(AnnotatedString(m.text)); true })
-                                        add(CustomAccessibilityAction(deleteLabel) { confirmDelete = m; true })
-                                    },
-                                )
-                                DropdownMenu(expanded = menuFor?.localId == m.localId, onDismissRequest = { menuFor = null }) {
-                                    if (failed) DropdownMenuItem(text = { Text(retryLabel) }, onClick = { menuFor = null; onRetry(m.localId) })
-                                    if (!m.system) DropdownMenuItem(text = { Text(copyLabel) },
-                                        onClick = { menuFor = null; clipboard.setText(AnnotatedString(m.text)) })
-                                    DropdownMenuItem(text = { Text(deleteLabel) }, onClick = { menuFor = null; confirmDelete = m })
-                                }
-                            }
+                            MessageBubble(
+                                m, item.firstInGroup,
+                                onLongPress = { menuFor = m },
+                                onTap = { if (failed) menuFor = m },
+                                actions = buildList {
+                                    if (failed) add(CustomAccessibilityAction(retryLabel) { onRetry(m.localId); true })
+                                    if (!m.system) add(CustomAccessibilityAction(copyLabel) { clipboard.setText(AnnotatedString(m.text)); true })
+                                    add(CustomAccessibilityAction(deleteLabel) { confirmDelete = m; true })
+                                },
+                                menu = {
+                                    AnchoredMenu(
+                                        expanded = menuFor?.localId == m.localId, alignEnd = m.outgoing,
+                                        actions = buildList {
+                                            if (failed) add(MenuAction(retryLabel) { onRetry(m.localId) })
+                                            if (!m.system) add(MenuAction(copyLabel) { clipboard.setText(AnnotatedString(m.text)) })
+                                            add(MenuAction(deleteLabel) { confirmDelete = m })
+                                        },
+                                        onDismiss = { menuFor = null },
+                                    )
+                                },
+                            )
                         }
                     }
                 }
