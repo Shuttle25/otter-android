@@ -8,10 +8,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
+
+/** Test tag of every shown illustration (instrumented smoke test). */
+const val ILLUSTRATION_TAG = "otter_illustration"
 
 /** Room that text and buttons next to an illustration always keep. */
 val IllustrationReserve = 120.dp
@@ -33,6 +37,6 @@ fun OtterIllustration(@DrawableRes id: Int, maxSize: Dp, modifier: Modifier = Mo
         val available = if (constraints.hasBoundedHeight) min(maxHeight, LocalViewportHeight.current) else LocalViewportHeight.current
         if (available < maxSize + IllustrationReserve) return@BoxWithConstraints
         Image(painterResource(id), contentDescription = null, contentScale = ContentScale.Fit,
-            modifier = Modifier.size(min(maxSize, maxWidth)))
+            modifier = Modifier.size(min(maxSize, maxWidth)).testTag(ILLUSTRATION_TAG))
     }
 }

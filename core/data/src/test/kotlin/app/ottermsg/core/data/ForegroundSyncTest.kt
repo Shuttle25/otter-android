@@ -22,4 +22,16 @@ class ForegroundSyncTest {
         assertEquals(1, stops)
         assertEquals(2, starts)
     }
+
+    /** A fake engine: foreground() retries at once only while the connection is waiting out a backoff. */
+    @Test fun foregroundRetriesWhenWaiting() = runTest {
+        var state: app.ottermsg.core.network.ConnectionState = app.ottermsg.core.network.ConnectionState.Waiting(Long.MAX_VALUE, "backoff")
+        var retries = 0
+        val fs = ForegroundSync({}, {}, backgroundScope) { if (state is app.ottermsg.core.network.ConnectionState.Waiting) retries++ }
+        fs.foreground()
+        assertEquals(1, retries)
+        state = app.ottermsg.core.network.ConnectionState.Connecting
+        fs.background(); fs.foreground()
+        assertEquals(1, retries)
+    }
 }

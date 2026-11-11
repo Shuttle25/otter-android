@@ -14,6 +14,7 @@ android {
         minSdk = 26; targetSdk = 36
         versionCode = 1; versionName = "0.1.0"
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
         debug { buildConfigField("boolean", "ALLOW_PLAINTEXT", "true") }
@@ -46,4 +47,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.hilt.android); ksp(libs.hilt.compiler)
     testImplementation(libs.junit)
+    androidTestImplementation(libs.junit); androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit); androidTestImplementation(libs.androidx.test.espresso)
+    androidTestImplementation(platform(libs.compose.bom)); androidTestImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
 }
