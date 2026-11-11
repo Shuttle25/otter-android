@@ -41,7 +41,7 @@ class ConversationViewModel @Inject constructor(
         val list = msgs.map {
             MessageUi(it.localId, it.outgoing, it.body, it.sentMs, it.status, it.kind == MessageKind.SYSTEM_UNDECRYPTABLE, if (it.outgoing) "" else title)
         }
-        ConversationUi(true, title, conv?.peerUserId ?: ByteArray(0), groupMessages(list, zone), msgs.lastOrNull { !it.outgoing }?.localId)
+        ConversationUi(true, title, conv?.peerUserId ?: conv?.groupId ?: ByteArray(0), groupMessages(list, zone), msgs.lastOrNull { !it.outgoing }?.localId)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ConversationUi())
 
     private val _text = MutableStateFlow("")

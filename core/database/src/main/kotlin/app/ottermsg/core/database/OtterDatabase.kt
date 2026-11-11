@@ -6,6 +6,8 @@ import androidx.room.RoomDatabase
 import app.ottermsg.core.database.dao.AccountDao
 import app.ottermsg.core.database.dao.ContactDao
 import app.ottermsg.core.database.dao.EndpointStatDao
+import app.ottermsg.core.database.dao.GroupDao
+import app.ottermsg.core.database.dao.MessageRecipientDao
 import app.ottermsg.core.database.dao.ConversationDao
 import app.ottermsg.core.database.dao.ManifestDao
 import app.ottermsg.core.database.dao.MessageDao
@@ -17,6 +19,13 @@ import app.ottermsg.core.database.entity.AccountEntity
 import app.ottermsg.core.database.entity.ContactEntity
 import app.ottermsg.core.database.entity.ConversationEntity
 import app.ottermsg.core.database.entity.EndpointStatEntity
+import app.ottermsg.core.database.entity.GroupEntity
+import app.ottermsg.core.database.entity.GroupMemberEntity
+import app.ottermsg.core.database.entity.MessageRecipientEntity
+import app.ottermsg.core.database.entity.MyDistributionEntity
+import app.ottermsg.core.database.entity.PendingGroupEnvelopeEntity
+import app.ottermsg.core.database.entity.PendingGroupUpdateEntity
+import app.ottermsg.core.database.entity.SenderKeySharedEntity
 import app.ottermsg.core.database.entity.ManifestEntity
 import app.ottermsg.core.database.entity.MessageEntity
 import app.ottermsg.core.database.entity.OutboxEntity
@@ -26,10 +35,12 @@ import app.ottermsg.core.database.entity.SignalKvEntity
 
 @Database(
     entities = [AccountEntity::class, ManifestEntity::class, ContactEntity::class, ConversationEntity::class,
-        MessageEntity::class, OutboxEntity::class, SeenEnvelopeEntity::class, SignalKvEntity::class, SettingEntity::class, EndpointStatEntity::class],
-    version = 3,
+        MessageEntity::class, OutboxEntity::class, SeenEnvelopeEntity::class, SignalKvEntity::class, SettingEntity::class, EndpointStatEntity::class,
+        GroupEntity::class, GroupMemberEntity::class, PendingGroupUpdateEntity::class, PendingGroupEnvelopeEntity::class,
+        SenderKeySharedEntity::class, MyDistributionEntity::class, MessageRecipientEntity::class],
+    version = 4,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3)],
+    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4)],
 )
 abstract class OtterDatabase : RoomDatabase() {
     abstract fun accountDao(): AccountDao
@@ -42,4 +53,6 @@ abstract class OtterDatabase : RoomDatabase() {
     abstract fun signalKvDao(): SignalKvDao
     abstract fun settingsDao(): SettingsDao
     abstract fun endpointStatDao(): EndpointStatDao
+    abstract fun groupDao(): GroupDao
+    abstract fun messageRecipientDao(): MessageRecipientDao
 }

@@ -20,4 +20,6 @@ data class OutboxEntity(
     /** Set once a data message was accepted by a node; kept until a receipt arrives (resend after 24 h). */
     @ColumnInfo(name = "sent_ms") val sentMs: Long? = null,
     @ColumnInfo(defaultValue = "0") val resent: Boolean = false,
+    /** Group message: one SENDER_KEY envelope to the frozen recipient set; [recipientUserId] is empty. */
+    @ColumnInfo(name = "group_id") val groupId: ByteArray? = null,
 )

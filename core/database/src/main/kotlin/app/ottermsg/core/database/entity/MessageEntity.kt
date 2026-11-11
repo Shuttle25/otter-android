@@ -20,4 +20,6 @@ data class MessageEntity(
     val status: Int,
     val kind: Int = MessageKind.TEXT,
     @ColumnInfo(name = "read_receipt_sent") val readReceiptSent: Boolean = false,
+    /** kind = SYSTEM_GROUP: encoded GroupEvent (rendered by the UI, never stored as text). */
+    @ColumnInfo(name = "system_data") val systemData: ByteArray? = null,
 )

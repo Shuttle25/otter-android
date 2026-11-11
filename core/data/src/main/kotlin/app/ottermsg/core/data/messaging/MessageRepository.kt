@@ -60,7 +60,7 @@ class MessageRepository @Inject constructor(
             val conv = checkNotNull(conversations.get(conversationId)) { "no conversation $conversationId" }
             val localId = messages.insert(MessageEntity(messageId = messageId, conversationId = conversationId, senderId = me.userId,
                 outgoing = true, sentMs = now, receivedMs = now, body = body, status = MessageStatus.PENDING))
-            db.outboxDao().insert(OutboxEntity(recipientUserId = conv.peerUserId,
+            db.outboxDao().insert(OutboxEntity(recipientUserId = checkNotNull(conv.peerUserId),
                 contentBytes = dataContent(messageId, body, now).toByteArray(), messageLocalId = localId, urgent = true, createdMs = now))
             conversations.setDraft(conversationId, "")
             conversations.touch(conversationId, now)
@@ -77,7 +77,7 @@ class MessageRepository @Inject constructor(
             val m = messages.get(localId) ?: return@withTransaction false
             if (!m.outgoing || m.status != MessageStatus.FAILED || m.kind != MessageKind.TEXT) return@withTransaction false
             val conv = conversations.get(m.conversationId) ?: return@withTransaction false
-            db.outboxDao().insert(OutboxEntity(recipientUserId = conv.peerUserId,
+            db.outboxDao().insert(OutboxEntity(recipientUserId = checkNotNull(conv.peerUserId),
                 contentBytes = dataContent(m.messageId, m.body, m.sentMs).toByteArray(), messageLocalId = localId, urgent = true, createdMs = now))
             messages.resetFailed(localId)
             true
@@ -98,7 +98,7 @@ class MessageRepository @Inject constructor(
             if (pending.isEmpty()) return@withTransaction false
             val receipt = Content.newBuilder().setReceipt(ReceiptMessage.newBuilder().setType(ReceiptMessage.Type.READ)
                 .addAllMessageIds(pending.map { bs(it.messageId) })).setSentMs(clock.now()).build()
-            db.outboxDao().insert(OutboxEntity(recipientUserId = conv.peerUserId,
+            db.outboxDao().insert(OutboxEntity(recipientUserId = checkNotNull(conv.peerUserId),
                 contentBytes = receipt.toByteArray(), messageLocalId = null, urgent = false, createdMs = clock.now()))
             messages.markReadReceiptSent(pending.map { it.localId })
             true

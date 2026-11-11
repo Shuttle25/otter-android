@@ -40,7 +40,7 @@ fun chatRows(list: List<ConversationSummary>, nowMs: Long, zone: ZoneId, locale:
     return list.map { s ->
         val t = Instant.ofEpochMilli(s.lastActivityMs).atZone(zone)
         ChatRow(
-            id = s.id, title = s.title, seed = s.peerUserId,
+            id = s.id, title = s.title, seed = s.seed,
             preview = if (s.lastKind == MessageKind.SYSTEM_UNDECRYPTABLE) "" else s.lastBody,
             previewIsSystem = s.lastKind == MessageKind.SYSTEM_UNDECRYPTABLE,
             outgoing = s.lastOutgoing == true,

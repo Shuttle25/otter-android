@@ -24,4 +24,6 @@ import app.ottermsg.core.database.entity.OutboxEntity
     @Query("UPDATE outbox SET record_bytes = :record WHERE id = :id") suspend fun setRecord(id: Long, record: ByteArray)
     @Query("UPDATE outbox SET attempts = :attempts, next_attempt_ms = :next WHERE id = :id") suspend fun reschedule(id: Long, attempts: Int, next: Long)
     @Query("DELETE FROM outbox WHERE id = :id") suspend fun delete(id: Long)
+    @Query("SELECT * FROM outbox WHERE id = :id") suspend fun get(id: Long): OutboxEntity?
+    @Query("SELECT * FROM outbox WHERE message_local_id = :localId") suspend fun forMessage(localId: Long): List<OutboxEntity>
 }

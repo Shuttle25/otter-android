@@ -35,4 +35,6 @@ object DatabaseModule {
     @Provides fun signalKvDao(db: OtterDatabase) = db.signalKvDao()
     @Provides fun settingsDao(db: OtterDatabase) = db.settingsDao()
     @Provides fun endpointStatDao(db: OtterDatabase) = db.endpointStatDao()
+    @Provides fun groupDao(db: OtterDatabase) = db.groupDao()
+    @Provides fun messageRecipientDao(db: OtterDatabase) = db.messageRecipientDao()
 }
