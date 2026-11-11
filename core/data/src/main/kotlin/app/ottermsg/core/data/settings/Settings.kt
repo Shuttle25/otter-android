@@ -18,13 +18,20 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
     suspend fun setNextOneTimeId(v: Int) = putInt(NEXT_ONE_TIME_ID, v)
     suspend fun networkPub(): ByteArray = checkNotNull(dao.get(NETWORK_PUB)) { "network key missing" }
     suspend fun setNetworkPub(v: ByteArray) = dao.put(SettingEntity(NETWORK_PUB, v))
+    /** M1 flag: a refill for the connected node was pending. Read once for compatibility. */
     suspend fun prekeysLow(): Boolean = (int(PREKEYS_LOW) ?: 0) != 0
     suspend fun setPrekeysLow(v: Boolean) = putInt(PREKEYS_LOW, if (v) 1 else 0)
+
+    /** Owner node ids (hex) whose one-time prekey refill has not been uploaded yet. */
+    suspend fun pendingRefills(): Set<String> =
+        dao.get(PENDING_REFILLS)?.decodeToString()?.split('\n')?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
+    suspend fun setPendingRefills(owners: Set<String>) = dao.put(SettingEntity(PENDING_REFILLS, owners.joinToString("\n").encodeToByteArray()))
 
     companion object {
         const val REGISTRATION_ID = "registration_id"
         const val NEXT_ONE_TIME_ID = "next_one_time_id"
         const val NETWORK_PUB = "network_pub"
         const val PREKEYS_LOW = "prekeys_low"
+        const val PENDING_REFILLS = "prekeys_pending_owners"
     }
 }

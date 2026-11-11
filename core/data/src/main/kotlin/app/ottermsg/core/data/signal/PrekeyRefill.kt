@@ -6,6 +6,8 @@ import app.ottermsg.core.data.account.AccountRepository
 import app.ottermsg.core.data.settings.Settings
 import app.ottermsg.core.network.NodeApi
 import app.ottermsg.core.signal.PreKeyFactory
+import app.ottermsg.core.signal.hexToBytes
+import app.ottermsg.core.signal.toHex
 import app.ottermsg.proto.v1.PreKeys
 import app.ottermsg.proto.v1.RecordType
 import kotlinx.coroutines.sync.Mutex
@@ -20,20 +22,29 @@ class PrekeyRefill @Inject constructor(
 ) {
     private val mutex = Mutex()
 
-    suspend fun refill(api: NodeApi, count: Int = BATCH) = mutex.withLock {
-        settings.setPrekeysLow(true) // cleared only after a successful upload
+    /**
+     * Uploads [count] one-time keys owned by [owner] (the node that reported it is low; each node only hands out its
+     * own keys). Null/empty owner = the connected node. Any node accepts the upload; replication spreads it.
+     */
+    suspend fun refill(api: NodeApi, owner: ByteArray? = null, count: Int = BATCH) = mutex.withLock {
+        val node = owner?.takeIf { it.isNotEmpty() } ?: api.nodeId()
+        val key = node.toHex()
+        settings.setPendingRefills(settings.pendingRefills() + key) // cleared only after a successful upload
         val me = accounts.require()
-        val node = api.nodeId()
         val first = settings.nextOneTimeId()
         val keys = signal.withSessions { store, _ -> PreKeyFactory.oneTime(store, first, count, node) }
         val payload = PreKeys.newBuilder().setDeviceId(1).setRegistrationId(me.registrationId).addAllOneTime(keys).build()
         val rec = RecordCodec.sign(RecordCodec.body(RecordType.PREKEYS, me.userId, payload.toByteArray(), createdMs = clock.now()), me.accountKey)
         settings.setNextOneTimeId(first + count) // never reuse ids, even if the upload fails
         api.uploadPrekeys(rec)
-        settings.setPrekeysLow(false)
+        settings.setPendingRefills(settings.pendingRefills() - key)
     }
 
-    suspend fun refillIfPending(api: NodeApi) { if (settings.prekeysLow()) refill(api) }
+    /** On login: retry refills that did not complete (per owner), plus the M1 single flag. */
+    suspend fun refillIfPending(api: NodeApi) {
+        if (settings.prekeysLow()) { refill(api, null); settings.setPrekeysLow(false) }
+        for (owner in settings.pendingRefills()) refill(api, owner.hexToBytes())
+    }
 
     companion object { const val BATCH = 50 }
 }

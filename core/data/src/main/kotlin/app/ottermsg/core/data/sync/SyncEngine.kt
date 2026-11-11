@@ -18,6 +18,7 @@ import app.ottermsg.core.network.EndpointStats
 import app.ottermsg.core.network.NodeSelector
 import app.ottermsg.proto.v1.Event
 import app.ottermsg.proto.v1.ManifestResponse
+import app.ottermsg.proto.v1.PrekeysLow
 import app.ottermsg.proto.v1.RecordBatch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -105,7 +106,7 @@ class SyncEngine @Inject constructor(
             when (e.type) {
                 "envelopes" -> receiver.handle(api, RecordBatch.parseFrom(e.body).recordsList)
                 "directory" -> directory.sync(api)
-                "prekeys_low" -> prekeys.refill(api)
+                "prekeys_low" -> prekeys.refill(api, PrekeysLow.parseFrom(e.body).ownerNode.toByteArray())
                 "manifest" -> {
                     val raw = ManifestResponse.parseFrom(e.body).manifest.toByteArray()
                     if (manifests.offer(raw, api.hello().nodeId.toByteArray()) == ManifestUpdater.Result.STORED_NODE_REMOVED) reconnect()

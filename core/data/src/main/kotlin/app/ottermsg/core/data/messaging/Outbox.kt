@@ -59,12 +59,17 @@ class Outbox @Inject constructor(
     /** Processes every due item once, in order. */
     suspend fun drainOnce(api: NodeApi) = mutex.withLock {
         val me = accounts.require()
+        outbox.deleteSentBefore(clock.now() - KEEP_SENT_MS)
         for (item in outbox.due(clock.now())) {
             try {
                 process(api, item, me)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                if (item.sentMs != null) { // the one 24 h resend failed: the message itself was delivered to a node before
+                    outbox.markResent(item.id)
+                    continue
+                }
                 val permanent = e is PermanentFailure || (e is RpcException &&
                     e.status in setOf(Status.STATUS_INVALID, Status.STATUS_NOT_FOUND, Status.STATUS_REVOKED))
                 if (permanent) {
@@ -99,12 +104,22 @@ class Outbox @Inject constructor(
             RecordCodec.sign(RecordCodec.body(RecordType.ENVELOPE, me.userId, env.toByteArray(), createdMs = clock.now()), me.accountKey)
                 .also { outbox.setRecord(item.id, it.toByteArray()) }
         }
-        api.send(record)
+        api.send(record) // the same record every time: nodes deduplicate by author‖id
+        val localId = item.messageLocalId
         db.withTransaction {
-            outbox.delete(item.id)
-            item.messageLocalId?.let { messages.advanceStatusLocal(it, MessageStatus.SENT) }
+            when {
+                item.sentMs != null -> outbox.markResent(item.id) // 24 h without a receipt: re-sent once
+                localId != null -> { // data message: keep until a receipt arrives (or 7 days)
+                    outbox.markSent(item.id, clock.now())
+                    messages.advanceStatusLocal(localId, MessageStatus.SENT)
+                }
+                else -> outbox.delete(item.id) // receipts are fire-and-forget
+            }
         }
     }
 
-    companion object { const val MAX_BACKOFF_MS = 300_000L }
+    companion object {
+        const val MAX_BACKOFF_MS = 300_000L
+        const val KEEP_SENT_MS = 7 * 86_400_000L
+    }
 }

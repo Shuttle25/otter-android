@@ -105,7 +105,12 @@ class MailboxReceiver @Inject constructor(
             }
             Content.BodyCase.RECEIPT -> {
                 val status = if (content.receipt.type == ReceiptMessage.Type.READ) MessageStatus.READ else MessageStatus.DELIVERED
-                content.receipt.messageIdsList.forEach { messages.advanceStatusIn(cid, it.toByteArray(), status) }
+                content.receipt.messageIdsList.forEach { id ->
+                    messages.advanceStatusIn(cid, id.toByteArray(), status)
+                    // delivered or read: no 24 h resend needed any more
+                    messages.byMessageId(id.toByteArray())?.takeIf { it.outgoing && it.conversationId == cid }
+                        ?.let { db.outboxDao().deleteForMessage(it.localId) }
+                }
             }
             else -> {}
         }

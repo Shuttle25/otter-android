@@ -3,6 +3,7 @@ package app.ottermsg.core.data
 import app.ottermsg.core.data.messaging.Outbox
 import app.ottermsg.core.database.model.MessageStatus
 import app.ottermsg.proto.v1.Status
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -54,7 +55,7 @@ class OutboxTest {
         assertEquals(1, b.db.outboxDao().due(Long.MAX_VALUE).size)
         clock.advance(Outbox.MAX_BACKOFF_MS)
         b.outbox.drainOnce(s)
-        assertTrue(b.db.outboxDao().due(Long.MAX_VALUE).isEmpty())
+        assertTrue(b.db.outboxDao().due(clock.now()).isEmpty()) // sent: kept for a possible 24 h resend, not due now
         assertEquals(MessageStatus.SENT, b.db.messageDao().get(local)!!.status)
         assertEquals(1, node.mailbox(a.me.userId).size)
     }
@@ -86,5 +87,52 @@ class OutboxTest {
         val item = b.db.outboxDao().due(Long.MAX_VALUE).single()
         assertTrue(item.nextAttemptMs - clock.now() <= Outbox.MAX_BACKOFF_MS)
         assertEquals(12, item.attempts)
+    }
+
+    @Test fun retryLaterKeepsPending() = runBlocking {
+        val (cid, s) = setup()
+        val local = b.messages.sendText(cid, "hi")!!
+        node.failFetch = Status.STATUS_RETRY_LATER // our recipient is not replicated to this node yet
+        b.outbox.drainOnce(s)
+        assertEquals(MessageStatus.PENDING, b.db.messageDao().get(local)!!.status)
+        assertEquals(1, b.db.outboxDao().due(Long.MAX_VALUE).single().attempts)
+        node.failFetch = null
+        node.failSend = Status.STATUS_RETRY_LATER
+        clock.advance(Outbox.MAX_BACKOFF_MS)
+        b.outbox.drainOnce(s)
+        assertEquals(MessageStatus.PENDING, b.db.messageDao().get(local)!!.status)
+    }
+
+    @Test fun resendAfter24hRecoversALostRecordOnce() = runBlocking {
+        val (cid, s) = setup()
+        val local = b.messages.sendText(cid, "hi")!!
+        b.outbox.drainOnce(s)
+        assertEquals(MessageStatus.SENT, b.db.messageDao().get(local)!!.status)
+        node.forgetMailbox(a.me.userId) // the node holding it died before A fetched it
+        clock.advance(app.ottermsg.core.database.dao.OutboxDao.RESEND_AFTER_MS - 1_000)
+        b.outbox.drainOnce(s)
+        assertEquals(0, node.mailbox(a.me.userId).size) // not yet
+        clock.advance(2_000)
+        b.outbox.drainOnce(s)
+        assertEquals(1, node.mailbox(a.me.userId).size) // the identical record again
+        clock.advance(app.ottermsg.core.database.dao.OutboxDao.RESEND_AFTER_MS)
+        b.outbox.drainOnce(s)
+        assertEquals("resent only once", 2, node.sends)
+        a.online()
+        eventually(what = "A has it once") { a.messages.observeMessages(a.messages.conversationWith(b.me.userId)).first().size == 1 }
+        a.receiver.handle(a.session!!, node.mailbox(a.me.userId)) // duplicate delivery is ignored
+        assertEquals(1, a.messages.observeMessages(a.messages.conversationWith(b.me.userId)).first().size)
+    }
+
+    @Test fun deliveryReceiptRemovesOutboxRow() = runBlocking {
+        val (cid, s) = setup()
+        val local = b.messages.sendText(cid, "hi")!!
+        b.outbox.drainOnce(s)
+        assertEquals(1, b.db.outboxDao().due(Long.MAX_VALUE).size)
+        a.online() // receives, sends a DELIVERED receipt
+        eventually(what = "receipt in B's mailbox") { node.mailbox(b.me.userId).isNotEmpty() }
+        b.receiver.handle(s, node.mailbox(b.me.userId))
+        assertEquals(MessageStatus.DELIVERED, b.db.messageDao().get(local)!!.status)
+        assertTrue(b.db.outboxDao().due(Long.MAX_VALUE).isEmpty())
     }
 }

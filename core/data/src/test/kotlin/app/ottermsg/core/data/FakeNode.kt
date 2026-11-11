@@ -82,6 +82,16 @@ class FakeNode(private val clock: () -> Long) {
     @Volatile var reachable = true
     /** If set, msg.send fails with this status. */
     @Volatile var failSend: Status? = null
+    /** If set, prekeys.fetch fails with this status. */
+    @Volatile var failFetch: Status? = null
+    /** One-time keys uploaded per owner node (hex), across registrations and refills. */
+    val uploadedByOwner = HashMap<String, Int>()
+
+    /** Simulates a node that lost the user's undelivered envelopes (records stay "applied" elsewhere: a fresh node). */
+    fun forgetMailbox(user: ByteArray) = synchronized(lock) {
+        mailboxes[user.hex()]?.keys?.forEach { applied.remove(it) }
+        mailboxes.remove(user.hex())
+    }
     var sends = 0; private set
 
     fun bootstrapLink(ttlMs: Long = 3_600_000): String {
@@ -174,10 +184,11 @@ class FakeNode(private val clock: () -> Long) {
             val b = verifyUser(record)
             if (!b.author.toByteArray().contentEquals(me())) fail(Status.STATUS_UNAUTHORIZED, "author")
             val pk = PreKeys.parseFrom(b.payload)
+            pk.oneTimeList.forEach { uploadedByOwner.merge(it.ownerNode.hex(), 1, Int::plus) }
             keys[b.author.hex()]!!.oneTime.addAll(pk.oneTimeList.filter { it.ownerNode.toByteArray().contentEquals(nodeId) })
         } }
 
-        override suspend fun fetchPrekeys(userId: ByteArray, device: Int): PreKeyBundle { check(); me(); return synchronized(lock) {
+        override suspend fun fetchPrekeys(userId: ByteArray, device: Int): PreKeyBundle { check(); me(); failFetch?.let { fail(it, "fetch refused") }; return synchronized(lock) {
             val u = users[userId.hex()] ?: fail(Status.STATUS_NOT_FOUND, "user")
             val k = keys[userId.hex()] ?: fail(Status.STATUS_NOT_FOUND, "prekeys")
             val ot = k.oneTime.removeFirstOrNull()
