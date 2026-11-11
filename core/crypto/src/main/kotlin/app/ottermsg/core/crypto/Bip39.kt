@@ -5,7 +5,8 @@ import java.security.MessageDigest
 /** BIP-39 mnemonic <-> 256-bit entropy. The entropy itself is the OtterMSG recovery seed. */
 object Bip39 {
     private val words: List<String> by lazy {
-        Bip39::class.java.getResourceAsStream("bip39-english.txt")!!.bufferedReader().readLines().filter { it.isNotBlank() }
+        // Absolute path: R8 repackages this class, so a path relative to it would not resolve in release builds.
+        checkNotNull(Bip39::class.java.getResourceAsStream("/app/ottermsg/core/crypto/bip39-english.txt")) { "bip39 word list missing" }.bufferedReader().readLines().filter { it.isNotBlank() }
             .also { require(it.size == 2048) }
     }
     private val index: Map<String, Int> by lazy { words.withIndex().associate { it.value to it.index } }

@@ -23,6 +23,14 @@ android {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
+        // Release code (R8) that may join a plaintext dev mesh; debug-signed. For testing only, never distributed.
+        create("staging") {
+            initWith(getByName("release"))
+            buildConfigField("boolean", "ALLOW_PLAINTEXT", "true")
+            signingConfig = signingConfigs.getByName("debug")
+            applicationIdSuffix = ".staging"
+            matchingFallbacks += listOf("release")
+        }
     }
     buildFeatures { compose = true; buildConfig = true }
     compileOptions {
