@@ -41,10 +41,11 @@ import app.ottermsg.core.ui.components.OtterEmptyState
 import app.ottermsg.core.ui.components.OtterTopBar
 import app.ottermsg.core.ui.components.deliveryStatusLabel
 import app.ottermsg.core.ui.theme.Dimens
+import app.ottermsg.core.ui.R as UiR
 
 @Composable
-fun ChatListRoute(myName: String, onOpen: (Long) -> Unit, onNewChat: () -> Unit, onSettings: () -> Unit, vm: ChatListViewModel = hiltViewModel()) {
-    val rows by vm.rows.collectAsStateWithLifecycle()
+fun ChatListRoute(myName: String, mySeed: ByteArray, onOpen: (Long) -> Unit, onNewChat: () -> Unit, onSettings: () -> Unit, vm: ChatListViewModel = hiltViewModel()) {
+    val state by vm.state.collectAsStateWithLifecycle()
     val connection by vm.connection.collectAsStateWithLifecycle()
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -53,7 +54,7 @@ fun ChatListRoute(myName: String, onOpen: (Long) -> Unit, onNewChat: () -> Unit,
                 val settingsLabel = stringResource(R.string.chats_settings)
                 OtterTopBar(title = stringResource(R.string.chats_title), actions = {
                     IconButton(onClick = onSettings, modifier = Modifier.semantics { contentDescription = settingsLabel }) {
-                        OtterAvatar(myName, Dimens.avatarTopBar - Dimens.s8)
+                        OtterAvatar(myName, mySeed, Dimens.avatarTopBar - Dimens.s8)
                     }
                 })
                 ConnectionBanner(connection)
@@ -64,12 +65,15 @@ fun ChatListRoute(myName: String, onOpen: (Long) -> Unit, onNewChat: () -> Unit,
                 text = { Text(stringResource(R.string.chats_write)) })
         },
     ) { padding ->
-        val list = rows
-        when {
-            list == null -> Box(Modifier.fillMaxSize().padding(padding)) // first load is local and instant: no skeleton
-            list.isEmpty() -> OtterEmptyState(stringResource(R.string.chats_empty), Modifier.padding(padding))
-            else -> LazyColumn(Modifier.fillMaxSize().padding(padding)) {
-                items(list, key = { it.id }) { row -> ChatRowItem(row) { onOpen(row.id) } }
+        when (val s = state) {
+            ChatListState.Loading -> Box(Modifier.fillMaxSize().padding(padding)) // local and fast: no skeleton
+            ChatListState.Empty -> OtterEmptyState(
+                title = stringResource(R.string.chats_empty_title), text = stringResource(R.string.chats_empty),
+                modifier = Modifier.padding(padding), illustration = UiR.drawable.otter_no_chats, illustrationMax = 180.dp,
+                action = stringResource(R.string.chats_write), onAction = onNewChat,
+            )
+            is ChatListState.Content -> LazyColumn(Modifier.fillMaxSize().padding(padding)) {
+                items(s.rows, key = { it.id }) { row -> ChatRowItem(row) { onOpen(row.id) } }
             }
         }
     }
@@ -93,7 +97,7 @@ private fun ChatRowItem(row: ChatRow, onClick: () -> Unit) {
             },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        OtterAvatar(row.title)
+        OtterAvatar(row.title, row.seed)
         Spacer(Modifier.width(Dimens.s12))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

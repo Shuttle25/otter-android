@@ -38,7 +38,7 @@ fun AppNavHost(hasAccount: Boolean, account: StateFlow<LocalAccount?>) {
         }
         composable(Routes.CHATS) {
             ChatListRoute(
-                myName = me?.displayName.orEmpty(),
+                myName = me?.displayName.orEmpty(), mySeed = me?.userId ?: ByteArray(0),
                 onOpen = { nav.navigate(Routes.conversation(it)) },
                 onNewChat = { nav.navigate(Routes.NEW_CHAT) },
                 onSettings = { nav.navigate(Routes.SETTINGS) },

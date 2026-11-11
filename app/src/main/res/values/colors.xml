@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Exact launcher background from otter-assets/manifest.m3-additions.json (= outgoingContainer, light). -->
+    <color name="ic_launcher_background">#FFDCF1E3</color>
+    <color name="otter_window_light">#FFFAF7F2</color>
+    <color name="otter_window_dark">#FF151B19</color>
+</resources>

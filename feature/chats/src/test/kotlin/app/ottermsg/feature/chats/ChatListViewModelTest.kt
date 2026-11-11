@@ -43,4 +43,15 @@ class ChatListViewModelTest {
         val rows = chatRows(listOf(summary(1, at(2026, 1, 2, 3, 4), "x", false, null)), now, zone, Locale.ENGLISH)
         assertEquals("2 Jan", rows[0].time)
     }
+
+    @Test fun emptyStateWaitsForFirstSync() {
+        val connecting = app.ottermsg.core.network.ConnectionState.Connecting
+        val waiting = app.ottermsg.core.network.ConnectionState.Waiting(0, "x")
+        assertEquals(ChatListState.Loading, chatListState(null, directorySynced = true, connection = connecting))
+        assertEquals(ChatListState.Loading, chatListState(emptyList(), directorySynced = false, connection = connecting))
+        assertEquals(ChatListState.Empty, chatListState(emptyList(), directorySynced = true, connection = connecting))
+        assertEquals(ChatListState.Empty, chatListState(emptyList(), directorySynced = false, connection = waiting))
+        val row = chatRows(listOf(summary(1, now, "x", outgoing = true, status = MessageStatus.SENT)), now, zone, Locale.ROOT)
+        assertEquals(ChatListState.Content(row), chatListState(row, directorySynced = false, connection = connecting))
+    }
 }

@@ -14,12 +14,14 @@ import androidx.compose.ui.graphics.Color
 data class OtterExtraColors(
     val outgoingContainer: Color, val onOutgoingContainer: Color, val divider: Color,
     val warning: Color, val warningContainer: Color,
+    /** True for the dark palette (avatar colours pick their light/dark pair from it). */
+    val dark: Boolean = false,
 )
 
 private val LocalExtra = staticCompositionLocalOf { extra(OtterPalette.Light) }
 
 private fun extra(p: OtterPalette) = OtterExtraColors(Color(p.outgoingContainer), Color(p.onOutgoingContainer),
-    Color(p.divider), Color(p.warning), Color(p.warningContainer))
+    Color(p.divider), Color(p.warning), Color(p.warningContainer), dark = p == OtterPalette.Dark)
 
 private fun scheme(p: OtterPalette, dark: Boolean) = (if (dark) darkColorScheme() else lightColorScheme()).copy(
     background = Color(p.background), onBackground = Color(p.onSurface),

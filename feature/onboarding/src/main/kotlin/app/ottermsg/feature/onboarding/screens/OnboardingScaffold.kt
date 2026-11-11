@@ -1,6 +1,7 @@
 package app.ottermsg.feature.onboarding.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,7 +17,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import app.ottermsg.core.ui.components.LocalViewportHeight
 import app.ottermsg.core.ui.components.OtterTopBar
 import app.ottermsg.core.ui.theme.Dimens
 
@@ -39,11 +42,15 @@ internal fun OnboardingScaffold(
             )
         },
     ) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = Dimens.screenGutter),
-            verticalArrangement = Arrangement.spacedBy(Dimens.s16),
-            content = content,
-        )
+        BoxWithConstraints(Modifier.fillMaxSize().padding(padding)) {
+            CompositionLocalProvider(LocalViewportHeight provides maxHeight) {
+                Column(
+                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Dimens.screenGutter),
+                    verticalArrangement = Arrangement.spacedBy(Dimens.s16),
+                    content = content,
+                )
+            }
+        }
     }
 }
 

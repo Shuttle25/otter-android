@@ -12,6 +12,8 @@ import app.ottermsg.proto.v1.DirectoryEntry
 import app.ottermsg.proto.v1.Record
 import app.ottermsg.proto.v1.RecordBody
 import app.ottermsg.proto.v1.RecordType
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
@@ -23,8 +25,14 @@ class DirectorySync @Inject constructor(
     private val accounts: AccountRepository, private val contacts: ContactDao, private val conversations: ConversationDao,
 ) {
     private val mutex = Mutex()
+    private val _synced = MutableStateFlow(false)
+    /** True once a directory sync has completed in this process (the chat list's empty state waits for it). */
+    val synced: StateFlow<Boolean> = _synced
 
-    suspend fun sync(api: NodeApi) = apply(api.directory())
+    suspend fun sync(api: NodeApi) {
+        apply(api.directory())
+        _synced.value = true
+    }
 
     suspend fun apply(records: List<Record>) = mutex.withLock {
         val me = accounts.require()

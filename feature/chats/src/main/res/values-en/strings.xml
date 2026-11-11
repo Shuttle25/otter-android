@@ -26,4 +26,5 @@
     <string name="settings_online">Connected</string>
     <string name="settings_connecting">Connecting…</string>
     <string name="settings_offline">No connection</string>
+    <string name="chats_empty_title">No chats yet</string>
 </resources>

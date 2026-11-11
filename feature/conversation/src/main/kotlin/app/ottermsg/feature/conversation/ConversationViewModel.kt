@@ -23,7 +23,10 @@ import kotlinx.coroutines.launch
 import java.time.ZoneId
 import javax.inject.Inject
 
-data class ConversationUi(val title: String = "", val items: List<ConversationItem> = emptyList(), val lastIncomingId: Long? = null)
+data class ConversationUi(
+    /** False until the first database emission (the empty-chat art must not flash while loading). */
+    val loaded: Boolean = false,
+    val title: String = "", val seed: ByteArray = ByteArray(0), val items: List<ConversationItem> = emptyList(), val lastIncomingId: Long? = null)
 
 @OptIn(FlowPreview::class)
 @HiltViewModel
@@ -38,7 +41,7 @@ class ConversationViewModel @Inject constructor(
         val list = msgs.map {
             MessageUi(it.localId, it.outgoing, it.body, it.sentMs, it.status, it.kind == MessageKind.SYSTEM_UNDECRYPTABLE, if (it.outgoing) "" else title)
         }
-        ConversationUi(title, groupMessages(list, zone), msgs.lastOrNull { !it.outgoing }?.localId)
+        ConversationUi(true, title, conv?.peerUserId ?: ByteArray(0), groupMessages(list, zone), msgs.lastOrNull { !it.outgoing }?.localId)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ConversationUi())
 
     private val _text = MutableStateFlow("")

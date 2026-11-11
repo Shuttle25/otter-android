@@ -14,4 +14,6 @@
     <string name="conv_you">Вы</string>
     <string name="conv_failed_hint">Не отправлено. Нажмите, чтобы повторить</string>
     <string name="conv_copied">Скопировано</string>
+    <string name="conv_empty_title">Пока нет сообщений</string>
+    <string name="conv_empty_text">Напишите первое сообщение</string>
 </resources>

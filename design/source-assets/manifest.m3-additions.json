@@ -1,0 +1,60 @@
+{
+  "pack": "M3 additions only",
+  "version": 1,
+  "launcher_background_hex": "#DCF1E3",
+  "assets": [
+    {
+      "file": "assets/otter_m3_launcher_background.png",
+      "sha256": "02964eef9d104a5b111022b02ed84b806d153ec4de00e12d5a916c4fc2ff8ce1",
+      "width": 1024,
+      "height": 1024,
+      "mode": "RGB",
+      "alpha_range": null
+    },
+    {
+      "file": "assets/otter_m3_launcher_foreground.png",
+      "sha256": "449995408982707b11af9c2d29aeedde86db9aa8d32d36a50dd3018dff865738",
+      "width": 1024,
+      "height": 1024,
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "max_alpha_radius_px": 300.334,
+      "safe_circle_diameter_px": 620
+    },
+    {
+      "file": "assets/otter_m3_monochrome_head.png",
+      "sha256": "9430fdc7fe313bad1dc70854de79e7d5eee8a0a5da7b9f26804d6b8cf2389009",
+      "width": 1024,
+      "height": 1024,
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "max_alpha_radius_px": 302.946,
+      "safe_circle_diameter_px": 620
+    },
+    {
+      "file": "assets/otter_m3_monochrome_head.svg",
+      "sha256": "feae0023a88a2282ac54c419a556e377d44d0cf9a902960d1958484f8f426a95",
+      "width": 1024,
+      "height": 1024,
+      "fill": "#FFFFFF",
+      "safe_circle_diameter_px": 620
+    },
+    {
+      "file": "assets/otter_m3_no_chats.png",
+      "sha256": "3626d386c9cda6e0c3873bcc3abe8596d5d0c734697ab26952119af9a0b10fda",
+      "width": 1254,
+      "height": 1254,
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ]
+    }
+  ]
+}

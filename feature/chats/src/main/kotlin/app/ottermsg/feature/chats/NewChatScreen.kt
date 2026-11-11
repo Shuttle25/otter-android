@@ -49,7 +49,7 @@ fun NewChatRoute(onBack: () -> Unit, onOpen: (Long) -> Unit, onInvite: () -> Uni
                         .padding(horizontal = Dimens.screenGutter, vertical = Dimens.s8).semantics(mergeDescendants = true) {},
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    OtterAvatar(c.displayName)
+                    OtterAvatar(c.displayName, c.userId)
                     Spacer(Modifier.width(Dimens.s12))
                     Column {
                         Text(c.displayName, style = MaterialTheme.typography.titleMedium)

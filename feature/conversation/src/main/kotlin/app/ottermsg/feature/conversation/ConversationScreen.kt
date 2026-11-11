@@ -48,6 +48,9 @@ import app.ottermsg.core.ui.components.AnchoredMenu
 import app.ottermsg.core.ui.components.DeliveryStatus
 import app.ottermsg.core.ui.components.MenuAction
 import app.ottermsg.core.ui.components.OtterAvatar
+import app.ottermsg.core.ui.components.OtterEmptyState
+import app.ottermsg.core.ui.R as UiR
+import androidx.compose.ui.unit.dp
 import app.ottermsg.core.ui.components.OtterTopBar
 import app.ottermsg.core.ui.theme.Dimens
 import kotlinx.coroutines.launch
@@ -97,12 +100,18 @@ fun ConversationScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             OtterTopBar(ui.title, onBack = onBack, leading = {
-                OtterAvatar(ui.title, Dimens.avatarTopBar); Spacer(Modifier.width(Dimens.s12))
+                OtterAvatar(ui.title, ui.seed, Dimens.avatarTopBar); Spacer(Modifier.width(Dimens.s12))
             })
         },
         bottomBar = { MessageComposer(text, sending, onText, onSend, Modifier.navigationBarsPadding().imePadding()) },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
+            if (ui.loaded && ui.items.isEmpty()) {
+                OtterEmptyState(
+                    title = stringResource(R.string.conv_empty_title), text = stringResource(R.string.conv_empty_text),
+                    illustration = UiR.drawable.otter_empty_chat, illustrationMax = 160.dp,
+                )
+            }
             LazyColumn(state = listState, reverseLayout = true, modifier = Modifier.fillMaxSize()) {
                 item { Spacer(Modifier.height(Dimens.s8)) }
                 items(reversed, key = { it.key }) { item ->
