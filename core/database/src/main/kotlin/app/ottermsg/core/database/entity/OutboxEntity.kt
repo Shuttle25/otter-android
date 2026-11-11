@@ -22,4 +22,6 @@ data class OutboxEntity(
     @ColumnInfo(defaultValue = "0") val resent: Boolean = false,
     /** Group message: one SENDER_KEY envelope to the frozen recipient set; [recipientUserId] is empty. */
     @ColumnInfo(name = "group_id") val groupId: ByteArray? = null,
+    /** Photo message: not sent until its blob is uploaded (D48); MediaTransfers releases it. */
+    @ColumnInfo(name = "held", defaultValue = "0") val held: Boolean = false,
 )

@@ -37,4 +37,5 @@ object DatabaseModule {
     @Provides fun endpointStatDao(db: OtterDatabase) = db.endpointStatDao()
     @Provides fun groupDao(db: OtterDatabase) = db.groupDao()
     @Provides fun messageRecipientDao(db: OtterDatabase) = db.messageRecipientDao()
+    @Provides fun attachmentDao(db: OtterDatabase) = db.attachmentDao()
 }

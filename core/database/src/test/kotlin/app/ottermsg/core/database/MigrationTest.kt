@@ -50,4 +50,18 @@ class MigrationTest {
             db.query("SELECT group_id IS NULL FROM outbox").use { c -> c.moveToFirst(); assertEquals(1, c.getInt(0)) }
         }
     }
+
+    @Test fun migrate4To5AddsAttachmentsAndHeld() {
+        helper.createDatabase("m5.db", 4).use {
+            it.execSQL("INSERT INTO conversations(id, peer_user_id, title, last_activity_ms, unread, draft, type) VALUES (7, x'0202', 'Мама', 10, 0, '', 0)")
+            it.execSQL("""INSERT INTO messages(local_id, message_id, conversation_id, sender_id, outgoing, sent_ms, received_ms, body, status, kind, read_receipt_sent)
+                          VALUES (1, x'01', 7, x'0202', 1, 5, 6, 'привет', 0, 0, 0)""")
+            it.execSQL("INSERT INTO outbox(recipient_user_id, content_bytes, message_local_id, urgent, record_bytes, attempts, next_attempt_ms, created_ms, sent_ms, resent) VALUES (x'0202', x'02', 1, 1, NULL, 0, 0, 5, NULL, 0)")
+        }
+        helper.runMigrationsAndValidate("m5.db", 5, true).use { db ->
+            db.query("SELECT held FROM outbox").use { c -> c.moveToFirst(); assertEquals(0, c.getInt(0)) }
+            db.query("SELECT body FROM messages").use { c -> c.moveToFirst(); assertEquals("привет", c.getString(0)) }
+            db.query("SELECT COUNT(*) FROM attachments").use { c -> c.moveToFirst(); assertEquals(0, c.getInt(0)) }
+        }
+    }
 }

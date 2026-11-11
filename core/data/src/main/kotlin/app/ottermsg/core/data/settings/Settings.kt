@@ -2,6 +2,8 @@ package app.ottermsg.core.data.settings
 
 import app.ottermsg.core.database.dao.SettingsDao
 import app.ottermsg.core.database.entity.SettingEntity
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import java.nio.ByteBuffer
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -34,7 +36,22 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
     suspend fun profilePending(): Boolean = (int(PROFILE_PENDING) ?: 0) != 0
     suspend fun setProfilePending(v: Boolean) = putInt(PROFILE_PENDING, if (v) 1 else 0)
 
+    /** Photo auto-download (D47): [AUTO_WIFI] (default), [AUTO_ANY], [AUTO_MANUAL]. */
+    suspend fun photoAutoDownload(): Int = int(PHOTO_AUTO) ?: AUTO_WIFI
+    suspend fun setPhotoAutoDownload(v: Int) = putInt(PHOTO_AUTO, v)
+    /** Save every downloaded photo to the gallery (default off). */
+    suspend fun photoSaveToGallery(): Boolean = (int(PHOTO_GALLERY) ?: 0) != 0
+    suspend fun setPhotoSaveToGallery(v: Boolean) = putInt(PHOTO_GALLERY, if (v) 1 else 0)
+    /** Raw value changes of one key (settings screens). */
+    fun observe(key: String): Flow<ByteArray?> = dao.observe(key)
+    fun observeInt(key: String, default: Int): Flow<Int> = dao.observe(key).map { it?.let { b -> ByteBuffer.wrap(b).int } ?: default }
+
     companion object {
+        const val PHOTO_AUTO = "photo_auto_download"
+        const val PHOTO_GALLERY = "photo_save_gallery"
+        const val AUTO_WIFI = 0
+        const val AUTO_ANY = 1
+        const val AUTO_MANUAL = 2
         const val ENTRY_VERSION = "profile_entry_version"
         const val PROFILE_PENDING = "profile_pending"
         const val REGISTRATION_ID = "registration_id"

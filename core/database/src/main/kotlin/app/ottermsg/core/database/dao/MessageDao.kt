@@ -27,7 +27,7 @@ import kotlinx.coroutines.flow.Flow
     @Query("UPDATE messages SET status = ${MessageStatus.FAILED} WHERE local_id = :localId") suspend fun markFailed(localId: Long)
     @Query("UPDATE messages SET status = ${MessageStatus.PENDING} WHERE local_id = :localId AND status = ${MessageStatus.FAILED}")
     suspend fun resetFailed(localId: Long): Int
-    @Query("SELECT * FROM messages WHERE conversation_id = :cid AND outgoing = 0 AND kind = ${MessageKind.TEXT} AND read_receipt_sent = 0")
+    @Query("SELECT * FROM messages WHERE conversation_id = :cid AND outgoing = 0 AND kind IN (${MessageKind.TEXT}, ${MessageKind.PHOTO}) AND read_receipt_sent = 0")
     suspend fun unreadReceiptsPending(cid: Long): List<MessageEntity>
     @Query("UPDATE messages SET read_receipt_sent = 1 WHERE local_id IN (:ids)") suspend fun markReadReceiptSent(ids: List<Long>)
     @Query("DELETE FROM messages WHERE local_id = :localId") suspend fun delete(localId: Long)
