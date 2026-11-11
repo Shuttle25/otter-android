@@ -9,6 +9,7 @@ import app.ottermsg.core.crypto.RecordCodec
 import app.ottermsg.core.crypto.SeedKeys
 import app.ottermsg.core.data.Clock
 import app.ottermsg.core.data.account.AccountRepository
+import app.ottermsg.core.data.account.DirectoryEntries
 import app.ottermsg.core.data.account.SeedVault
 import app.ottermsg.core.data.bs
 import app.ottermsg.core.data.di.AllowPlaintext
@@ -24,7 +25,6 @@ import app.ottermsg.core.signal.IdentityKeys
 import app.ottermsg.core.signal.InMemorySignalKeyValue
 import app.ottermsg.core.signal.OtterProtocolStore
 import app.ottermsg.core.signal.PreKeyFactory
-import app.ottermsg.proto.v1.DirectoryEntry
 import app.ottermsg.proto.v1.InviteUsed
 import app.ottermsg.proto.v1.PreKeys
 import app.ottermsg.proto.v1.RecordType
@@ -73,7 +73,7 @@ class Registration @Inject constructor(
     private suspend fun doRegister(link: String, displayName: String, username: String, seed: ByteArray) {
         val name = displayName.trim(); val user = username.trim().lowercase()
         if (!USERNAME.matches(user)) throw RegistrationError.BadUsername
-        if (name.isEmpty() || name.length > 64) throw RegistrationError.BadDisplayName
+        if (DirectoryEntries.validate(name) != null) throw RegistrationError.BadDisplayName
         val bundle = try { InviteLink.decode(link) } catch (e: IllegalArgumentException) { throw RegistrationError.BadLink }
         val networkPub = bundle.networkPub.toByteArray()
         val manifest = try { ManifestVerifier.verify(bundle.manifest.toByteArray(), networkPub, 0) } catch (e: ManifestException) { throw RegistrationError.BadLink }
@@ -93,9 +93,7 @@ class Registration @Inject constructor(
             PreKeyFactory.oneTime(store, nextId, ONE_TIME_PER_NODE, n.nodeId.toByteArray()).also { nextId += ONE_TIME_PER_NODE }
         }
 
-        val entry = DirectoryEntry.newBuilder().setUserId(bs(userId)).setUsername(user).setDisplayName(name)
-            .setAccountPub(bs(account.publicKey)).setIdentityPub(bs(identity.publicKey.serialize()))
-            .setIdentitySig(bs(IdentityKeys.bindAccount(identity, account.publicKey))).setVersion(1).setCanInvite(true).build()
+        val entry = DirectoryEntries.build(userId, user, name, seed, version = 1, registeredMs = now)
         val prekeys = PreKeys.newBuilder().setDeviceId(1).setRegistrationId(registrationId)
             .setSignedPrekey(signed).setKyberPrekey(kyber).addAllOneTime(oneTime).build()
         val inviteId = MessageDigest.getInstance("SHA-256").digest(bundle.secret.toByteArray())

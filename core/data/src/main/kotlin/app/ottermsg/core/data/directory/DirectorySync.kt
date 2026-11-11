@@ -3,6 +3,8 @@ package app.ottermsg.core.data.directory
 import app.ottermsg.core.crypto.Ids
 import app.ottermsg.core.crypto.RecordCodec
 import app.ottermsg.core.data.account.AccountRepository
+import app.ottermsg.core.data.settings.Settings
+import app.ottermsg.core.database.dao.AccountDao
 import app.ottermsg.core.database.dao.ContactDao
 import app.ottermsg.core.database.dao.ConversationDao
 import app.ottermsg.core.database.entity.ContactEntity
@@ -23,6 +25,7 @@ import javax.inject.Singleton
 @Singleton
 class DirectorySync @Inject constructor(
     private val accounts: AccountRepository, private val contacts: ContactDao, private val conversations: ConversationDao,
+    private val settings: Settings, private val accountDao: AccountDao,
 ) {
     private val mutex = Mutex()
     private val _synced = MutableStateFlow(false)
@@ -39,7 +42,7 @@ class DirectorySync @Inject constructor(
         for (rec in records) {
             val e = verify(rec) ?: continue
             val userId = e.userId.toByteArray()
-            if (userId.contentEquals(me.userId)) continue
+            if (userId.contentEquals(me.userId)) { applyOwn(e); continue }
             val old = contacts.get(userId)
             if (old != null && old.entryVersion > e.version) continue // stale entry
             val identity = e.identityPub.toByteArray()
@@ -52,6 +55,19 @@ class DirectorySync @Inject constructor(
                 revoked = false, entryVersion = e.version,
             ))
             if (old == null || old.displayName != e.displayName) conversations.setTitle(userId, e.displayName)
+        }
+    }
+
+    /**
+     * Our own entry: follow its version (profile updates continue from it); when no local edit is pending, adopt
+     * its name (an edit made by another install of the account, or a restore).
+     */
+    private suspend fun applyOwn(e: DirectoryEntry) {
+        if (e.version.toInt() > settings.entryVersion()) settings.setEntryVersion(e.version.toInt())
+        if (!settings.profilePending() && e.version.toInt() >= settings.entryVersion() &&
+            e.displayName != accounts.require().displayName) {
+            accountDao.setDisplayName(e.displayName)
+            accounts.reload()
         }
     }
 

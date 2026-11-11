@@ -2,6 +2,7 @@ package app.ottermsg.core.data.sync
 
 import app.ottermsg.core.data.Clock
 import app.ottermsg.core.data.account.AccountRepository
+import app.ottermsg.core.data.profile.ProfileRepository
 import app.ottermsg.core.data.di.AllowPlaintext
 import app.ottermsg.core.data.di.ApplicationScope
 import app.ottermsg.core.data.directory.DirectorySync
@@ -42,7 +43,7 @@ class SyncEngine @Inject constructor(
     private val selector: NodeSelector,
     private val accounts: AccountRepository, private val settings: Settings, private val manifests: ManifestUpdater,
     private val directory: DirectorySync, private val receiver: MailboxReceiver, private val outbox: Outbox,
-    private val prekeys: PrekeyRefill,
+    private val prekeys: PrekeyRefill, private val profile: ProfileRepository,
     @ApplicationScope scope: CoroutineScope, @param:AllowPlaintext private val allowPlaintext: Boolean, private val clock: Clock,
 ) : OnlineApi {
     private val manager = ConnectionManager(selector, ::candidates, stats, scope, { api -> runSession(api, this) }, clock::now)
@@ -72,6 +73,7 @@ class SyncEngine @Inject constructor(
         }
         directory.sync(api)
         prekeys.refillIfPending(api)
+        session.launch { profile.run(api) }
         session.launch { outbox.run(api) }
         session.launch { reprobeLoop(api) }
     }

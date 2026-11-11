@@ -13,6 +13,7 @@ import app.ottermsg.core.data.messaging.GroupSender
 import app.ottermsg.core.data.messaging.MailboxReceiver
 import app.ottermsg.core.data.messaging.MessageRepository
 import app.ottermsg.core.data.messaging.Outbox
+import app.ottermsg.core.data.profile.ProfileRepository
 import app.ottermsg.core.data.registration.Registration
 import app.ottermsg.core.data.registration.TransportConnector
 import app.ottermsg.core.data.settings.Settings
@@ -41,7 +42,8 @@ class LiveClient {
     val settings = Settings(db.settingsDao())
     val accounts = AccountRepository(db.accountDao(), settings, SeedVault(XorWrapper))
     val signal = SignalService(accounts, db.signalKvDao(), db.contactDao(), scope)
-    val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao())
+    val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao(), settings, db.accountDao())
+    val profile = ProfileRepository(accounts, db, settings, clock)
     val outbox = Outbox(db, accounts, signal, clock, GroupSender(db, signal, clock))
     val applier = GroupApplier(db, accounts, directory, clock)
     val groupReceiver = GroupReceiver(db, accounts, signal, applier, outbox, clock)
@@ -52,7 +54,7 @@ class LiveClient {
     val stats = InMemoryEndpointStats()
     val selector = NodeSelector(transport, stats, clock::now)
     val manifests = ManifestUpdater(db.manifestDao(), settings, clock)
-    val engine = SyncEngine(stats, selector, accounts, settings, manifests, directory, receiver, outbox, prekeys, scope, true, clock)
+    val engine = SyncEngine(stats, selector, accounts, settings, manifests, directory, receiver, outbox, prekeys, profile, scope, true, clock)
     val invites = InviteRepository(accounts, settings, db.manifestDao(), engine, clock)
     val registration = Registration(db, TransportConnector(selector), SeedVault(XorWrapper), accounts, settings, clock, allowPlaintext = true)
     val me get() = accounts.require()

@@ -31,6 +31,8 @@ interface NodeApi {
     suspend fun send(envelope: Record)
     suspend fun ack(ack: Record)
     suspend fun createInvite(invite: Record)
+    /** Publishes a newer version of our own DIRECTORY_ENTRY (profile edit). */
+    suspend fun updateDirectory(entry: Record)
     suspend fun ping()
 }
 
@@ -57,5 +59,6 @@ class RemoteNodeApi(private val rpc: RpcClient, private val clock: () -> Long = 
     override suspend fun send(envelope: Record) { rpc.call("msg.send", req(envelope)) }
     override suspend fun ack(ack: Record) { rpc.call("msg.ack", req(ack)) }
     override suspend fun createInvite(invite: Record) { rpc.call("invite.create", req(invite)) }
+    override suspend fun updateDirectory(entry: Record) { rpc.call("directory.update", req(entry)) }
     override suspend fun ping() { rpc.call("ping", Empty.getDefaultInstance()) }
 }

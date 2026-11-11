@@ -103,6 +103,14 @@ class FakeNode(private val clock: () -> Long) {
     fun mailbox(user: ByteArray): List<Record> = synchronized(lock) { mailboxes[user.hex()]?.values?.toList() ?: emptyList() }
     fun oneTimeLeft(user: ByteArray): Int = synchronized(lock) { keys[user.hex()]?.oneTime?.size ?: 0 }
     fun directoryRecords(): List<Record> = synchronized(lock) { users.values.map { it.record } }
+    private val directoryUpdateCount = HashMap<String, Int>()
+    /** Accepted directory.update calls of [user]. */
+    fun directoryUpdates(user: ByteArray): Int = synchronized(lock) { directoryUpdateCount[user.hex()] ?: 0 }
+    /** Replaces a user's entry without the update rules (tests: an entry published elsewhere). */
+    fun putDirectoryEntry(rec: Record) = synchronized(lock) {
+        val e = DirectoryEntry.parseFrom(body(rec).payload)
+        users[e.userId.hex()] = User(rec, e)
+    }
 
     fun connect(): Session = Session().also { synchronized(lock) { sessions += it } }
 
@@ -229,6 +237,22 @@ class FakeNode(private val clock: () -> Long) {
             if (!b.author.toByteArray().contentEquals(me())) fail(Status.STATUS_UNAUTHORIZED, "author")
             val i = Invite.parseFrom(b.payload)
             invites[i.inviteId.hex()] = InviteState(b.author.toByteArray(), i.expiresMs)
+        } }
+
+        override suspend fun updateDirectory(entry: Record) { check(); synchronized(lock) {
+            val b = body(entry)
+            if (b.type != RecordType.DIRECTORY_ENTRY) fail(Status.STATUS_INVALID, "not a directory entry")
+            if (!b.author.toByteArray().contentEquals(me())) fail(Status.STATUS_UNAUTHORIZED, "entry of another user")
+            val cur = users[b.author.hex()] ?: fail(Status.STATUS_RETRY_LATER, "user")
+            verifyUser(entry)
+            val e = DirectoryEntry.parseFrom(b.payload)
+            val n = e.displayName.codePointCount(0, e.displayName.length)
+            if (n < 1 || n > 64) fail(Status.STATUS_INVALID, "display name")
+            if (e.username != cur.entry.username) fail(Status.STATUS_INVALID, "username changes are not supported")
+            if (e.version <= cur.entry.version) fail(Status.STATUS_CONFLICT, "not newer")
+            users[b.author.hex()] = User(entry, e)
+            directoryUpdateCount.merge(b.author.hex(), 1, Int::plus)
+            sessions.filter { it.user != null }.forEach { it.emit("directory", app.ottermsg.proto.v1.Empty.getDefaultInstance()) }
         } }
 
         override suspend fun ping() { check() }

@@ -9,4 +9,5 @@ import app.ottermsg.core.database.entity.AccountEntity
 interface AccountDao {
     @Insert suspend fun insert(a: AccountEntity)
     @Query("SELECT * FROM account LIMIT 1") suspend fun get(): AccountEntity?
+    @Query("UPDATE account SET display_name = :name") suspend fun setDisplayName(name: String)
 }

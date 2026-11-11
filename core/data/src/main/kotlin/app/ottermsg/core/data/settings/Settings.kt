@@ -27,7 +27,16 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
         dao.get(PENDING_REFILLS)?.decodeToString()?.split('\n')?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
     suspend fun setPendingRefills(owners: Set<String>) = dao.put(SettingEntity(PENDING_REFILLS, owners.joinToString("\n").encodeToByteArray()))
 
+    /** Version of our own DIRECTORY_ENTRY as last published or seen (M1–M3 registrations are version 1). */
+    suspend fun entryVersion(): Int = int(ENTRY_VERSION) ?: 1
+    suspend fun setEntryVersion(v: Int) = putInt(ENTRY_VERSION, v)
+    /** A display-name change is saved locally but not yet accepted by a node. */
+    suspend fun profilePending(): Boolean = (int(PROFILE_PENDING) ?: 0) != 0
+    suspend fun setProfilePending(v: Boolean) = putInt(PROFILE_PENDING, if (v) 1 else 0)
+
     companion object {
+        const val ENTRY_VERSION = "profile_entry_version"
+        const val PROFILE_PENDING = "profile_pending"
         const val REGISTRATION_ID = "registration_id"
         const val NEXT_ONE_TIME_ID = "next_one_time_id"
         const val NETWORK_PUB = "network_pub"

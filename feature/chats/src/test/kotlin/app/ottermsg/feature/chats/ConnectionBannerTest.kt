@@ -28,5 +28,6 @@ private object FakeApi : NodeApi {
     override suspend fun send(envelope: app.ottermsg.proto.v1.Record) = TODO()
     override suspend fun ack(ack: app.ottermsg.proto.v1.Record) = TODO()
     override suspend fun createInvite(invite: app.ottermsg.proto.v1.Record) = TODO()
+    override suspend fun updateDirectory(entry: app.ottermsg.proto.v1.Record) = TODO()
     override suspend fun ping() = TODO()
 }

@@ -13,6 +13,7 @@ import app.ottermsg.core.data.messaging.GroupSender
 import app.ottermsg.core.data.messaging.MailboxReceiver
 import app.ottermsg.core.data.messaging.MessageRepository
 import app.ottermsg.core.data.messaging.Outbox
+import app.ottermsg.core.data.profile.ProfileRepository
 import app.ottermsg.core.data.registration.NodeConnector
 import app.ottermsg.core.data.registration.Registration
 import app.ottermsg.core.data.settings.Settings
@@ -46,13 +47,16 @@ object XorWrapper : KeyWrapper {
 }
 
 /** One client wired by hand, as Hilt would, over an in-memory database and a [FakeNode]. */
-class TestGraph(val node: FakeNode, val clock: TestClock) {
-    val db: OtterDatabase = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), OtterDatabase::class.java).build()
+class TestGraph(
+    val node: FakeNode, val clock: TestClock,
+    val db: OtterDatabase = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), OtterDatabase::class.java).build(),
+) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val settings = Settings(db.settingsDao())
     val accounts = AccountRepository(db.accountDao(), settings, SeedVault(XorWrapper))
     val signal = SignalService(accounts, db.signalKvDao(), db.contactDao(), scope)
-    val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao())
+    val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao(), settings, db.accountDao())
+    val profile = ProfileRepository(accounts, db, settings, clock)
     val outbox = Outbox(db, accounts, signal, clock, GroupSender(db, signal, clock))
     val applier = GroupApplier(db, accounts, directory, clock)
     val groupReceiver = GroupReceiver(db, accounts, signal, applier, outbox, clock)
@@ -75,7 +79,7 @@ class TestGraph(val node: FakeNode, val clock: TestClock) {
     val manifests = app.ottermsg.core.data.sync.ManifestUpdater(db.manifestDao(), settings, clock)
     val engine = SyncEngine(app.ottermsg.core.network.InMemoryEndpointStats(),
         app.ottermsg.core.network.NodeSelector(noTransport, app.ottermsg.core.network.InMemoryEndpointStats(), clock::now),
-        accounts, settings, manifests, directory, receiver, outbox, prekeys, scope, true, clock)
+        accounts, settings, manifests, directory, receiver, outbox, prekeys, profile, scope, true, clock)
     val seed = ByteArray(32).also(SecureRandom()::nextBytes)
     val me get() = accounts.require()
 
@@ -96,7 +100,15 @@ class TestGraph(val node: FakeNode, val clock: TestClock) {
         session?.close(); session = null
     }
 
-    fun close() { offline(); scope.cancel(); db.close() }
+    private var closeDb = true
+
+    /** Simulates an app restart: this graph stops (database kept), a new graph opens on the same database. */
+    suspend fun restart(): TestGraph {
+        offline(); scope.cancel(); closeDb = false
+        return TestGraph(node, clock, db).also { it.accounts.load() }
+    }
+
+    fun close() { offline(); scope.cancel(); if (closeDb) db.close() }
 }
 
 suspend fun eventually(timeoutMs: Long = 15_000, what: String = "condition", cond: suspend () -> Boolean) {

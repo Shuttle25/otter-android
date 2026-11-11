@@ -6,4 +6,9 @@ import org.signal.libsignal.protocol.IdentityKeyPair
 class LocalAccount(
     val userId: ByteArray, val username: String, val displayName: String,
     val seed: ByteArray, val accountKey: Ed25519.KeyPair, val identity: IdentityKeyPair, val registrationId: Int,
-)
+    /** Time of registration: copied into every DIRECTORY_ENTRY version as registered_ms (D40). */
+    val createdMs: Long,
+) {
+    fun copyWith(displayName: String) =
+        LocalAccount(userId, username, displayName, seed, accountKey, identity, registrationId, createdMs)
+}
