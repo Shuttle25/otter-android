@@ -1,5 +1,6 @@
 package app.ottermsg.feature.conversation
 
+import app.ottermsg.proto.v1.GroupEvent
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -8,7 +9,15 @@ import java.time.ZoneId
 data class MessageUi(
     val localId: Long, val outgoing: Boolean, val text: String, val sentMs: Long,
     val status: Int, val system: Boolean, val authorName: String,
-)
+    /** Stable author key (user id hex); a change starts a new series. */
+    val authorKey: String = if (outgoing) "me" else authorName,
+    /** Group system event (rendered as a centered chip). */
+    val event: GroupEvent? = null,
+    /** Incoming message in a group: the author's name is shown at the start of a series. */
+    val inGroup: Boolean = false,
+) {
+    val isEvent: Boolean get() = event != null
+}
 
 sealed interface ConversationItem {
     val key: String
@@ -27,7 +36,8 @@ const val GROUP_GAP_MS = 5 * 60 * 1000L
 fun groupMessages(list: List<MessageUi>, zone: ZoneId): List<ConversationItem> {
     fun date(m: MessageUi) = LocalDate.ofInstant(Instant.ofEpochMilli(m.sentMs), zone)
     fun breaks(a: MessageUi, b: MessageUi) =
-        a.outgoing != b.outgoing || a.system || b.system || date(a) != date(b) || b.sentMs - a.sentMs > GROUP_GAP_MS
+        a.outgoing != b.outgoing || a.authorKey != b.authorKey || a.system || b.system || a.isEvent || b.isEvent ||
+            date(a) != date(b) || b.sentMs - a.sentMs > GROUP_GAP_MS
     val out = ArrayList<ConversationItem>(list.size + 4)
     list.forEachIndexed { i, m ->
         val prev = list.getOrNull(i - 1)

@@ -1,6 +1,8 @@
 package app.ottermsg.feature.conversation
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -49,6 +51,8 @@ import app.ottermsg.core.ui.components.DeliveryStatus
 import app.ottermsg.core.ui.components.MenuAction
 import app.ottermsg.core.ui.components.OtterAvatar
 import app.ottermsg.core.ui.components.OtterEmptyState
+import app.ottermsg.core.ui.components.groupEventText
+import androidx.compose.ui.res.pluralStringResource
 import app.ottermsg.core.ui.R as UiR
 import androidx.compose.ui.unit.dp
 import app.ottermsg.core.ui.components.OtterTopBar
@@ -56,14 +60,18 @@ import app.ottermsg.core.ui.theme.Dimens
 import kotlinx.coroutines.launch
 
 @Composable
-fun ConversationRoute(onBack: () -> Unit, vm: ConversationViewModel = hiltViewModel()) {
+fun ConversationRoute(
+    onBack: () -> Unit, onOpenGroupInfo: (String) -> Unit = {}, onMessageInfo: (Long) -> Unit = {},
+    vm: ConversationViewModel = hiltViewModel(),
+) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val text by vm.text.collectAsStateWithLifecycle()
     val sending by vm.sending.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     // Visible conversation = read: on enter and whenever new incoming messages arrive while resumed.
     LaunchedEffect(ui.lastIncomingId) { lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { vm.markRead() } }
-    ConversationScreen(ui, text, sending, onBack, vm::onText, vm::send, { vm.retry(it) }, { vm.delete(it) }, vm.sent)
+    ConversationScreen(ui, text, sending, onBack, vm::onText, vm::send, { vm.retry(it) }, { vm.delete(it) }, vm.sent,
+        onOpenGroupInfo = { if (ui.isGroup) onOpenGroupInfo(ui.groupIdHex) }, onMessageInfo = onMessageInfo)
 }
 
 @Composable
@@ -72,6 +80,7 @@ fun ConversationScreen(
     onBack: () -> Unit, onText: (String) -> Unit, onSend: () -> Unit,
     onRetry: (Long) -> Unit, onDelete: (Long) -> Unit,
     sentEvents: kotlinx.coroutines.flow.Flow<Long> = kotlinx.coroutines.flow.emptyFlow(),
+    onOpenGroupInfo: () -> Unit = {}, onMessageInfo: (Long) -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -95,15 +104,20 @@ fun ConversationScreen(
     val copyLabel = stringResource(R.string.conv_copy)
     val deleteLabel = stringResource(R.string.conv_delete)
     val retryLabel = stringResource(R.string.conv_retry)
+    val infoLabel = stringResource(R.string.conv_info)
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             OtterTopBar(ui.title, onBack = onBack, leading = {
-                OtterAvatar(ui.title, ui.seed, Dimens.avatarTopBar); Spacer(Modifier.width(Dimens.s12))
-            })
+                OtterAvatar(ui.title, ui.seed, Dimens.avatarTopBar, family = ui.family); Spacer(Modifier.width(Dimens.s12))
+            }, onTitleClick = if (ui.isGroup) onOpenGroupInfo else null,
+                subtitle = if (ui.isGroup) pluralStringResource(R.plurals.conv_members, ui.memberCount, ui.memberCount) else null)
         },
-        bottomBar = { MessageComposer(text, sending, onText, onSend, Modifier.navigationBarsPadding().imePadding()) },
+        bottomBar = {
+            if (ui.canWrite) MessageComposer(text, sending, onText, onSend, Modifier.navigationBarsPadding().imePadding())
+            else NotMemberNotice(Modifier.navigationBarsPadding())
+        },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             if (ui.loaded && ui.items.isEmpty()) {
@@ -117,7 +131,9 @@ fun ConversationScreen(
                 items(reversed, key = { it.key }) { item ->
                     when (item) {
                         is ConversationItem.DateChip -> DateChip(item.date)
-                        is ConversationItem.Bubble -> {
+                        is ConversationItem.Bubble -> if (item.message.event != null) {
+                            SystemEventChip(groupEventText(item.message.event, ui.me, ui::nameOf))
+                        } else {
                             val m = item.message
                             val failed = m.outgoing && m.status == DeliveryStatus.FAILED
                             MessageBubble(
@@ -127,6 +143,7 @@ fun ConversationScreen(
                                 actions = buildList {
                                     if (failed) add(CustomAccessibilityAction(retryLabel) { onRetry(m.localId); true })
                                     if (!m.system) add(CustomAccessibilityAction(copyLabel) { clipboard.setText(AnnotatedString(m.text)); true })
+                                    if (ui.isGroup && m.outgoing) add(CustomAccessibilityAction(infoLabel) { onMessageInfo(m.localId); true })
                                     add(CustomAccessibilityAction(deleteLabel) { confirmDelete = m; true })
                                 },
                                 menu = {
@@ -135,6 +152,7 @@ fun ConversationScreen(
                                         actions = buildList {
                                             if (failed) add(MenuAction(retryLabel) { onRetry(m.localId) })
                                             if (!m.system) add(MenuAction(copyLabel) { clipboard.setText(AnnotatedString(m.text)) })
+                                            if (ui.isGroup && m.outgoing) add(MenuAction(infoLabel) { onMessageInfo(m.localId) })
                                             add(MenuAction(deleteLabel) { confirmDelete = m })
                                         },
                                         onDismiss = { menuFor = null },
@@ -166,5 +184,13 @@ fun ConversationScreen(
             confirmButton = { TextButton(onClick = { confirmDelete = null; onDelete(m.localId) }) { Text(stringResource(R.string.conv_delete_ok)) } },
             dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text(stringResource(R.string.conv_cancel)) } },
         )
+    }
+}
+
+/** Calm notice instead of the composer once we are no longer a member of the group. */
+@Composable
+fun NotMemberNotice(modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(Dimens.screenGutter), contentAlignment = Alignment.Center) {
+        Text(stringResource(R.string.conv_not_member), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

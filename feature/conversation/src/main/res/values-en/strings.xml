@@ -16,4 +16,17 @@
     <string name="conv_copied">Copied</string>
     <string name="conv_empty_title">No messages yet</string>
     <string name="conv_empty_text">Write the first message</string>
+    <string name="conv_info">Info</string>
+    <string name="conv_not_member">You are no longer a member of this group</string>
+    <plurals name="conv_members">
+        <item quantity="one">%1$d member</item>
+        <item quantity="other">%1$d members</item>
+    </plurals>
+    <string name="info_title">Message info</string>
+    <string name="info_delivered">Delivered %1$d of %2$d</string>
+    <string name="info_read">Read %1$d of %2$d</string>
+    <string name="info_state_pending">Waiting</string>
+    <string name="info_state_delivered">Delivered, %1$s</string>
+    <string name="info_state_read">Read, %1$s</string>
+    <string name="info_not_in_group">not in the group</string>
 </resources>

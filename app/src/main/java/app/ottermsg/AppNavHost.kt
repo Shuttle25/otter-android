@@ -15,6 +15,8 @@ import app.ottermsg.feature.chats.NewChatRoute
 import app.ottermsg.feature.chats.SettingsRoute
 import app.ottermsg.feature.conversation.ConversationRoute
 import app.ottermsg.feature.conversation.ConversationViewModel
+import app.ottermsg.feature.conversation.MessageInfoRoute
+import app.ottermsg.feature.conversation.MessageInfoViewModel
 import app.ottermsg.feature.groups.AddMembersRoute
 import app.ottermsg.feature.groups.GroupInfoRoute
 import app.ottermsg.feature.groups.GroupInfoViewModel
@@ -34,6 +36,8 @@ object Routes {
     const val ADD_MEMBERS = "addMembers/{${GroupInfoViewModel.ARG_GROUP}}"
     fun conversation(id: Long) = "conversation/$id"
     fun groupInfo(groupIdHex: String) = "groupInfo/$groupIdHex"
+    const val MESSAGE_INFO = "messageInfo/{${MessageInfoViewModel.ARG_LOCAL_ID}}"
+    fun messageInfo(localId: Long) = "messageInfo/$localId"
     fun addMembers(groupIdHex: String) = "addMembers/$groupIdHex"
 }
 
@@ -72,7 +76,11 @@ fun AppNavHost(hasAccount: Boolean, account: StateFlow<LocalAccount?>) {
             AddMembersRoute(onBack = { nav.popBackStack() })
         }
         composable(Routes.CONVERSATION, arguments = listOf(navArgument(ConversationViewModel.ARG_ID) { type = NavType.LongType })) {
-            ConversationRoute(onBack = { nav.popBackStack() })
+            ConversationRoute(onBack = { nav.popBackStack() }, onOpenGroupInfo = { nav.navigate(Routes.groupInfo(it)) },
+                onMessageInfo = { nav.navigate(Routes.messageInfo(it)) })
+        }
+        composable(Routes.MESSAGE_INFO, arguments = listOf(navArgument(MessageInfoViewModel.ARG_LOCAL_ID) { type = NavType.LongType })) {
+            MessageInfoRoute(onBack = { nav.popBackStack() })
         }
         composable(Routes.INVITE) { InviteRoute(onBack = { nav.popBackStack() }) }
         composable(Routes.SETTINGS) { SettingsRoute(onBack = { nav.popBackStack() }, onInvite = { nav.navigate(Routes.INVITE) }) }

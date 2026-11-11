@@ -5,7 +5,11 @@ import app.ottermsg.core.data.Clock
 import app.ottermsg.core.data.account.AccountRepository
 import app.ottermsg.core.data.bs
 import app.ottermsg.core.database.OtterDatabase
+import app.ottermsg.core.database.dao.RecipientStatus
+import app.ottermsg.core.database.entity.ContactEntity
 import app.ottermsg.core.database.entity.ConversationEntity
+import app.ottermsg.core.database.entity.GroupEntity
+import app.ottermsg.core.database.entity.GroupMemberEntity
 import app.ottermsg.core.database.entity.MessageEntity
 import app.ottermsg.core.database.entity.MessageRecipientEntity
 import app.ottermsg.core.database.entity.OutboxEntity
@@ -16,7 +20,11 @@ import app.ottermsg.proto.v1.Content
 import app.ottermsg.proto.v1.DataMessage
 import app.ottermsg.proto.v1.GroupContext
 import app.ottermsg.proto.v1.ReceiptMessage
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import java.security.SecureRandom
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -30,7 +38,16 @@ interface ConversationStore {
     suspend fun deleteLocal(localId: Long)
     suspend fun setDraft(conversationId: Long, draft: String)
     suspend fun markConversationRead(conversationId: Long)
+    /** Group conversations: the group and its members (null for direct chats). */
+    fun observeGroup(conversationId: Long): Flow<GroupView?> = flowOf(null)
+    fun observeContacts(): Flow<List<ContactEntity>> = flowOf(emptyList())
+    suspend fun myId(): ByteArray = ByteArray(0)
+    /** Message info (D23): the frozen recipients of an outgoing group message with their receipt times. */
+    fun observeRecipients(localId: Long): Flow<List<RecipientStatus>> = flowOf(emptyList())
+    fun observeMessage(localId: Long): Flow<MessageEntity?> = flowOf(null)
 }
+
+class GroupView(val group: GroupEntity, val members: List<GroupMemberEntity>)
 
 @Singleton
 class MessageRepository @Inject constructor(
@@ -44,6 +61,16 @@ class MessageRepository @Inject constructor(
     fun observeSummaries(): Flow<List<ConversationSummary>> = conversations.observeSummaries()
     override fun observeMessages(conversationId: Long): Flow<List<MessageEntity>> = messages.observe(conversationId)
     override fun observeConversation(conversationId: Long): Flow<ConversationEntity?> = conversations.observe(conversationId)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeGroup(conversationId: Long): Flow<GroupView?> = conversations.observe(conversationId).flatMapLatest { c ->
+        val gid = c?.groupId ?: return@flatMapLatest flowOf(null)
+        combine(db.groupDao().observe(gid), db.groupDao().observeMembers(gid)) { g, ms -> g?.let { GroupView(it, ms) } }
+    }
+    override fun observeContacts(): Flow<List<ContactEntity>> = contacts.observeAll()
+    override suspend fun myId(): ByteArray = accounts.require().userId
+    override fun observeRecipients(localId: Long): Flow<List<RecipientStatus>> = db.messageRecipientDao().observeRecipients(localId)
+    override fun observeMessage(localId: Long): Flow<MessageEntity?> = messages.observeOne(localId)
 
     /** The direct conversation with a family member (created on first use). */
     suspend fun conversationWith(userId: ByteArray): Long {

@@ -16,4 +16,19 @@
     <string name="conv_copied">Скопировано</string>
     <string name="conv_empty_title">Пока нет сообщений</string>
     <string name="conv_empty_text">Напишите первое сообщение</string>
+    <string name="conv_info">Сведения</string>
+    <string name="conv_not_member">Вы больше не участник этой группы</string>
+    <plurals name="conv_members">
+        <item quantity="one">%1$d участник</item>
+        <item quantity="few">%1$d участника</item>
+        <item quantity="many">%1$d участников</item>
+        <item quantity="other">%1$d участника</item>
+    </plurals>
+    <string name="info_title">Сведения о сообщении</string>
+    <string name="info_delivered">Доставлено %1$d из %2$d</string>
+    <string name="info_read">Прочитано %1$d из %2$d</string>
+    <string name="info_state_pending">Ожидает</string>
+    <string name="info_state_delivered">Доставлено, %1$s</string>
+    <string name="info_state_read">Прочитано, %1$s</string>
+    <string name="info_not_in_group">не в группе</string>
 </resources>

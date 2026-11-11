@@ -1,5 +1,6 @@
 package app.ottermsg.core.ui.components
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.ui.Alignment
@@ -30,18 +31,24 @@ fun OtterTopBar(
     onBack: (() -> Unit)? = null,
     leading: (@Composable () -> Unit)? = null,
     onTitleClick: (() -> Unit)? = null,
+    subtitle: String? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     TopAppBar(
         title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // Avatar, title and subtitle form one target when the title opens details (guide §7: group → info).
+            Row(verticalAlignment = Alignment.CenterVertically,
+                modifier = if (onTitleClick != null) Modifier.clickable(onClick = onTitleClick) else Modifier) {
                 leading?.invoke()
-                Text(
-                    title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.semantics { heading() }.let { m ->
-                        if (onTitleClick != null) m.then(Modifier.clickable(onClick = onTitleClick)) else m
-                    },
-                )
+                Column {
+                    Text(
+                        title, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        style = if (subtitle == null) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.semantics { heading() },
+                    )
+                    if (subtitle != null) Text(subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         },
         navigationIcon = {

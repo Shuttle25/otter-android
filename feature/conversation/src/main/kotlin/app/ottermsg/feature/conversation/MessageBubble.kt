@@ -20,11 +20,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.min
 import app.ottermsg.core.ui.components.DeliveryStatus
 import app.ottermsg.core.ui.components.deliveryStatusLabel
@@ -33,6 +37,12 @@ import app.ottermsg.core.ui.theme.OtterTheme
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+
+/** True on bubbles that show the author line (tests; the bubble is one cleared TalkBack unit). */
+val ShowsAuthor = SemanticsPropertyKey<Boolean>("ShowsAuthor")
+
+/** Author line in group bubbles: 14/20 sp, weight 600. */
+private val AuthorStyle = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold)
 
 fun timeOf(ms: Long, zone: ZoneId = ZoneId.systemDefault()): String =
     DateTimeFormatter.ofPattern("HH:mm").format(Instant.ofEpochMilli(ms).atZone(zone))
@@ -60,6 +70,7 @@ fun MessageBubble(
     val failedHint = if (status == DeliveryStatus.FAILED) stringResource(R.string.conv_failed_hint) else null
     val description = listOfNotNull(author.ifEmpty { null }, text, time, statusLabel, failedHint).joinToString(", ")
     val large = LocalDensity.current.fontScale >= 1.3f
+    val showAuthor = m.inGroup && firstInGroup && !m.system
 
     BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = Dimens.messageListGutter)
         .padding(top = if (firstInGroup) Dimens.groupGap else Dimens.sameAuthorGap)) {
@@ -75,9 +86,12 @@ fun MessageBubble(
                             contentDescription = description
                             onClick(label = null) { onTap(); true }
                             customActions = actions
+                            set(ShowsAuthor, showAuthor)
                         },
                 ) {
                     Column(Modifier.padding(horizontal = Dimens.s12, vertical = Dimens.s8)) {
+                        // Group: the author's name at the start of a series only (guide §7); same colour for everyone.
+                        if (showAuthor) Text(m.authorName, style = AuthorStyle, color = onContainer)
                         Text(text, style = MaterialTheme.typography.bodyLarge, color = onContainer,
                             fontStyle = if (m.system) FontStyle.Italic else FontStyle.Normal)
                         MessageMeta(time, status, color = if (m.outgoing) onContainer else MaterialTheme.colorScheme.onSurfaceVariant,

@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.Flow
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insert(m: MessageEntity): Long
     @Query("SELECT * FROM messages WHERE conversation_id = :cid ORDER BY sent_ms, local_id") fun observe(cid: Long): Flow<List<MessageEntity>>
     @Query("SELECT * FROM messages WHERE local_id = :id") suspend fun get(id: Long): MessageEntity?
+    @Query("SELECT * FROM messages WHERE local_id = :id") fun observeOne(id: Long): Flow<MessageEntity?>
     @Query("""UPDATE messages SET status = :status WHERE message_id = :messageId AND outgoing = 1
               AND status < :status AND status != ${MessageStatus.FAILED}""")
     suspend fun advanceStatus(messageId: ByteArray, status: Int): Int
