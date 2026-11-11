@@ -4,6 +4,7 @@ import app.ottermsg.core.crypto.AuthMessage
 import app.ottermsg.core.crypto.Ed25519
 import app.ottermsg.proto.v1.Empty
 import app.ottermsg.proto.v1.Event
+import app.ottermsg.proto.v1.Hello
 import app.ottermsg.proto.v1.LoginRequest
 import app.ottermsg.proto.v1.ManifestResponse
 import app.ottermsg.proto.v1.PreKeyBundle
@@ -18,8 +19,9 @@ import kotlinx.coroutines.flow.Flow
 /** The node's client API (docs/02 §4). Faked in core:data tests. */
 interface NodeApi {
     val events: Flow<Event>
-    /** node_id from this connection's hello (owner of one-time prekeys we upload here). */
-    suspend fun nodeId(): ByteArray
+    /** This connection's hello: node id (owner of one-time prekeys we upload here), manifest version. */
+    suspend fun hello(): Hello
+    suspend fun nodeId(): ByteArray = hello().nodeId.toByteArray()
     suspend fun register(req: RegisterRequest)
     suspend fun login(userId: ByteArray, account: Ed25519.KeyPair)
     suspend fun manifest(): Record
@@ -34,7 +36,7 @@ interface NodeApi {
 
 class RemoteNodeApi(private val rpc: RpcClient, private val clock: () -> Long = System::currentTimeMillis) : NodeApi {
     override val events: Flow<Event> = rpc.events
-    override suspend fun nodeId(): ByteArray = rpc.hello.await().nodeId.toByteArray()
+    override suspend fun hello(): Hello = rpc.hello.await()
     private fun req(r: Record) = RecordRequest.newBuilder().setRecord(r).build()
 
     override suspend fun register(req: RegisterRequest) { rpc.call("register", req) }

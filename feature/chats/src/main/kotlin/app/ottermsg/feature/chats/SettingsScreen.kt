@@ -55,8 +55,9 @@ fun SettingsRoute(onBack: () -> Unit, onInvite: () -> Unit, vm: SettingsViewMode
             Section(stringResource(R.string.settings_family))
             OtterSettingsRow(stringResource(R.string.settings_invite), icon = Icons.Outlined.PersonAdd, onClick = onInvite)
             Section(stringResource(R.string.settings_connection))
-            val url = (connection as? ConnectionState.Online)?.url
-            OtterSettingsRow(stringResource(connectionLabel(connection)), subtitle = url, icon = Icons.Outlined.Wifi)
+            val online = connection as? ConnectionState.Online
+            OtterSettingsRow(stringResource(connectionLabel(connection)), subtitle = online?.let { "${it.nodeLabel} · ${it.url}" },
+                icon = Icons.Outlined.Wifi)
         }
     }
 }

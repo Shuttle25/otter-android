@@ -52,9 +52,11 @@ class LiveNodeTest {
         val receiver = MailboxReceiver(db, accounts, signal, directory, outbox, clock)
         val messages = MessageRepository(db, accounts, outbox, clock)
         val prekeys = PrekeyRefill(accounts, settings, signal, clock)
-        val engine = SyncEngine(transport, accounts, settings, db.manifestDao(), directory, receiver, outbox, prekeys, scope, true, clock)
+        val stats = app.ottermsg.core.network.InMemoryEndpointStats()
+        val selector = app.ottermsg.core.network.NodeSelector(transport, stats, clock::now)
+        val engine = SyncEngine(selector, stats, accounts, settings, db.manifestDao(), directory, receiver, outbox, prekeys, scope, true, clock)
         val invites = InviteRepository(accounts, settings, db.manifestDao(), engine, clock)
-        val registration = Registration(db, TransportConnector(transport), SeedVault(XorWrapper), accounts, settings, clock, allowPlaintext = true)
+        val registration = Registration(db, TransportConnector(selector), SeedVault(XorWrapper), accounts, settings, clock, allowPlaintext = true)
         val me get() = accounts.require()
 
         suspend fun register(link: String, name: String, username: String) =

@@ -5,6 +5,10 @@ import app.ottermsg.proto.v1.Event
 import app.ottermsg.proto.v1.Frame
 import app.ottermsg.proto.v1.Status
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -33,5 +37,27 @@ class RpcClientTest {
         conn.drop()
         rpc.closed.await()
         assertThrows(IOException::class.java) { kotlinx.coroutines.runBlocking { rpc.call("ping", Empty.getDefaultInstance()) } }
+    }
+
+    @Test fun slowEventHandlingDoesNotBlockResponses() = runTest {
+        val t = FakeTransport { ok() }
+        val conn = t.connect(cand("x")) as FakeTransport.FakeConnection
+        val rpc = RpcClient(conn, backgroundScope)
+        rpc.hello.await()
+        val seen = mutableListOf<String>()
+        val collector = backgroundScope.launch {
+            rpc.events.collect { e ->
+                if (seen.isEmpty()) delay(5_000) // a slow first handler (decrypting)
+                seen += e.type
+            }
+        }
+        repeat(1000) { conn.push(Frame.newBuilder().setEvent(Event.newBuilder().setType("e$it")).build()) }
+        val t0 = currentTime
+        rpc.call("ping", Empty.getDefaultInstance()) // answered while the collector is still busy
+        assertEquals(t0, currentTime)
+        advanceTimeBy(6_000)
+        kotlinx.coroutines.yield()
+        assertEquals((0 until 1000).map { "e$it" }, seen)
+        collector.cancel()
     }
 }

@@ -12,6 +12,9 @@ import app.ottermsg.core.data.registration.TransportConnector
 import app.ottermsg.core.data.sync.SyncEngine
 import app.ottermsg.core.database.OtterDatabase
 import app.ottermsg.core.database.key.KeystoreKeyWrapper
+import app.ottermsg.core.data.network.RoomEndpointStats
+import app.ottermsg.core.network.EndpointStats
+import app.ottermsg.core.network.NodeSelector
 import app.ottermsg.core.network.OkHttpTransport
 import app.ottermsg.core.network.Transport
 import dagger.Binds
@@ -29,7 +32,10 @@ import javax.inject.Singleton
 object DataModule {
     @Provides fun clock(): Clock = Clock { System.currentTimeMillis() }
     @Provides @Singleton fun transport(): Transport = OkHttpTransport()
-    @Provides @Singleton fun connector(transport: Transport): NodeConnector = TransportConnector(transport)
+    @Provides @Singleton fun endpointStats(s: RoomEndpointStats): EndpointStats = s
+    @Provides @Singleton fun nodeSelector(transport: Transport, stats: EndpointStats, clock: Clock): NodeSelector =
+        NodeSelector(transport, stats, clock::now)
+    @Provides @Singleton fun connector(selector: NodeSelector): NodeConnector = TransportConnector(selector)
     @Provides @Singleton fun seedVault(): SeedVault = SeedVault(KeystoreKeyWrapper("otter_seed_kek"))
     @Provides @Singleton @ApplicationScope fun appScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     @Provides fun onlineApi(engine: SyncEngine): OnlineApi = engine

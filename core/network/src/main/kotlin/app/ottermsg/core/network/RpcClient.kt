@@ -11,8 +11,9 @@ import com.google.protobuf.MessageLite
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import java.io.IOException
@@ -25,8 +26,10 @@ class RpcTimeoutException(method: String) : IOException("$method timed out")
 class RpcClient(private val conn: Connection, scope: CoroutineScope, private val timeoutMs: Long = 15_000) {
     private val nextId = AtomicLong(1)
     private val pending = ConcurrentHashMap<Long, CompletableDeferred<Response>>()
-    private val _events = MutableSharedFlow<Event>(extraBufferCapacity = 256)
-    val events: SharedFlow<Event> = _events
+    // Unlimited channel: the reader never waits for slow event handling, so responses keep flowing while
+    // envelopes are being decrypted. Single collector (the session).
+    private val _events = Channel<Event>(Channel.UNLIMITED)
+    val events: Flow<Event> = _events.receiveAsFlow()
     val hello = CompletableDeferred<Hello>()
     /** Completes when the connection ends (with the cause, or null on clean close). */
     val closed = CompletableDeferred<Throwable?>()
@@ -39,7 +42,7 @@ class RpcClient(private val conn: Connection, scope: CoroutineScope, private val
                 when (f.kindCase) {
                     Frame.KindCase.RESPONSE -> pending.remove(f.response.id)?.complete(f.response)
                     Frame.KindCase.EVENT ->
-                        if (f.event.type == "hello") hello.complete(Hello.parseFrom(f.event.body)) else _events.emit(f.event)
+                        if (f.event.type == "hello") hello.complete(Hello.parseFrom(f.event.body)) else _events.trySend(f.event)
                     else -> {}
                 }
             }
@@ -50,6 +53,7 @@ class RpcClient(private val conn: Connection, scope: CoroutineScope, private val
             pending.values.forEach { it.completeExceptionally(err) }
             pending.clear()
             hello.completeExceptionally(err)
+            _events.close()
             closed.complete(cause)
         }
     }

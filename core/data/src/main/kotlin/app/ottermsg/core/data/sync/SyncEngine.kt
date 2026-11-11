@@ -17,7 +17,8 @@ import app.ottermsg.core.network.ConnectionManager
 import app.ottermsg.core.network.ConnectionState
 import app.ottermsg.core.network.Endpoints
 import app.ottermsg.core.network.NodeApi
-import app.ottermsg.core.network.Transport
+import app.ottermsg.core.network.EndpointStats
+import app.ottermsg.core.network.NodeSelector
 import app.ottermsg.proto.v1.Event
 import app.ottermsg.proto.v1.RecordBatch
 import kotlinx.coroutines.CoroutineScope
@@ -36,13 +37,13 @@ import kotlin.coroutines.cancellation.CancellationException
  */
 @Singleton
 class SyncEngine @Inject constructor(
-    transport: Transport,
+    selector: NodeSelector, stats: EndpointStats,
     private val accounts: AccountRepository, private val settings: Settings, private val manifests: ManifestDao,
     private val directory: DirectorySync, private val receiver: MailboxReceiver, private val outbox: Outbox,
     private val prekeys: PrekeyRefill,
     @ApplicationScope scope: CoroutineScope, @param:AllowPlaintext private val allowPlaintext: Boolean, clock: Clock,
 ) : OnlineApi {
-    private val manager = ConnectionManager(transport, ::candidates, scope, { api -> runSession(api, this) }, clock::now)
+    private val manager = ConnectionManager(selector, ::candidates, stats, scope, { api -> runSession(api, this) }, clock::now)
     val connection: StateFlow<ConnectionState> = manager.state
 
     fun start() = manager.start()

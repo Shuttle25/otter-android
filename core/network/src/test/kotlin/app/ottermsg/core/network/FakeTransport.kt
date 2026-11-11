@@ -11,12 +11,24 @@ import kotlinx.coroutines.channels.Channel
 import java.io.IOException
 
 /** In-memory "node": answers requests with [handler], can push events and drop the connection. */
-class FakeTransport(var failUrls: Set<String> = emptySet(), val handler: (Request) -> Response) : Transport {
+class FakeTransport(
+    var failUrls: Set<String> = emptySet(),
+    /** Connect latency per url (virtual time). */
+    var delays: Map<String, Long> = emptyMap(),
+    /** These urls connect but never send hello. */
+    var silentUrls: Set<String> = emptySet(),
+    val handler: (Request) -> Response,
+) : Transport {
     val connections = mutableListOf<FakeConnection>()
+    val byUrl = mutableMapOf<String, MutableList<FakeConnection>>()
     override suspend fun connect(candidate: Candidate): Connection {
         val url = candidate.url
+        delays[url]?.let { kotlinx.coroutines.delay(it) }
         if (url in failUrls) throw IOException("refused $url")
-        return FakeConnection(handler).also { connections += it; it.push(helloEvent()) }
+        return FakeConnection(handler).also {
+            synchronized(this) { connections += it; byUrl.getOrPut(url) { mutableListOf() } += it }
+            if (url !in silentUrls) it.push(helloEvent())
+        }
     }
     private fun helloEvent() = Frame.newBuilder().setEvent(Event.newBuilder().setType("hello")
         .setBody(Hello.newBuilder().setProtocolVersion(1).setNodeId(ByteString.copyFrom(ByteArray(16) { 1 }))

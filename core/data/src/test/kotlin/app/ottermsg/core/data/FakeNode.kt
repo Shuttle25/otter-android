@@ -121,7 +121,8 @@ class FakeNode(private val clock: () -> Long) {
             emit("envelopes", RecordBatch.newBuilder().addAllRecords(fresh.values).build())
         }
 
-        override suspend fun nodeId(): ByteArray = nodeId
+        override suspend fun hello(): app.ottermsg.proto.v1.Hello = app.ottermsg.proto.v1.Hello.newBuilder().setProtocolVersion(1)
+            .setNodeId(bs(nodeId)).setManifestVersion(1).build()
 
         override suspend fun register(req: RegisterRequest) { check(); synchronized(lock) {
             if (req.inviteSecret.size() != 32) fail(Status.STATUS_INVALID, "incomplete registration")

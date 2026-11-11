@@ -2,12 +2,9 @@ package app.ottermsg.core.data.registration
 
 import app.ottermsg.core.network.Candidate
 import app.ottermsg.core.network.NodeApi
+import app.ottermsg.core.network.NodeSelector
 import app.ottermsg.core.network.RemoteNodeApi
-import app.ottermsg.core.network.RpcClient
-import app.ottermsg.core.network.Transport
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.withTimeout
 import java.io.IOException
 
 /** One-off connection to the first reachable endpoint (used before an account exists). */
@@ -16,27 +13,14 @@ interface NodeConnector {
     suspend fun <T> withNode(candidates: List<Candidate>, block: suspend (NodeApi) -> T): T
 }
 
-class TransportConnector(private val transport: Transport) : NodeConnector {
-    override suspend fun <T> withNode(candidates: List<Candidate>, block: suspend (NodeApi) -> T): T {
-        var last = IOException("no endpoints")
-        for (cand in candidates) {
-            val conn = try { transport.connect(cand) } catch (e: IOException) { last = e; continue }
-            try {
-                return coroutineScope {
-                    val rpc = RpcClient(conn, this)
-                    try {
-                        withTimeout(10_000) { rpc.hello.await() }
-                        block(RemoteNodeApi(rpc))
-                    } finally {
-                        rpc.close()
-                    }
-                }
-            } catch (e: IOException) {
-                last = e
-            } catch (e: TimeoutCancellationException) {
-                last = IOException("no hello from ${cand.url}", e)
-            }
+/** Races the candidates like the sync engine does and runs [block] on the winner. */
+class TransportConnector(private val selector: NodeSelector) : NodeConnector {
+    override suspend fun <T> withNode(candidates: List<Candidate>, block: suspend (NodeApi) -> T): T = coroutineScope {
+        val w = selector.race(candidates, this) ?: throw IOException("no node reachable")
+        try {
+            block(RemoteNodeApi(w.rpc))
+        } finally {
+            w.rpc.close()
         }
-        throw last
     }
 }
