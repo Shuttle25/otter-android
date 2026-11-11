@@ -1,0 +1,34 @@
+<resources>
+    <string name="newgroup_title">Новая группа</string>
+    <string name="newgroup_name">Название группы</string>
+    <string name="newgroup_family">Семейная группа</string>
+    <string name="newgroup_family_hint">У группы будет семейная картинка с выдрами</string>
+    <string name="newgroup_members">Участники: %1$d</string>
+    <string name="newgroup_search">Поиск</string>
+    <string name="newgroup_create">Создать</string>
+    <string name="group_info_title">Группа</string>
+    <string name="group_you">Вы</string>
+    <string name="group_rename">Изменить название</string>
+    <string name="group_save">Сохранить</string>
+    <string name="group_cancel">Отмена</string>
+    <string name="group_not_member">Вы больше не участник</string>
+    <string name="group_action_failed">Не получилось. Возможно, права изменились — попробуйте ещё раз.</string>
+    <string name="group_add_members">Добавить участников</string>
+    <string name="group_make_admin">Сделать админом</string>
+    <string name="group_unadmin">Снять админа</string>
+    <string name="group_remove">Удалить из группы</string>
+    <string name="group_remove_confirm">Удалить из группы: %1$s?</string>
+    <string name="group_leave">Покинуть группу</string>
+    <string name="group_leave_confirm">Покинуть группу? Вы больше не будете получать её сообщения.</string>
+    <string name="group_pick_admin_title">Выберите нового админа</string>
+    <string name="group_pick_admin_text">Вы последний админ. Назначьте другого участника, затем вы покинете группу.</string>
+    <string name="group_admin_badge">админ</string>
+    <string name="group_add_button">Добавить (%1$d)</string>
+    <string name="group_add_nobody">Все из семьи уже в группе.</string>
+    <plurals name="group_members_count">
+        <item quantity="one">%1$d участник</item>
+        <item quantity="few">%1$d участника</item>
+        <item quantity="many">%1$d участников</item>
+        <item quantity="other">%1$d участника</item>
+    </plurals>
+</resources>

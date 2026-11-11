@@ -40,12 +40,14 @@ import app.ottermsg.core.ui.components.OtterAvatar
 import app.ottermsg.core.ui.components.OtterEmptyState
 import app.ottermsg.core.ui.components.OtterTopBar
 import app.ottermsg.core.ui.components.deliveryStatusLabel
+import app.ottermsg.core.ui.components.groupEventText
 import app.ottermsg.core.ui.theme.Dimens
 import app.ottermsg.core.ui.R as UiR
 
 @Composable
 fun ChatListRoute(myName: String, mySeed: ByteArray, onOpen: (Long) -> Unit, onNewChat: () -> Unit, onSettings: () -> Unit, vm: ChatListViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val names by vm.names.collectAsStateWithLifecycle()
     val connection by vm.connection.collectAsStateWithLifecycle()
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -73,18 +75,20 @@ fun ChatListRoute(myName: String, mySeed: ByteArray, onOpen: (Long) -> Unit, onN
                 action = stringResource(R.string.chats_write), onAction = onNewChat,
             )
             is ChatListState.Content -> LazyColumn(Modifier.fillMaxSize().padding(padding)) {
-                items(s.rows, key = { it.id }) { row -> ChatRowItem(row) { onOpen(row.id) } }
+                items(s.rows, key = { it.id }) { row -> ChatRowItem(row, mySeed, names) { onOpen(row.id) } }
             }
         }
     }
 }
 
 @Composable
-private fun ChatRowItem(row: ChatRow, onClick: () -> Unit) {
+internal fun ChatRowItem(row: ChatRow, me: ByteArray, names: Names, onClick: () -> Unit) {
     val preview = when {
+        row.event != null -> groupEventText(row.event, me, names::of)
         row.previewIsSystem -> stringResource(R.string.chats_undecryptable)
         row.preview == null -> ""
         row.outgoing -> stringResource(R.string.chats_you, row.preview)
+        row.authorName != null -> stringResource(R.string.chats_author, row.authorName, row.preview)
         else -> row.preview
     }
     val statusLabel = row.status?.let { stringResource(deliveryStatusLabel(it)) }
@@ -97,7 +101,7 @@ private fun ChatRowItem(row: ChatRow, onClick: () -> Unit) {
             },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        OtterAvatar(row.title, row.seed)
+        OtterAvatar(row.title, row.seed, family = row.family)
         Spacer(Modifier.width(Dimens.s12))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -107,7 +111,7 @@ private fun ChatRowItem(row: ChatRow, onClick: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (row.status != null) { DeliveryStatusIcon(row.status); Spacer(Modifier.width(Dimens.s4)) }
                 Text(preview, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontStyle = if (row.previewIsSystem) FontStyle.Italic else FontStyle.Normal,
+                    fontStyle = if (row.previewIsSystem || row.event != null) FontStyle.Italic else FontStyle.Normal,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 if (row.unread > 0) {
                     Box(Modifier.padding(start = Dimens.s8).background(MaterialTheme.colorScheme.primary, CircleShape)

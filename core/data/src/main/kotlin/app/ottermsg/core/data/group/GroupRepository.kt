@@ -5,6 +5,7 @@ import app.ottermsg.core.data.account.AccountRepository
 import app.ottermsg.core.data.bs
 import app.ottermsg.core.data.messaging.Outbox
 import app.ottermsg.core.database.OtterDatabase
+import app.ottermsg.core.database.entity.ContactEntity
 import app.ottermsg.core.database.entity.GroupEntity
 import app.ottermsg.core.database.entity.GroupMemberEntity
 import app.ottermsg.proto.v1.Content
@@ -29,6 +30,9 @@ interface GroupStore {
     suspend fun setAdmin(groupId: ByteArray, user: ByteArray, admin: Boolean)
     suspend fun leave(groupId: ByteArray)
     suspend fun conversationOf(groupId: ByteArray): Long?
+    /** Family members (pickers, names). */
+    fun observeContacts(): Flow<List<ContactEntity>>
+    suspend fun myId(): ByteArray
 }
 
 /**
@@ -47,6 +51,8 @@ class GroupRepository @Inject constructor(
     override fun observeGroup(groupId: ByteArray) = groups.observe(groupId)
     override fun observeMembers(groupId: ByteArray) = groups.observeMembers(groupId)
     override suspend fun conversationOf(groupId: ByteArray): Long? = db.conversationDao().byGroup(groupId)?.id
+    override fun observeContacts(): Flow<List<ContactEntity>> = db.contactDao().observeAll()
+    override suspend fun myId(): ByteArray = accounts.require().userId
 
     override suspend fun create(name: String, family: Boolean, members: List<ByteArray>): Long {
         val me = accounts.require().userId

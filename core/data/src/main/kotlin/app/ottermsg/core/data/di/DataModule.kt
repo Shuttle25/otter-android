@@ -3,6 +3,8 @@ package app.ottermsg.core.data.di
 import app.ottermsg.core.data.Clock
 import app.ottermsg.core.data.account.SeedVault
 import app.ottermsg.core.data.invite.OnlineApi
+import app.ottermsg.core.data.group.GroupRepository
+import app.ottermsg.core.data.group.GroupStore
 import app.ottermsg.core.data.messaging.ConversationStore
 import app.ottermsg.core.data.messaging.MessageRepository
 import app.ottermsg.core.data.registration.NodeConnector
@@ -41,4 +43,5 @@ object DataModule {
     @Provides fun onlineApi(engine: SyncEngine): OnlineApi = engine
     @Provides fun registrar(r: Registration): Registrar = r
     @Provides fun conversationStore(r: MessageRepository): ConversationStore = r
+    @Provides fun groupStore(r: GroupRepository): GroupStore = r
 }

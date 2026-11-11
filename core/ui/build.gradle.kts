@@ -15,5 +15,6 @@ dependencies {
     api(platform(libs.compose.bom)); api(libs.compose.ui); api(libs.compose.material3)
     api(libs.compose.ui.tooling.preview); debugImplementation(libs.compose.ui.tooling)
     api(libs.compose.material.icons)
+    implementation(project(":core:proto")) // GroupEvent rendering
     testImplementation(libs.junit)
 }

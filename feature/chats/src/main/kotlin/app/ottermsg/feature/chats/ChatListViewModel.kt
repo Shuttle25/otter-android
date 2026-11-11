@@ -2,7 +2,11 @@ package app.ottermsg.feature.chats
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.ottermsg.core.data.directory.ContactRepository
 import app.ottermsg.core.data.directory.DirectorySync
+import app.ottermsg.core.ui.components.parseGroupEvent
+import app.ottermsg.feature.chats.Names.Companion.hex
+import app.ottermsg.proto.v1.GroupEvent
 import app.ottermsg.core.data.messaging.MessageRepository
 import app.ottermsg.core.data.sync.SyncEngine
 import app.ottermsg.core.database.model.ConversationSummary
@@ -30,10 +34,24 @@ data class ChatRow(
     val preview: String?,
     val previewIsSystem: Boolean, val outgoing: Boolean, val status: Int?,
     val time: String, val unread: Int,
+    val isGroup: Boolean = false, val family: Boolean = false,
+    /** Incoming group text: the author's name ("Имя: текст"). */
+    val authorName: String? = null,
+    /** Last item is a group system event (rendered as short text). */
+    val event: GroupEvent? = null,
 )
 
+/** Display names by user id (hex), for group previews and events. */
+class Names(private val byId: Map<String, String>) {
+    fun of(id: ByteArray): String = byId[id.hex()] ?: "?"
+    companion object {
+        fun ByteArray.hex() = joinToString("") { "%02x".format(it) }
+        val Empty = Names(emptyMap())
+    }
+}
+
 /** Pure mapping, unit-tested: time "HH:mm" today, "d MMM" otherwise, in the device locale. */
-fun chatRows(list: List<ConversationSummary>, nowMs: Long, zone: ZoneId, locale: Locale): List<ChatRow> {
+fun chatRows(list: List<ConversationSummary>, nowMs: Long, zone: ZoneId, locale: Locale, names: Names = Names.Empty): List<ChatRow> {
     val today = LocalDate.ofInstant(Instant.ofEpochMilli(nowMs), zone)
     val hm = DateTimeFormatter.ofPattern("HH:mm", locale)
     val dm = DateTimeFormatter.ofPattern("d MMM", locale)
@@ -41,12 +59,16 @@ fun chatRows(list: List<ConversationSummary>, nowMs: Long, zone: ZoneId, locale:
         val t = Instant.ofEpochMilli(s.lastActivityMs).atZone(zone)
         ChatRow(
             id = s.id, title = s.title, seed = s.seed,
-            preview = if (s.lastKind == MessageKind.SYSTEM_UNDECRYPTABLE) "" else s.lastBody,
+            preview = if (s.lastKind == MessageKind.SYSTEM_UNDECRYPTABLE || s.lastKind == MessageKind.SYSTEM_GROUP) "" else s.lastBody,
             previewIsSystem = s.lastKind == MessageKind.SYSTEM_UNDECRYPTABLE,
             outgoing = s.lastOutgoing == true,
             status = if (s.lastOutgoing == true) s.lastStatus else null,
             time = if (t.toLocalDate() == today) hm.format(t) else dm.format(t),
             unread = s.unread,
+            isGroup = s.groupId != null, family = s.family,
+            authorName = if (s.groupId != null && s.lastOutgoing == false && s.lastKind == MessageKind.TEXT)
+                s.lastSenderId?.let(names::of) else null,
+            event = if (s.lastKind == MessageKind.SYSTEM_GROUP) parseGroupEvent(s.lastSystemData) else null,
         )
     }
 }
@@ -69,11 +91,15 @@ fun chatListState(rows: List<ChatRow>?, directorySynced: Boolean, connection: Co
 }
 
 @HiltViewModel
-class ChatListViewModel @Inject constructor(messages: MessageRepository, sync: SyncEngine, directory: DirectorySync) : ViewModel() {
+class ChatListViewModel @Inject constructor(
+    messages: MessageRepository, sync: SyncEngine, directory: DirectorySync, contacts: ContactRepository,
+) : ViewModel() {
     val connection: StateFlow<ConnectionState> = sync.connection
-    private val rows = messages.observeSummaries()
-        .map<List<ConversationSummary>, List<ChatRow>?> { chatRows(it, System.currentTimeMillis(), ZoneId.systemDefault(), Locale.getDefault()) }
-        .onStart { emit(null) }
+    val names: StateFlow<Names> = contacts.observeContacts().map { cs -> Names(cs.associate { it.userId.hex() to it.displayName }) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Names.Empty)
+    private val rows = combine(messages.observeSummaries(), names) { list, n ->
+        chatRows(list, System.currentTimeMillis(), ZoneId.systemDefault(), Locale.getDefault(), n) as List<ChatRow>?
+    }.onStart { emit(null) }
     val state: StateFlow<ChatListState> = combine(rows, directory.synced, connection, ::chatListState)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChatListState.Loading)
 }

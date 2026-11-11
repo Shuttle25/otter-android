@@ -5,4 +5,24 @@
     <string name="ui_status_delivered">Delivered</string>
     <string name="ui_status_read">Read</string>
     <string name="ui_status_failed">Not sent</string>
+    <string name="ui_ev_you">you</string>
+    <string name="ui_ev_created">%1$s created the group “%2$s”</string>
+    <string name="ui_ev_created_me">You created the group “%1$s”</string>
+    <string name="ui_ev_added">%1$s added %2$s</string>
+    <string name="ui_ev_added_me">You added %1$s</string>
+    <string name="ui_ev_added_you">%1$s added you to the group</string>
+    <string name="ui_ev_removed">%1$s removed %2$s</string>
+    <string name="ui_ev_removed_me">You removed %1$s</string>
+    <string name="ui_ev_you_removed">%1$s removed you from the group</string>
+    <string name="ui_ev_left">%1$s left the group</string>
+    <string name="ui_ev_left_me">You left the group</string>
+    <string name="ui_ev_renamed">%1$s renamed the group to “%2$s”</string>
+    <string name="ui_ev_renamed_me">You renamed the group to “%1$s”</string>
+    <string name="ui_ev_admin">%1$s made %2$s an admin</string>
+    <string name="ui_ev_admin_me">You made %1$s an admin</string>
+    <string name="ui_ev_admin_you">%1$s made you an admin</string>
+    <string name="ui_ev_unadmin">%1$s removed admin rights from %2$s</string>
+    <string name="ui_ev_unadmin_me">You removed admin rights from %1$s</string>
+    <string name="ui_ev_undecryptable">Couldn’t read a message from %1$s</string>
+    <string name="ui_ev_unknown">Group changed</string>
 </resources>

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.GroupAdd
 import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -31,11 +32,12 @@ import app.ottermsg.core.ui.components.OtterTopBar
 import app.ottermsg.core.ui.theme.Dimens
 
 @Composable
-fun NewChatRoute(onBack: () -> Unit, onOpen: (Long) -> Unit, onInvite: () -> Unit, vm: NewChatViewModel = hiltViewModel()) {
+fun NewChatRoute(onBack: () -> Unit, onOpen: (Long) -> Unit, onInvite: () -> Unit, onNewGroup: () -> Unit = {}, vm: NewChatViewModel = hiltViewModel()) {
     val contacts by vm.contacts.collectAsStateWithLifecycle()
     Scaffold(containerColor = MaterialTheme.colorScheme.background,
         topBar = { OtterTopBar(stringResource(R.string.newchat_title), onBack = onBack) }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding)) {
+            item { OtterSettingsRow(stringResource(R.string.newchat_group), icon = Icons.Outlined.GroupAdd, onClick = onNewGroup) }
             item { OtterSettingsRow(stringResource(R.string.newchat_invite), icon = Icons.Outlined.PersonAdd, onClick = onInvite) }
             item { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant) }
             val list = contacts.orEmpty()

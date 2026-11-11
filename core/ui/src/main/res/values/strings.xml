@@ -5,4 +5,24 @@
     <string name="ui_status_delivered">Доставлено</string>
     <string name="ui_status_read">Прочитано</string>
     <string name="ui_status_failed">Не отправлено</string>
+    <string name="ui_ev_you">вы</string>
+    <string name="ui_ev_created">%1$s создал(а) группу «%2$s»</string>
+    <string name="ui_ev_created_me">Вы создали группу «%1$s»</string>
+    <string name="ui_ev_added">%1$s добавил(а): %2$s</string>
+    <string name="ui_ev_added_me">Вы добавили: %1$s</string>
+    <string name="ui_ev_added_you">%1$s добавил(а) вас в группу</string>
+    <string name="ui_ev_removed">%1$s удалил(а) из группы: %2$s</string>
+    <string name="ui_ev_removed_me">Вы удалили из группы: %1$s</string>
+    <string name="ui_ev_you_removed">%1$s удалил(а) вас из группы</string>
+    <string name="ui_ev_left">%1$s покинул(а) группу</string>
+    <string name="ui_ev_left_me">Вы покинули группу</string>
+    <string name="ui_ev_renamed">%1$s переименовал(а) группу в «%2$s»</string>
+    <string name="ui_ev_renamed_me">Вы переименовали группу в «%1$s»</string>
+    <string name="ui_ev_admin">%1$s назначил(а) администратором: %2$s</string>
+    <string name="ui_ev_admin_me">Вы назначили администратором: %1$s</string>
+    <string name="ui_ev_admin_you">%1$s назначил(а) вас администратором</string>
+    <string name="ui_ev_unadmin">%1$s снял(а) права администратора: %2$s</string>
+    <string name="ui_ev_unadmin_me">Вы сняли права администратора: %1$s</string>
+    <string name="ui_ev_undecryptable">Не удалось прочитать сообщение от %1$s</string>
+    <string name="ui_ev_unknown">Изменение в группе</string>
 </resources>

@@ -16,5 +16,5 @@ rootProject.name = "otter-android"
 include(
     ":app",
     ":core:proto", ":core:crypto", ":core:signal", ":core:network", ":core:database", ":core:data", ":core:ui",
-    ":feature:onboarding", ":feature:chats", ":feature:conversation",
+    ":feature:onboarding", ":feature:chats", ":feature:conversation", ":feature:groups",
 )

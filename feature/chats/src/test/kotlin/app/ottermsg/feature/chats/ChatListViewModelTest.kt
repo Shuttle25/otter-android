@@ -54,4 +54,19 @@ class ChatListViewModelTest {
         val row = chatRows(listOf(summary(1, now, "x", outgoing = true, status = MessageStatus.SENT)), now, zone, Locale.ROOT)
         assertEquals(ChatListState.Content(row), chatListState(row, directorySynced = false, connection = connecting))
     }
+
+    @Test fun groupRowsShowAuthorAndEvents() {
+        val gid = ByteArray(16) { 9 }; val boris = ByteArray(16) { 2 }
+        val names = Names(mapOf(boris.joinToString("") { "%02x".format(it) } to "Борис"))
+        val ev = app.ottermsg.proto.v1.GroupEvent.newBuilder().setType(app.ottermsg.proto.v1.GroupEvent.Type.LEFT)
+            .setActor(com.google.protobuf.ByteString.copyFrom(boris)).build()
+        val rows = chatRows(listOf(
+            ConversationSummary(1, "Семья", null, 0, now, "привет", MessageStatus.DELIVERED, false, MessageKind.TEXT, gid, true, boris, null),
+            ConversationSummary(2, "Дача", null, 0, now, "", MessageStatus.DELIVERED, false, MessageKind.SYSTEM_GROUP, gid, false, boris, ev.toByteArray()),
+        ), now, zone, Locale.ROOT, names)
+        assertEquals("Борис", rows[0].authorName); assertTrue(rows[0].isGroup); assertTrue(rows[0].family)
+        assertTrue(gid.contentEquals(rows[0].seed))
+        assertEquals(app.ottermsg.proto.v1.GroupEvent.Type.LEFT, rows[1].event!!.type)
+        assertNull(rows[1].authorName)
+    }
 }
