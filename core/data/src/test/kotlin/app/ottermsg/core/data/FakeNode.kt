@@ -45,12 +45,25 @@ private fun ByteString.hex() = toByteArray().hex()
 class FakeNode(private val clock: () -> Long) {
     val nodeId = ByteArray(16) { 0x42 }
     val network = Ed25519.keyPairFromSeed(ByteArray(32) { 9 })
-    val manifest: Record = run {
-        val m = Manifest.newBuilder().setVersion(1).setIssuedMs(1).setNetworkPub(bs(network.publicKey)).addNodes(
-            NodeInfo.newBuilder().setNodeId(bs(nodeId)).setLabel("fake")
-                .addEndpoints(Endpoint.newBuilder().setKind(Endpoint.Kind.WS_PLAIN).setHost("fake").setPort(1).setPath("/fakepath")),
-        ).build()
-        RecordCodec.sign(RecordCodec.body(RecordType.MANIFEST, Ids.id16(network.publicKey), m.toByteArray(), createdMs = 1), network)
+    /** Signs a manifest; [withSelf] lists this node, [extraHosts] adds other (fake) nodes. */
+    fun signManifest(version: Long, withSelf: Boolean = true, extraHosts: List<String> = emptyList()): Record {
+        val b = Manifest.newBuilder().setVersion(version).setIssuedMs(version).setNetworkPub(bs(network.publicKey))
+        if (withSelf) b.addNodes(NodeInfo.newBuilder().setNodeId(bs(nodeId)).setLabel("fake")
+            .addEndpoints(Endpoint.newBuilder().setKind(Endpoint.Kind.WS_PLAIN).setHost("fake").setPort(1).setPath("/fakepath")))
+        extraHosts.forEachIndexed { i, h -> b.addNodes(NodeInfo.newBuilder().setNodeId(bs(ByteArray(16) { (i + 1).toByte() })).setLabel(h)
+            .addEndpoints(Endpoint.newBuilder().setKind(Endpoint.Kind.WS_PLAIN).setHost(h).setPort(1).setPath("/p"))) }
+        return RecordCodec.sign(RecordCodec.body(RecordType.MANIFEST, Ids.id16(network.publicKey), b.build().toByteArray(), createdMs = version), network)
+    }
+
+    @Volatile var manifest: Record = signManifest(1)
+    private var manifestVersion = 1L
+
+    /** Like manifest.publish on a real node: becomes current and is pushed to every session. */
+    fun publish(rec: Record, version: Long) {
+        synchronized(lock) {
+            manifest = rec; manifestVersion = version
+            sessions.forEach { it.emit("manifest", app.ottermsg.proto.v1.ManifestResponse.newBuilder().setManifest(rec).build()) }
+        }
     }
 
     private class InviteState(val inviter: ByteArray, val expiresMs: Long, var usedBy: ByteArray? = null)
@@ -122,7 +135,7 @@ class FakeNode(private val clock: () -> Long) {
         }
 
         override suspend fun hello(): app.ottermsg.proto.v1.Hello = app.ottermsg.proto.v1.Hello.newBuilder().setProtocolVersion(1)
-            .setNodeId(bs(nodeId)).setManifestVersion(1).build()
+            .setNodeId(bs(nodeId)).setManifestVersion(manifestVersion).build()
 
         override suspend fun register(req: RegisterRequest) { check(); synchronized(lock) {
             if (req.inviteSecret.size() != 32) fail(Status.STATUS_INVALID, "incomplete registration")

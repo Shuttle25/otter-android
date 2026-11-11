@@ -54,7 +54,7 @@ class LiveNodeTest {
         val prekeys = PrekeyRefill(accounts, settings, signal, clock)
         val stats = app.ottermsg.core.network.InMemoryEndpointStats()
         val selector = app.ottermsg.core.network.NodeSelector(transport, stats, clock::now)
-        val engine = SyncEngine(selector, stats, accounts, settings, db.manifestDao(), directory, receiver, outbox, prekeys, scope, true, clock)
+        val engine = SyncEngine(stats, selector, accounts, settings, app.ottermsg.core.data.sync.ManifestUpdater(db.manifestDao(), settings, clock), directory, receiver, outbox, prekeys, scope, true, clock)
         val invites = InviteRepository(accounts, settings, db.manifestDao(), engine, clock)
         val registration = Registration(db, TransportConnector(selector), SeedVault(XorWrapper), accounts, settings, clock, allowPlaintext = true)
         val me get() = accounts.require()

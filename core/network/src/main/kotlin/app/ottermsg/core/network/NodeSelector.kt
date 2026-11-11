@@ -2,6 +2,8 @@ package app.ottermsg.core.network
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
@@ -75,6 +77,32 @@ class NodeSelector(
             late.second?.rpc?.close()
         }
         winner
+    }
+
+    /** Connects to each candidate (staggered), records its RTT or failure, closes it. Returns the best RTT, or null. */
+    suspend fun probe(cands: List<Candidate>, scope: CoroutineScope): Long? = coroutineScope {
+        val gate = Semaphore(maxParallel)
+        cands.mapIndexed { i, c ->
+            async {
+                delay(i * staggerMs)
+                gate.withPermit {
+                    val t0 = clock()
+                    try {
+                        val rpc = RpcClient(transport.connect(c), scope)
+                        try {
+                            withTimeout(helloTimeoutMs) { rpc.hello.await() }
+                            (clock() - t0).also { stats.success(c.key, it, clock()) }
+                        } finally { rpc.close() }
+                    } catch (e: TimeoutCancellationException) {
+                        stats.failure(c.key, clock()); null
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        stats.failure(c.key, clock()); null
+                    }
+                }
+            }
+        }.awaitAll().filterNotNull().minOrNull()
     }
 
     private companion object {

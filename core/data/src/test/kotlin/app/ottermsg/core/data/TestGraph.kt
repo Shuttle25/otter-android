@@ -65,8 +65,10 @@ class TestGraph(val node: FakeNode, val clock: TestClock) {
     }
     val registration get() = Registration(db, connector, SeedVault(XorWrapper), accounts, settings, clock, allowPlaintext = true)
     private val noTransport = object : Transport { override suspend fun connect(candidate: app.ottermsg.core.network.Candidate) = throw IOException("unused") }
-    val engine = SyncEngine(app.ottermsg.core.network.NodeSelector(noTransport, app.ottermsg.core.network.InMemoryEndpointStats(), clock::now),
-        app.ottermsg.core.network.InMemoryEndpointStats(), accounts, settings, db.manifestDao(), directory, receiver, outbox, prekeys, scope, true, clock)
+    val manifests = app.ottermsg.core.data.sync.ManifestUpdater(db.manifestDao(), settings, clock)
+    val engine = SyncEngine(app.ottermsg.core.network.InMemoryEndpointStats(),
+        app.ottermsg.core.network.NodeSelector(noTransport, app.ottermsg.core.network.InMemoryEndpointStats(), clock::now),
+        accounts, settings, manifests, directory, receiver, outbox, prekeys, scope, true, clock)
     val seed = ByteArray(32).also(SecureRandom()::nextBytes)
     val me get() = accounts.require()
 

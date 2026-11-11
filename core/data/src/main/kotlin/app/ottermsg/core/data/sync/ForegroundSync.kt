@@ -15,7 +15,11 @@ import javax.inject.Singleton
 class ForegroundSync internal constructor(
     private val start: () -> Unit, private val stop: () -> Unit, private val scope: CoroutineScope,
 ) : DefaultLifecycleObserver {
-    @Inject constructor(engine: SyncEngine, @ApplicationScope scope: CoroutineScope) : this(engine::start, engine::stop, scope)
+    @Inject constructor(engine: SyncEngine, network: NetworkMonitor, @ApplicationScope scope: CoroutineScope) : this(
+        { engine.start(); network.start(engine::onNetworkChanged) },
+        { engine.stop(); network.stop() },
+        scope,
+    )
 
     private var pendingStop: Job? = null
 
