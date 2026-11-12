@@ -2,7 +2,7 @@ package app.ottermsg.core.database.model
 
 object MessageStatus { const val PENDING = 0; const val SENT = 1; const val DELIVERED = 2; const val READ = 3; const val FAILED = 4 }
 
-object MessageKind { const val TEXT = 0; const val SYSTEM_UNDECRYPTABLE = 1; const val SYSTEM_GROUP = 2; const val PHOTO = 3 }
+object MessageKind { const val TEXT = 0; const val SYSTEM_UNDECRYPTABLE = 1; const val SYSTEM_GROUP = 2; const val PHOTO = 3; const val SYSTEM_RESET = 4 }
 
 /** attachments.state (D48). */
 object AttachmentState {
@@ -14,4 +14,5 @@ object AttachmentState {
     const val DOWNLOADED = 5
     const val FAILED = 6        // incoming, gave up after 3 digest/IO failures; tap retries
     const val GONE = 7          // incoming, the node no longer has it: «Фото недоступно»
+    const val NOT_IN_BACKUP = 8 // restored from a backup: thumbnail only (D55)
 }

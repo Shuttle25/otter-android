@@ -14,7 +14,9 @@ android {
 kotlin { jvmToolchain(21) }
 dependencies {
     api(project(":core:signal")); api(project(":core:network")); api(project(":core:database"))
-    implementation(libs.room.runtime); implementation(libs.room.ktx)
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    implementation(libs.zxcvbn)
     implementation(libs.hilt.android); ksp(libs.hilt.compiler)
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.exifinterface)

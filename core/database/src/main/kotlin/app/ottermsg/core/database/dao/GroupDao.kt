@@ -46,6 +46,8 @@ import kotlinx.coroutines.flow.Flow
     @Query("SELECT member FROM sender_key_shared WHERE group_id = :groupId AND distribution_id = :distId") suspend fun sharedWith(groupId: ByteArray, distId: ByteArray): List<ByteArray>
     @Query("DELETE FROM sender_key_shared WHERE group_id = :groupId") suspend fun clearShared(groupId: ByteArray)
     @Query("DELETE FROM sender_key_shared WHERE group_id = :groupId AND member = :member") suspend fun deleteShared(groupId: ByteArray, member: ByteArray)
+    /** A member restored their account (D53): every group re-sends our sender key to them. */
+    @Query("DELETE FROM sender_key_shared WHERE member = :member") suspend fun deleteSharedWithMember(member: ByteArray)
 
     @Query("SELECT * FROM my_distribution WHERE group_id = :groupId") suspend fun myDistribution(groupId: ByteArray): MyDistributionEntity?
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertMyDistribution(d: MyDistributionEntity): Long

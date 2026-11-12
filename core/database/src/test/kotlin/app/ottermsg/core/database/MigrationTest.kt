@@ -64,4 +64,14 @@ class MigrationTest {
             db.query("SELECT COUNT(*) FROM attachments").use { c -> c.moveToFirst(); assertEquals(0, c.getInt(0)) }
         }
     }
+
+    @Test fun migrate5To6AddsResetMs() {
+        helper.createDatabase("m6.db", 5).use {
+            it.execSQL("""INSERT INTO contacts(user_id, username, display_name, account_pub, identity_pub, verified, identity_changed, revoked, entry_version)
+                          VALUES (x'01', 'anna', 'Анна', x'02', x'03', 1, 0, 0, 1)""")
+        }
+        helper.runMigrationsAndValidate("m6.db", 6, true).use { db ->
+            db.query("SELECT username, reset_ms FROM contacts").use { c -> c.moveToFirst(); assertEquals("anna", c.getString(0)); assertEquals(0, c.getInt(1)) }
+        }
+    }
 }

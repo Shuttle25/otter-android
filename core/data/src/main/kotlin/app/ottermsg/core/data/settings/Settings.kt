@@ -13,6 +13,8 @@ import javax.inject.Singleton
 class Settings @Inject constructor(private val dao: SettingsDao) {
     private suspend fun int(key: String): Int? = dao.get(key)?.let { ByteBuffer.wrap(it).int }
     private suspend fun putInt(key: String, v: Int) = dao.put(SettingEntity(key, ByteBuffer.allocate(4).putInt(v).array()))
+    private suspend fun long(key: String): Long? = dao.get(key)?.let { ByteBuffer.wrap(it).long }
+    private suspend fun putLong(key: String, v: Long) = dao.put(SettingEntity(key, ByteBuffer.allocate(8).putLong(v).array()))
 
     suspend fun registrationId(): Int = checkNotNull(int(REGISTRATION_ID)) { "registration id missing" }
     suspend fun setRegistrationId(v: Int) = putInt(REGISTRATION_ID, v)
@@ -45,8 +47,46 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
     /** Raw value changes of one key (settings screens). */
     fun observe(key: String): Flow<ByteArray?> = dao.observe(key)
     fun observeInt(key: String, default: Int): Flow<Int> = dao.observe(key).map { it?.let { b -> ByteBuffer.wrap(b).int } ?: default }
+    fun observeLong(key: String, default: Long): Flow<Long> = dao.observe(key).map { it?.let { b -> ByteBuffer.wrap(b).long } ?: default }
+
+    // ---- install identity (D52) ----
+    /** Time this install was created (registration or restore); 0 for installs from before M6. */
+    suspend fun installedMs(): Long = long(INSTALLED_MS) ?: 0
+    suspend fun setInstalledMs(v: Long) = putLong(INSTALLED_MS, v)
+    /** A restore wrote the database but prekeys/resets are not done yet (InstallGuard finishes it). */
+    suspend fun restorePending(): Boolean = (int(RESTORE_PENDING) ?: 0) != 0
+    suspend fun setRestorePending(v: Boolean) = putInt(RESTORE_PENDING, if (v) 1 else 0)
+    /** Another phone restored this account; this install stopped syncing. */
+    suspend fun superseded(): Boolean = (int(SUPERSEDED) ?: 0) != 0
+    suspend fun setSuperseded(v: Boolean) = putInt(SUPERSEDED, if (v) 1 else 0)
+    fun observeSuperseded(): Flow<Boolean> = observeInt(SUPERSEDED, 0).map { it != 0 }
+
+    // ---- password backup (D55) ----
+    /** backup_key ‖ auth_secret wrapped by SeedVault; null = backup off. */
+    suspend fun backupSecret(): ByteArray? = dao.get(BACKUP_SECRET)
+    suspend fun setBackupSecret(v: ByteArray) = dao.put(SettingEntity(BACKUP_SECRET, v))
+    suspend fun backupSalt(): ByteArray? = dao.get(BACKUP_SALT)
+    suspend fun setBackupSalt(v: ByteArray) = dao.put(SettingEntity(BACKUP_SALT, v))
+    suspend fun backupVersion(): Long = long(BACKUP_VERSION) ?: 0
+    suspend fun setBackupVersion(v: Long) = putLong(BACKUP_VERSION, v)
+    suspend fun backupLastMs(): Long = long(BACKUP_LAST_MS) ?: 0
+    suspend fun setBackupLastMs(v: Long) = putLong(BACKUP_LAST_MS, v)
+    fun observeBackupLastMs(): Flow<Long> = observeLong(BACKUP_LAST_MS, 0)
+    /** Last backup error code (BackupManager.ERR_*), 0 = none. */
+    suspend fun backupError(): Int = int(BACKUP_ERROR) ?: 0
+    suspend fun setBackupError(v: Int) = putInt(BACKUP_ERROR, v)
+    fun observeBackupError(): Flow<Int> = observeInt(BACKUP_ERROR, 0)
+    fun observeBackupEnabled(): Flow<Boolean> = dao.observe(BACKUP_SECRET).map { it != null }
 
     companion object {
+        const val INSTALLED_MS = "installed_ms"
+        const val RESTORE_PENDING = "restore_pending"
+        const val SUPERSEDED = "superseded"
+        const val BACKUP_SECRET = "backup_secret"
+        const val BACKUP_SALT = "backup_salt"
+        const val BACKUP_VERSION = "backup_version"
+        const val BACKUP_LAST_MS = "backup_last_ms"
+        const val BACKUP_ERROR = "backup_error"
         const val PHOTO_AUTO = "photo_auto_download"
         const val PHOTO_GALLERY = "photo_save_gallery"
         const val AUTO_WIFI = 0

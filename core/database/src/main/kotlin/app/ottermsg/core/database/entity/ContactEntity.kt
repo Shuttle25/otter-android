@@ -15,4 +15,5 @@ data class ContactEntity(
     @ColumnInfo(name = "identity_changed") val identityChanged: Boolean,
     val revoked: Boolean,
     @ColumnInfo(name = "entry_version") val entryVersion: Long,
+    @ColumnInfo(name = "reset_ms", defaultValue = "0") val resetMs: Long = 0, // last SessionReset we sent (D53)
 )
