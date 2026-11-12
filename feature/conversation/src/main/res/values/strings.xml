@@ -58,4 +58,9 @@
     <string name="news_link_open">Открыть</string>
     <string name="news_link_cancel">Отмена</string>
     <string name="news_link_label">Ссылка: %1$s</string>
+    <string name="news_update">Обновить до %1$s</string>
+    <string name="news_update_progress">Загрузка… %1$d %%</string>
+    <string name="news_update_corrupt">Файл повреждён</string>
+    <string name="news_update_not_found">Файл ещё не на сервере, попробуйте позже</string>
+    <string name="news_update_offline">Нет связи с сервером</string>
 </resources>

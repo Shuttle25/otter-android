@@ -75,6 +75,12 @@ import app.ottermsg.core.ui.components.OtterTopBar
 import app.ottermsg.core.ui.theme.Dimens
 import kotlinx.coroutines.launch
 
+/** The «Обновить» state of news bubbles (D68): shown only for a versionCode above [installedCode]. */
+class NewsUpdate(
+    val installedCode: Int = Int.MAX_VALUE, val state: UpdateUi = UpdateUi.Idle,
+    val onUpdate: (app.ottermsg.proto.v1.AppUpdate) -> Unit = {},
+)
+
 /** Photo callbacks of the conversation screen. */
 class PhotoActions(
     val onPick: () -> Unit = {}, val onCamera: () -> Unit = {}, val onOpen: (Long) -> Unit = {},
@@ -92,6 +98,7 @@ fun ConversationRoute(
     val sending by vm.sending.collectAsStateWithLifecycle()
     val pending by vm.pendingPhoto.collectAsStateWithLifecycle()
     val photoSending by vm.photoSending.collectAsStateWithLifecycle()
+    val updateState by vm.updateState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val snackbar = remember { SnackbarHostState() }
@@ -144,7 +151,8 @@ fun ConversationRoute(
     CompositionLocalProvider(LocalPhotoSource provides vm.photoSource) {
         ConversationScreen(ui, text, sending, onBack, vm::onText, vm::send, { vm.retry(it) }, { vm.delete(it) }, vm.sent,
             onOpenGroupInfo = { if (ui.isGroup) onOpenGroupInfo(ui.groupIdHex) }, onMessageInfo = onMessageInfo,
-            photoActions = actions, snackbar = snackbar)
+            photoActions = actions, snackbar = snackbar,
+            update = NewsUpdate(vm.installedCode, updateState, vm::startUpdate))
     }
     pending?.let { path -> PhotoPreview(path, text, photoSending, onCancel = vm::cancelPhoto, onSend = vm::sendPhoto) }
     if (cameraDenied) {
@@ -170,6 +178,7 @@ fun ConversationScreen(
     sentEvents: kotlinx.coroutines.flow.Flow<Long> = kotlinx.coroutines.flow.emptyFlow(),
     onOpenGroupInfo: () -> Unit = {}, onMessageInfo: (Long) -> Unit = {},
     photoActions: PhotoActions = PhotoActions(), snackbar: SnackbarHostState = remember { SnackbarHostState() },
+    update: NewsUpdate = NewsUpdate(),
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -233,7 +242,9 @@ fun ConversationScreen(
                             // News (D64): read-only; the only action is copying the text.
                             val m = item.message
                             val newsText = newsText(m, language)
+                            val u = m.news.update.takeIf { m.news.hasUpdate() && it.versionCode > update.installedCode }
                             NewsBubble(m, newsText, item.firstInGroup,
+                                slot = { if (u != null) UpdateRow(u.versionName, update.state) { update.onUpdate(u) } },
                                 onLongPress = { menuFor = m },
                                 actions = listOf(CustomAccessibilityAction(copyLabel) { clipboard.setText(AnnotatedString(newsText)); true }),
                                 menu = {

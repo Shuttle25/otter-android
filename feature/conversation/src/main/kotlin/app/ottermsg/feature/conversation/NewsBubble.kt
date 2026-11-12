@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -29,7 +30,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
@@ -159,5 +162,22 @@ fun NewsBubble(
             },
             dismissButton = { TextButton(onClick = { pendingUrl = null }) { Text(stringResource(R.string.news_link_cancel)) } },
         )
+    }
+}
+
+/** «Обновить до X» → «Загрузка… N %» → installer; an error shows its text above the button again (D68). */
+@Composable
+fun UpdateRow(versionName: String, state: UpdateUi, onUpdate: () -> Unit) {
+    Column(Modifier.padding(top = Dimens.s8), verticalArrangement = Arrangement.spacedBy(Dimens.s4)) {
+        when (state) {
+            is UpdateUi.Downloading -> Text(stringResource(R.string.news_update_progress, state.percent),
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            else -> {
+                if (state is UpdateUi.Error) Text(stringResource(state.message), style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                FilledTonalButton(onClick = onUpdate) { Text(stringResource(R.string.news_update, versionName)) }
+            }
+        }
     }
 }

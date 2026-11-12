@@ -20,6 +20,8 @@ import app.ottermsg.core.database.model.MessageKind
 import app.ottermsg.core.database.model.MessageStatus
 import app.ottermsg.core.ui.theme.OtterTheme
 import app.ottermsg.proto.v1.Announcement
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -80,5 +82,19 @@ class NewsBubbleTest {
         compose.onNodeWithContentDescription("Ссылка: https://ottermsg.app/x").performSemanticsAction(SemanticsActions.OnClick)
         compose.onNodeWithText("Открыть").performClick()
         assertEquals(listOf("https://ottermsg.app/x"), opened)
+    }
+
+    @Test fun updateRowStates() {
+        var state by androidx.compose.runtime.mutableStateOf<UpdateUi>(UpdateUi.Idle)
+        var taps = 0
+        compose.setContent { OtterTheme { UpdateRow("0.6.0", state) { taps++ } } }
+        compose.onNodeWithText("Обновить до 0.6.0").performClick()
+        assertEquals(1, taps)
+        state = UpdateUi.Downloading(42)
+        compose.onNodeWithText("Загрузка… 42 %").assertExists()
+        compose.onNodeWithText("Обновить до 0.6.0").assertDoesNotExist()
+        state = UpdateUi.Error(R.string.news_update_corrupt)
+        compose.onNodeWithText("Файл повреждён").assertExists()
+        compose.onNodeWithText("Обновить до 0.6.0").assertExists()
     }
 }

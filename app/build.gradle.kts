@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -20,6 +22,9 @@ val gitHash: Provider<String> = providers.exec {
     commandLine("git", "rev-parse", "--short=7", "HEAD")
     isIgnoreExitValue = true
 }.standardOutput.asText.map { it.trim().ifEmpty { "dev" } }.orElse("dev")
+// Release signing (D68): the owner's keystore, when keystore.properties (gitignored, with storeFile, storePassword,
+// keyAlias, keyPassword) exists next to settings.gradle.kts; otherwise release builds stay debug-signed as before.
+val keystoreProps = rootProject.file("keystore.properties")
 android {
     namespace = "app.ottermsg"
     compileSdk = 36
@@ -27,15 +32,23 @@ android {
     defaultConfig {
         applicationId = "app.ottermsg"
         minSdk = 26; targetSdk = 36
-        versionCode = 5; versionName = "0.5.0"
+        versionCode = 6; versionName = "0.6.0"
         buildConfigField("String", "GIT_HASH", "\"${gitHash.get()}\"")
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+    signingConfigs {
+        if (keystoreProps.exists()) create("release") {
+            val p = Properties().apply { keystoreProps.inputStream().use { load(it) } }
+            storeFile = rootProject.file(p.getProperty("storeFile"))
+            storePassword = p.getProperty("storePassword"); keyAlias = p.getProperty("keyAlias"); keyPassword = p.getProperty("keyPassword")
+        }
     }
     buildTypes {
         debug { buildConfigField("boolean", "ALLOW_PLAINTEXT", "true") }
         release {
             buildConfigField("boolean", "ALLOW_PLAINTEXT", "false")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }

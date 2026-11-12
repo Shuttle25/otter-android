@@ -51,5 +51,8 @@ object DataModule {
     @Provides fun groupStore(r: GroupRepository): GroupStore = r
     @Provides fun networkInfo(n: AndroidNetworkInfo): NetworkInfo = n
     @Provides fun photoStore(r: MediaRepository): PhotoStore = r
+    @Provides @CacheDir fun cacheDir(@dagger.hilt.android.qualifiers.ApplicationContext context: android.content.Context): java.io.File =
+        context.cacheDir
+    @Provides fun updateDownloader(u: app.ottermsg.core.data.news.ApkUpdater): app.ottermsg.core.data.news.UpdateDownloader = u
     @Provides fun newsKeys(m: app.ottermsg.core.data.sync.ManifestUpdater): app.ottermsg.core.data.sync.NewsKeys = m
 }
