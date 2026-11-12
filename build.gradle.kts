@@ -7,6 +7,7 @@ plugins {
     alias(libs.plugins.ksp) apply false
     alias(libs.plugins.hilt) apply false
     alias(libs.plugins.protobuf) apply false
+    alias(libs.plugins.google.services) apply false
 }
 
 // Some JavaCompile tasks (e.g. Hilt's) default to the Gradle daemon JVM instead of the Kotlin

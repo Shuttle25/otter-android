@@ -1,5 +1,6 @@
 package app.ottermsg
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -15,6 +16,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.activity.viewModels
 import app.ottermsg.core.data.account.AccountRepository
 import app.ottermsg.core.data.settings.Settings
+import app.ottermsg.notify.MessageNotifier
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import app.ottermsg.core.ui.theme.OtterTheme
@@ -34,6 +36,9 @@ class MainViewModel @Inject constructor(val accounts: AccountRepository, setting
     /** Another phone restored this account (D52): this one only explains why it stopped. */
     val superseded: StateFlow<Boolean> = settings.observeSuperseded().stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    /** A notification tap asks to open this conversation (consumed by AppNavHost). */
+    val openConversation = MutableStateFlow<Long?>(null)
+
     init { viewModelScope.launch { _hasAccount.value = accounts.load() != null } }
 }
 
@@ -44,15 +49,27 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        handle(intent)
         setContent {
             OtterTheme {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     val hasAccount by vm.hasAccount.collectAsStateWithLifecycle()
                     // Blank themed surface while the local account loads (no skeleton: it is local and fast).
                     val superseded by vm.superseded.collectAsStateWithLifecycle()
-                    if (superseded) SupersededScreen() else hasAccount?.let { AppNavHost(it, vm.accounts.account) }
+                    if (superseded) SupersededScreen() else hasAccount?.let { AppNavHost(it, vm.accounts.account, vm.openConversation) }
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handle(intent)
+    }
+
+    /** Notification tap (D62): cold start (onCreate) or warm (onNewIntent). */
+    private fun handle(intent: Intent?) {
+        if (intent?.action != MessageNotifier.ACTION_OPEN) return
+        intent.getLongExtra(MessageNotifier.EXTRA_CONVERSATION, -1).takeIf { it > 0 }?.let { vm.openConversation.value = it }
     }
 }

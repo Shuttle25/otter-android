@@ -5,6 +5,9 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
 }
+// Firebase is optional (D61): without the owner's google-services.json (never committed) the app builds without push.
+val firebaseConfigured = file("google-services.json").exists()
+if (firebaseConfigured) apply(plugin = "com.google.gms.google-services")
 // Short git hash for the Settings version line (D63); "dev" outside a git checkout. Configuration-cache safe.
 val gitHash: Provider<String> = providers.exec {
     commandLine("git", "rev-parse", "--short=7", "HEAD")
@@ -19,6 +22,7 @@ android {
         minSdk = 26; targetSdk = 36
         versionCode = 5; versionName = "0.5.0"
         buildConfigField("String", "GIT_HASH", "\"${gitHash.get()}\"")
+        buildConfigField("boolean", "FIREBASE", firebaseConfigured.toString())
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -62,8 +66,11 @@ dependencies {
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.room.runtime) // MessageNotifier reads OtterDatabase (a RoomDatabase)
     implementation(libs.hilt.android); ksp(libs.hilt.compiler)
+    implementation(platform(libs.firebase.bom)); implementation(libs.firebase.messaging); implementation(libs.play.services.base)
+    implementation(libs.androidx.work.runtime)
+    implementation(libs.androidx.hilt.work); ksp(libs.androidx.hilt.compiler)
     testImplementation(libs.junit); testImplementation(libs.robolectric); testImplementation(libs.androidx.test.core)
-    testImplementation(libs.coroutines.test)
+    testImplementation(libs.coroutines.test); testImplementation(libs.androidx.work.testing)
     androidTestImplementation(libs.junit); androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit); androidTestImplementation(libs.androidx.test.espresso)
     androidTestImplementation(platform(libs.compose.bom)); androidTestImplementation(libs.compose.ui.test.junit4)

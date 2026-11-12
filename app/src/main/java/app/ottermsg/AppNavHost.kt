@@ -1,6 +1,7 @@
 package app.ottermsg
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
@@ -28,6 +29,8 @@ import app.ottermsg.feature.settings.BackupRoute
 import app.ottermsg.feature.settings.PhotoStorageRoute
 import app.ottermsg.feature.settings.ProfileRoute
 import app.ottermsg.feature.settings.SettingsRoute
+import app.ottermsg.notify.NotificationPermissionOnce
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 object Routes {
@@ -54,14 +57,23 @@ object Routes {
 }
 
 @Composable
-fun AppNavHost(hasAccount: Boolean, account: StateFlow<LocalAccount?>) {
+fun AppNavHost(hasAccount: Boolean, account: StateFlow<LocalAccount?>,
+               openConversation: MutableStateFlow<Long?> = MutableStateFlow(null)) {
     val nav = rememberNavController()
     val me by account.collectAsStateWithLifecycle()
+    // Notification tap (D62): open that chat on top of the chat list.
+    val open by openConversation.collectAsStateWithLifecycle()
+    LaunchedEffect(open) {
+        val id = open ?: return@LaunchedEffect
+        if (hasAccount) nav.navigate(Routes.conversation(id)) { popUpTo(Routes.CHATS) }
+        openConversation.value = null
+    }
     NavHost(nav, startDestination = if (hasAccount) Routes.CHATS else Routes.ONBOARDING) {
         composable(Routes.ONBOARDING) {
             OnboardingRoute(onDone = { nav.navigate(Routes.CHATS) { popUpTo(Routes.ONBOARDING) { inclusive = true } } })
         }
         composable(Routes.CHATS) {
+            NotificationPermissionOnce()
             ChatListRoute(
                 myName = me?.displayName.orEmpty(), mySeed = me?.userId ?: ByteArray(0),
                 onOpen = { nav.navigate(Routes.conversation(it)) },
