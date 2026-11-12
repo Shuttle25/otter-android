@@ -1,0 +1,10 @@
+# gitleaks v8 config (D57). Allowlisted paths contain only throwaway test keys generated for unit tests.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "test vectors (never used by a real node or phone)"
+paths = [
+  # copies of otter-server testdata/vectors/v1.json: fixed keys published on purpose for cross-language crypto tests
+  '''.*/src/test/resources/vectors/.*\.json''',
+]
