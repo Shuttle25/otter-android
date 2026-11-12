@@ -24,6 +24,7 @@ import app.ottermsg.feature.onboarding.OnboardingRoute
 import app.ottermsg.feature.conversation.PhotoViewerRoute
 import app.ottermsg.feature.conversation.PhotoViewerViewModel
 import app.ottermsg.feature.settings.EditNameRoute
+import app.ottermsg.feature.settings.BackupRoute
 import app.ottermsg.feature.settings.PhotoStorageRoute
 import app.ottermsg.feature.settings.ProfileRoute
 import app.ottermsg.feature.settings.SettingsRoute
@@ -39,6 +40,7 @@ object Routes {
     const val PROFILE = "settings/profile"
     const val EDIT_NAME = "settings/profile/name"
     const val PHOTOS = "settings/photos"
+    const val BACKUP = "settings/backup"
     const val PHOTO = "photo/{${PhotoViewerViewModel.ARG_LOCAL_ID}}"
     fun photo(localId: Long) = "photo/$localId"
     const val NEW_GROUP = "newGroup"
@@ -95,13 +97,15 @@ fun AppNavHost(hasAccount: Boolean, account: StateFlow<LocalAccount?>) {
         composable(Routes.INVITE) { InviteRoute(onBack = { nav.popBackStack() }) }
         composable(Routes.SETTINGS) {
             SettingsRoute(onBack = { nav.popBackStack() }, onInvite = { nav.navigate(Routes.INVITE) },
-                onProfile = { nav.navigate(Routes.PROFILE) }, onPhotos = { nav.navigate(Routes.PHOTOS) })
+                onProfile = { nav.navigate(Routes.PROFILE) }, onPhotos = { nav.navigate(Routes.PHOTOS) },
+                onBackup = { nav.navigate(Routes.BACKUP) })
         }
         composable(Routes.PROFILE) {
             ProfileRoute(onBack = { nav.popBackStack() }, onEditName = { nav.navigate(Routes.EDIT_NAME) })
         }
         composable(Routes.EDIT_NAME) { EditNameRoute(onBack = { nav.popBackStack() }) }
         composable(Routes.PHOTOS) { PhotoStorageRoute(onBack = { nav.popBackStack() }) }
+        composable(Routes.BACKUP) { BackupRoute(onBack = { nav.popBackStack() }) }
         composable(Routes.PHOTO, arguments = listOf(navArgument(PhotoViewerViewModel.ARG_LOCAL_ID) { type = NavType.LongType })) {
             PhotoViewerRoute(onBack = { nav.popBackStack() })
         }
