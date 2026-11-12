@@ -35,7 +35,7 @@ import kotlin.time.Duration.Companion.days
 class MailboxReceiver @Inject constructor(
     private val db: OtterDatabase, private val accounts: AccountRepository, private val signal: SignalService,
     private val directory: DirectorySync, private val outbox: Outbox, private val clock: Clock,
-    private val groups: GroupReceiver, private val photos: IncomingPhotos,
+    private val groups: GroupReceiver, private val photos: IncomingPhotos, private val resets: SessionResets,
 ) {
     private val seen = db.seenEnvelopeDao()
     private val contacts = db.contactDao()
@@ -81,6 +81,7 @@ class MailboxReceiver @Inject constructor(
             when (content?.bodyCase) {
                 Content.BodyCase.GROUP_UPDATE -> { groups.onGroupUpdate(sender.userId, content.groupUpdate.state, api); acks += key; continue }
                 Content.BodyCase.SENDER_KEY -> { groups.onSenderKey(sender.userId, content.senderKey); acks += key; continue }
+                Content.BodyCase.SESSION_RESET -> { resets.onReceived(sender.userId); acks += key; continue }
                 else -> {}
             }
             db.withTransaction {
@@ -96,6 +97,7 @@ class MailboxReceiver @Inject constructor(
                     handleContent(cid, sender, content)
                 }
             }
+            if (content == null) resets.onUndecryptable(sender.userId) // throttled (D53)
             acks += key
         }
         if (acks.isNotEmpty()) {

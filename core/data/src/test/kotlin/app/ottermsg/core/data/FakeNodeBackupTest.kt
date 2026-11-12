@@ -87,17 +87,17 @@ class FakeNodeBackupTest {
         a.register(node.bootstrapLink(), "Мама", "mama").getOrThrow()
         val s = node.connect().apply { login(a.me.userId, a.me.accountKey) }
         val (rid0, inst0) = node.loginInfo(a.me.userId)
-        assertEquals(0L, inst0)
+        assertEquals(a.settings.installedMs(), inst0)
         val key = SignedPreKey.newBuilder().setId(9).setPublicKey(bs(ByteArray(33))).setSignature(bs(ByteArray(64))).build()
         s.uploadPrekeys(signed(RecordType.PREKEYS, PreKeys.newBuilder().setDeviceId(1).setRegistrationId(rid0 + 1)
-            .setInstalledMs(5000).setSignedPrekey(key).setKyberPrekey(key).build().toByteArray()))
-        assertEquals(rid0 + 1 to 5000L, node.loginInfo(a.me.userId))
+            .setInstalledMs(inst0 + 5000).setSignedPrekey(key).setKyberPrekey(key).build().toByteArray()))
+        assertEquals(rid0 + 1 to inst0 + 5000, node.loginInfo(a.me.userId))
         assertEquals(0, node.oneTimeLeft(a.me.userId))
         s.uploadPrekeys(signed(RecordType.PREKEYS, PreKeys.newBuilder().setDeviceId(1).setRegistrationId(rid0)
-            .setInstalledMs(0).build().toByteArray())) // the replaced phone refills late
-        assertEquals(rid0 + 1 to 5000L, node.loginInfo(a.me.userId))
+            .setInstalledMs(inst0).build().toByteArray())) // the replaced phone refills late
+        assertEquals(rid0 + 1 to inst0 + 5000, node.loginInfo(a.me.userId))
         val again = node.connect()
         val r = again.login(a.me.userId, a.me.accountKey)
-        assertEquals(rid0 + 1, r.registrationId); assertEquals(5000L, r.installedMs)
+        assertEquals(rid0 + 1, r.registrationId); assertEquals(inst0 + 5000, r.installedMs)
     }
 }

@@ -78,8 +78,10 @@ class TestGraph(
     val incomingPhotos = IncomingPhotos(db, files, settings, media)
     val photos = MediaRepository(db, photoLoader, gallery, media, files)
     val applier = GroupApplier(db, accounts, directory, clock)
-    val groupReceiver = GroupReceiver(db, accounts, signal, applier, outbox, clock, incomingPhotos)
-    val receiver = MailboxReceiver(db, accounts, signal, directory, outbox, clock, groupReceiver, incomingPhotos)
+    val resets = app.ottermsg.core.data.messaging.SessionResets(db, signal, outbox, clock)
+    val groupReceiver = GroupReceiver(db, accounts, signal, applier, outbox, clock, incomingPhotos, resets)
+    val receiver = MailboxReceiver(db, accounts, signal, directory, outbox, clock, groupReceiver, incomingPhotos, resets)
+    val guard = app.ottermsg.core.data.backup.InstallGuard(db, accounts, settings, signal, resets, clock)
     val groups = GroupRepository(db, accounts, applier, outbox, clock)
     val messages = MessageRepository(db, accounts, outbox, clock, files, PhotoPrep(), media)
     val prekeys = PrekeyRefill(accounts, settings, signal, clock)
@@ -98,7 +100,7 @@ class TestGraph(
     val manifests = app.ottermsg.core.data.sync.ManifestUpdater(db.manifestDao(), settings, clock)
     val engine = SyncEngine(app.ottermsg.core.network.InMemoryEndpointStats(),
         app.ottermsg.core.network.NodeSelector(noTransport, app.ottermsg.core.network.InMemoryEndpointStats(), clock::now),
-        accounts, settings, manifests, directory, receiver, outbox, prekeys, profile, media, scope, true, clock)
+        accounts, settings, manifests, directory, receiver, outbox, prekeys, profile, media, scope, true, clock, guard)
     val seed = ByteArray(32).also(SecureRandom()::nextBytes)
     val me get() = accounts.require()
 

@@ -94,7 +94,7 @@ class Registration @Inject constructor(
         }
 
         val entry = DirectoryEntries.build(userId, user, name, seed, version = 1, registeredMs = now)
-        val prekeys = PreKeys.newBuilder().setDeviceId(1).setRegistrationId(registrationId)
+        val prekeys = PreKeys.newBuilder().setDeviceId(1).setRegistrationId(registrationId).setInstalledMs(now)
             .setSignedPrekey(signed).setKyberPrekey(kyber).addAllOneTime(oneTime).build()
         val inviteId = MessageDigest.getInstance("SHA-256").digest(bundle.secret.toByteArray())
         val used = InviteUsed.newBuilder().setInviteId(bs(inviteId)).setUserId(bs(userId)).build()
@@ -115,6 +115,7 @@ class Registration @Inject constructor(
         db.withTransaction {
             db.accountDao().insert(AccountEntity(userId, user, name, vault.wrap(seed), now))
             settings.setRegistrationId(registrationId)
+            settings.setInstalledMs(now)
             settings.setNextOneTimeId(nextId)
             settings.setNetworkPub(networkPub)
             db.manifestDao().insert(ManifestEntity(manifest.version, bundle.manifest.toByteArray(), receivedMs = now))

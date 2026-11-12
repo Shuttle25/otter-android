@@ -33,7 +33,8 @@ class PrekeyRefill @Inject constructor(
         val me = accounts.require()
         val first = settings.nextOneTimeId()
         val keys = signal.withSessions { store, _ -> PreKeyFactory.oneTime(store, first, count, node) }
-        val payload = PreKeys.newBuilder().setDeviceId(1).setRegistrationId(me.registrationId).addAllOneTime(keys).build()
+        val payload = PreKeys.newBuilder().setDeviceId(1).setRegistrationId(me.registrationId).setInstalledMs(settings.installedMs())
+            .addAllOneTime(keys).build()
         val rec = RecordCodec.sign(RecordCodec.body(RecordType.PREKEYS, me.userId, payload.toByteArray(), createdMs = clock.now()), me.accountKey)
         settings.setNextOneTimeId(first + count) // never reuse ids, even if the upload fails
         api.uploadPrekeys(rec)

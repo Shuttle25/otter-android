@@ -41,7 +41,7 @@ import kotlin.time.Duration.Companion.days
 class GroupReceiver @Inject constructor(
     private val db: OtterDatabase, private val accounts: AccountRepository, private val signal: SignalService,
     private val applier: GroupApplier, private val outbox: Outbox, private val clock: Clock,
-    private val photos: IncomingPhotos,
+    private val photos: IncomingPhotos, private val resets: SessionResets,
 ) {
     private val groups = db.groupDao()
     private val conversations = db.conversationDao()
@@ -53,8 +53,11 @@ class GroupReceiver @Inject constructor(
     suspend fun onEnvelope(sender: ByteArray, recordKey: ByteArray, rec: Record, body: RecordBody, env: Envelope) {
         when (val r = decrypt(sender, env)) {
             is Decrypted.Ok -> place(sender, recordKey, r.content, body.createdMs, receivedMs = clock.now())
-            Decrypted.NoKey -> groups.insertPendingEnvelope(PendingGroupEnvelopeEntity(recordKey, null, sender, rec.toByteArray(),
-                clock.now(), decrypted = false, sentMs = body.createdMs))
+            Decrypted.NoKey -> {
+                groups.insertPendingEnvelope(PendingGroupEnvelopeEntity(recordKey, null, sender, rec.toByteArray(),
+                    clock.now(), decrypted = false, sentMs = body.createdMs))
+                resets.onUndecryptable(sender) // they re-send their sender key after a reset; throttled (D53)
+            }
             Decrypted.Drop -> {}
         }
     }

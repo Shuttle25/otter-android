@@ -2,6 +2,7 @@ package app.ottermsg.core.data.sync
 
 import app.ottermsg.core.data.Clock
 import app.ottermsg.core.data.account.AccountRepository
+import app.ottermsg.core.data.backup.InstallGuard
 import app.ottermsg.core.data.media.MediaTransfers
 import app.ottermsg.core.data.profile.ProfileRepository
 import app.ottermsg.core.data.di.AllowPlaintext
@@ -46,11 +47,15 @@ class SyncEngine @Inject constructor(
     private val directory: DirectorySync, private val receiver: MailboxReceiver, private val outbox: Outbox,
     private val prekeys: PrekeyRefill, private val profile: ProfileRepository, private val media: MediaTransfers,
     @ApplicationScope scope: CoroutineScope, @param:AllowPlaintext private val allowPlaintext: Boolean, private val clock: Clock,
+    private val guard: InstallGuard,
 ) : OnlineApi {
     private val manager = ConnectionManager(selector, ::candidates, stats, scope, { api -> runSession(api, this) }, clock::now)
     val connection: StateFlow<ConnectionState> = manager.state
 
-    fun start() = manager.start()
+    /** Set once another phone restored this account (D52): the engine never connects again. */
+    @Volatile private var superseded = false
+
+    fun start() { if (!superseded) manager.start() }
     fun stop() = manager.stop()
     fun retryNow() = manager.retryNow()
     /** Hook for tests; drops the connection and races all candidates again. */
@@ -65,9 +70,15 @@ class SyncEngine @Inject constructor(
     /** One connected session; [session] is cancelled by the ConnectionManager when the connection ends. */
     suspend fun runSession(api: NodeApi, session: CoroutineScope) {
         val me = accounts.require()
+        if (settings.superseded()) { superseded = true; stop(); return }
         // Subscribe before login: the node pushes queued envelopes right after auth.login.
         session.launch(start = CoroutineStart.UNDISPATCHED) { api.events.collect { e -> onEvent(api, e) } }
-        api.login(me.userId, me.accountKey)
+        val login = api.login(me.userId, me.accountKey)
+        if (!guard.afterLogin(api, login)) {
+            superseded = true
+            stop() // this install was replaced by a restore on another phone; the UI shows it (settings.superseded)
+            return
+        }
         if (manifests.checkAfterLogin(api) == ManifestUpdater.Result.STORED_NODE_REMOVED) {
             reconnect() // this node is no longer part of the network
             return
