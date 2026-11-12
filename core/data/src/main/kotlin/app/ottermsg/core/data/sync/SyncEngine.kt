@@ -2,6 +2,7 @@ package app.ottermsg.core.data.sync
 
 import app.ottermsg.core.data.Clock
 import app.ottermsg.core.data.account.AccountRepository
+import app.ottermsg.core.data.backup.BackupManager
 import app.ottermsg.core.data.backup.InstallGuard
 import app.ottermsg.core.data.media.MediaTransfers
 import app.ottermsg.core.data.profile.ProfileRepository
@@ -47,7 +48,7 @@ class SyncEngine @Inject constructor(
     private val directory: DirectorySync, private val receiver: MailboxReceiver, private val outbox: Outbox,
     private val prekeys: PrekeyRefill, private val profile: ProfileRepository, private val media: MediaTransfers,
     @ApplicationScope scope: CoroutineScope, @param:AllowPlaintext private val allowPlaintext: Boolean, private val clock: Clock,
-    private val guard: InstallGuard,
+    private val guard: InstallGuard, private val backups: BackupManager,
 ) : OnlineApi {
     private val manager = ConnectionManager(selector, ::candidates, stats, scope, { api -> runSession(api, this) }, clock::now)
     val connection: StateFlow<ConnectionState> = manager.state
@@ -88,6 +89,7 @@ class SyncEngine @Inject constructor(
         session.launch { profile.run(api) }
         session.launch { media.run(api) }
         session.launch { outbox.run(api) }
+        session.launch { backups.runIfDue(api) }
         session.launch { reprobeLoop(api) }
     }
 

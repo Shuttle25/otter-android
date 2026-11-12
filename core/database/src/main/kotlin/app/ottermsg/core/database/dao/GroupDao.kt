@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.Flow
     companion object { const val PENDING_TTL_MS = 30L * 24 * 60 * 60 * 1000 }
 
     @Query("SELECT * FROM groups WHERE group_id = :groupId") suspend fun get(groupId: ByteArray): GroupEntity?
+    @Query("SELECT * FROM `groups`") suspend fun all(): List<GroupEntity>
     @Query("SELECT * FROM groups WHERE group_id = :groupId") fun observe(groupId: ByteArray): Flow<GroupEntity?>
     @Upsert suspend fun upsert(g: GroupEntity)
     @Query("SELECT * FROM groups WHERE i_am_member = 1") suspend fun groupsIAmIn(): List<GroupEntity>
