@@ -5,6 +5,39 @@ The OtterMSG Android client (Gradle multi-module: `app`, `core:proto`, `core:cry
 
 Backup and restore (M6): Settings → Безопасность → Резервная копия turns on an encrypted password backup (Argon2id, Tink streaming AEAD, uploaded to the nodes as a persistent blob). On a wiped phone, «Восстановить аккаунт» restores from the network link plus username and password (account and history) or from the 24 words (account only). Code: `core/data/.../backup` (`BackupManager`, `RestoreManager`, `InstallGuard`), `messaging/SessionResets`. Manual checks: [`docs/m6-manual-test.md`](docs/m6-manual-test.md).
 
+## Push / Firebase
+
+Push (M5) is optional and there is one build, no flavors. `firebase-messaging` is always a dependency; the
+`com.google.gms.google-services` plugin is applied only when `app/google-services.json` exists. That file is the
+owner's Firebase config: it is ignored by git (`git check-ignore -v app/google-services.json` names the rule) and never
+committed. Without it the build works as usual, `BuildConfig.FIREBASE` is false and the app runs in «Экономия
+батареи» (a WorkManager check every 15 minutes); Settings → Уведомления shows the mode.
+
+To enable push:
+
+1. [Firebase console](https://console.firebase.google.com): add a project (Google Analytics off), add an Android app
+   with package `app.ottermsg` (no SHA-1 needed; add `app.ottermsg.staging` too for staging builds), download
+   `google-services.json` to `app/google-services.json`. Skip the "add SDK" steps.
+2. Project settings → Cloud Messaging: "Firebase Cloud Messaging API (V1)" must be enabled.
+3. Project settings → Service accounts → «Generate new private key»: this is the nodes' key. Keep it outside every
+   repo (e.g. `~/otter-secrets/fcm.json`) and install it with `otter-server/deploy/push-key.sh`, then
+   `otter-admin node set-push` (see `otter-server/deploy/FIRST-DEPLOY.md`, "Push notifications").
+4. Rebuild (`./gradlew :app:assembleDebug`) and install over the old APK (data kept). Settings → Уведомления shows
+   «Быстрые уведомления» once Google Play services are present and a token exists.
+
+How it works (D58–D62 in `../docs/00-decisions.md`): the app registers its FCM token as a signed `PUSH_TOKEN`
+(`push.register`); a node sends a constant, content-free push; `OtterMessagingService` starts the expedited `wake`
+work, which connects (last-good node first for 2 s), drains the mailbox, flushes the outbox and goes offline after 10 s
+of quiet (at most 60 s). Notifications are built on the phone from the decrypted messages (MessagingStyle,
+«Ответить», «Прочитано», private on the lock screen). After 3 missed wake-ups in 24 h the app falls back to the
+15-minute `saver` work. WorkManager must stay ≥ 2.11.1: older versions run the saver in a cached process whose
+network Android 15 blocks. Code: `core/data/.../push` (`PushRegistrar`, `PushMonitor`, `BackgroundSync`,
+`MessageAlerts`), `app/.../push` (`OtterMessagingService`, `WakeScheduler`, `WakeWorker`, `SaverWorker`),
+`app/.../notify` (`MessageNotifier`, `Channels`, `NotificationActionReceiver`), `feature/settings`
+(`NotificationsScreen`). Manual checks: [`docs/m5-manual-test.md`](docs/m5-manual-test.md).
+
+The bottom of Settings shows «Otter <versionName> (<short git hash>)» (`"dev"` outside a git checkout).
+
 ## Private files (never commit)
 
 | File | Where it lives | Why it is private |
