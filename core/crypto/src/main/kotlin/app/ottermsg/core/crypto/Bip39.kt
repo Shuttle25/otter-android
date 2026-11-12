@@ -11,6 +11,9 @@ object Bip39 {
     }
     private val index: Map<String, Int> by lazy { words.withIndex().associate { it.value to it.index } }
 
+    /** True for a word of the BIP-39 English list (input checks while typing). */
+    fun isWord(w: String): Boolean = w.trim().lowercase() in index
+
     fun toMnemonic(entropy: ByteArray): List<String> {
         require(entropy.size == 32) { "entropy must be 32 bytes" }
         val checksum = MessageDigest.getInstance("SHA-256").digest(entropy)[0]

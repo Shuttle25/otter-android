@@ -28,7 +28,8 @@ import com.google.zxing.client.android.Intents
 import androidx.activity.compose.rememberLauncherForActivityResult
 
 @Composable
-fun InviteScreen(state: OnboardingUiState, onLink: (String) -> Unit, onSubmit: () -> Unit, onBack: () -> Unit) {
+fun InviteScreen(state: OnboardingUiState, onLink: (String) -> Unit, onSubmit: () -> Unit, onBack: () -> Unit,
+                 title: Int = R.string.onb_invite_title, text: Int = R.string.onb_invite_text) {
     var cameraDenied by rememberSaveable { mutableStateOf(false) }
     val scanPrompt = stringResource(R.string.onb_scan_prompt)
     // The scanner activity asks for the camera permission itself, only when the user taps "Scan".
@@ -38,10 +39,10 @@ fun InviteScreen(state: OnboardingUiState, onLink: (String) -> Unit, onSubmit: (
         else if (result.originalIntent?.hasExtra(Intents.Scan.MISSING_CAMERA_PERMISSION) == true) cameraDenied = true
     }
     OnboardingScaffold(
-        title = stringResource(R.string.onb_invite_title), onBack = onBack,
+        title = stringResource(title), onBack = onBack,
         bottom = { PrimaryButton(stringResource(R.string.onb_invite_continue), onSubmit, enabled = state.link.isNotBlank()) },
     ) {
-        BodyText(stringResource(R.string.onb_invite_text))
+        BodyText(stringResource(text))
         OutlinedButton(
             onClick = {
                 scan.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setBeepEnabled(false)

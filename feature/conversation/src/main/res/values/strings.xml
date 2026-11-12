@@ -49,4 +49,6 @@
     <string name="conv_camera_settings">Настройки</string>
     <string name="conv_camera_gallery">Выбрать из галереи</string>
     <string name="viewer_back">Назад</string>
+    <string name="conv_system_reset">%1$s восстановил(а) аккаунт</string>
+    <string name="conv_photo_not_in_backup">Нет в резервной копии</string>
 </resources>

@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Otter</string>
+    <string name="superseded_title">Аккаунт на другом телефоне</string>
+    <string name="superseded_text">Аккаунт восстановлен на другом телефоне. Этот телефон больше не получает сообщения. Чтобы пользоваться Otter здесь, удалите данные приложения и восстановите аккаунт снова.</string>
 </resources>

@@ -17,8 +17,11 @@ import app.ottermsg.core.ui.theme.Dimens
 import app.ottermsg.feature.onboarding.R
 
 @Composable
-fun WelcomeScreen(onJoin: () -> Unit) {
-    OnboardingScaffold(title = "", onBack = null, bottom = { PrimaryButton(stringResource(R.string.onb_welcome_join), onJoin) }) {
+fun WelcomeScreen(onJoin: () -> Unit, onRestore: () -> Unit = {}) {
+    OnboardingScaffold(title = "", onBack = null, bottom = {
+        PrimaryButton(stringResource(R.string.onb_welcome_join), onJoin)
+        SecondaryButton(stringResource(R.string.onb_welcome_restore), onRestore)
+    }) {
         Spacer(Modifier.height(Dimens.s16))
         OtterIllustration(UiR.drawable.otter_welcome, maxSize = 200.dp, modifier = Modifier.align(Alignment.CenterHorizontally))
         Text(stringResource(R.string.onb_welcome_title), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })

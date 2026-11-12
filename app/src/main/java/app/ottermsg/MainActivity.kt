@@ -14,6 +14,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.activity.viewModels
 import app.ottermsg.core.data.account.AccountRepository
+import app.ottermsg.core.data.settings.Settings
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import app.ottermsg.core.ui.theme.OtterTheme
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -23,10 +26,13 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
-class MainViewModel @Inject constructor(val accounts: AccountRepository) : ViewModel() {
+class MainViewModel @Inject constructor(val accounts: AccountRepository, settings: Settings) : ViewModel() {
     /** null while loading; then whether an account exists. */
     private val _hasAccount = MutableStateFlow<Boolean?>(null)
     val hasAccount: StateFlow<Boolean?> = _hasAccount
+
+    /** Another phone restored this account (D52): this one only explains why it stopped. */
+    val superseded: StateFlow<Boolean> = settings.observeSuperseded().stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     init { viewModelScope.launch { _hasAccount.value = accounts.load() != null } }
 }
@@ -43,7 +49,8 @@ class MainActivity : ComponentActivity() {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     val hasAccount by vm.hasAccount.collectAsStateWithLifecycle()
                     // Blank themed surface while the local account loads (no skeleton: it is local and fast).
-                    hasAccount?.let { AppNavHost(it, vm.accounts.account) }
+                    val superseded by vm.superseded.collectAsStateWithLifecycle()
+                    if (superseded) SupersededScreen() else hasAccount?.let { AppNavHost(it, vm.accounts.account) }
                 }
             }
         }

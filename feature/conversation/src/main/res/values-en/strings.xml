@@ -47,4 +47,6 @@
     <string name="conv_camera_settings">Settings</string>
     <string name="conv_camera_gallery">Choose from gallery</string>
     <string name="viewer_back">Back</string>
+    <string name="conv_system_reset">%1$s restored their account</string>
+    <string name="conv_photo_not_in_backup">Not in the backup</string>
 </resources>

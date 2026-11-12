@@ -90,6 +90,7 @@ internal fun ChatRowItem(row: ChatRow, me: ByteArray, names: Names, onClick: () 
         else -> stringResource(R.string.chats_preview_photo_caption, row.preview)
     }
     val preview = when {
+        row.resetBy != null -> stringResource(R.string.chats_system_reset, row.resetBy)
         row.event != null -> groupEventText(row.event, me, names::of)
         row.previewIsSystem -> stringResource(R.string.chats_undecryptable)
         body == null -> ""
@@ -117,7 +118,7 @@ internal fun ChatRowItem(row: ChatRow, me: ByteArray, names: Names, onClick: () 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (row.status != null) { DeliveryStatusIcon(row.status); Spacer(Modifier.width(Dimens.s4)) }
                 Text(preview, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontStyle = if (row.previewIsSystem || row.event != null) FontStyle.Italic else FontStyle.Normal,
+                    fontStyle = if (row.previewIsSystem || row.event != null || row.resetBy != null) FontStyle.Italic else FontStyle.Normal,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 if (row.unread > 0) {
                     Box(Modifier.padding(start = Dimens.s8).background(MaterialTheme.colorScheme.primary, CircleShape)

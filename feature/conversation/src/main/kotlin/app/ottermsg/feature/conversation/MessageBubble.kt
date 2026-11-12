@@ -80,6 +80,7 @@ fun MessageBubble(
     val photoLabel = when (m.photo?.state) {
         null -> null
         PhotoState.Gone -> stringResource(R.string.conv_photo_gone)
+        PhotoState.NotInBackup -> stringResource(R.string.conv_photo_label) + ", " + stringResource(R.string.conv_photo_not_in_backup)
         PhotoState.Remote -> stringResource(R.string.conv_photo_label) + ", " + stringResource(R.string.conv_photo_download)
         PhotoState.Failed -> stringResource(R.string.conv_photo_label) + ", " + stringResource(R.string.conv_photo_failed)
         PhotoState.Downloading -> stringResource(R.string.conv_photo_loading)

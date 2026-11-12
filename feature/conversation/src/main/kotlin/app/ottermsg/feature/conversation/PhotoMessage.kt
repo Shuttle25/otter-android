@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -62,7 +63,9 @@ fun PhotoContent(localId: Long, p: PhotoUi, width: Dp, onDownload: () -> Unit, m
     Box(Modifier.padding(modifierInset).width(width).height(h).clip(RoundedCornerShape(Dimens.photoRadius))
         .background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
         image?.let {
-            Image(it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            // restored without the file: only the 64 px thumbnail exists, shown blurred (API 31+) under the label
+            Image(it, contentDescription = null, contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().then(if (p.state == PhotoState.NotInBackup) Modifier.blur(12.dp) else Modifier))
         }
         when (p.state) {
             PhotoState.Uploading, PhotoState.Downloading -> Box(Modifier.size(48.dp).clip(RoundedCornerShape(24.dp))
@@ -79,6 +82,7 @@ fun PhotoContent(localId: Long, p: PhotoUi, width: Dp, onDownload: () -> Unit, m
                 }
             }
             PhotoState.Gone -> Label(stringResource(R.string.conv_photo_gone))
+            PhotoState.NotInBackup -> Label(stringResource(R.string.conv_photo_not_in_backup))
             PhotoState.Ready -> {}
         }
         overlay()

@@ -30,6 +30,7 @@ fun photoUi(a: AttachmentEntity): PhotoUi {
         AttachmentState.QUEUED -> PhotoState.Downloading
         AttachmentState.FAILED -> PhotoState.Failed
         AttachmentState.GONE -> PhotoState.Gone
+        AttachmentState.NOT_IN_BACKUP -> PhotoState.NotInBackup
         else -> PhotoState.Ready // UPLOADED, UPLOAD_FAILED (the original is on the phone), DOWNLOADED
     }
     return PhotoUi(a.width, a.height, state,

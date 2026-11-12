@@ -73,10 +73,11 @@ fun conversationUi(
             authorKey = if (it.outgoing) "me" else it.senderId.hex(),
             event = if (it.kind == MessageKind.SYSTEM_GROUP) parseGroupEvent(it.systemData) else null,
             inGroup = isGroup && !it.outgoing,
-            photo = if (it.kind == MessageKind.PHOTO) attachments[it.localId]?.let(::photoUi) else null)
+            photo = if (it.kind == MessageKind.PHOTO) attachments[it.localId]?.let(::photoUi) else null,
+            resetName = if (it.kind == MessageKind.SYSTEM_RESET) (names[it.senderId.hex()] ?: title) else null)
     }
     return ConversationUi(true, title, conv?.peerUserId ?: conv?.groupId ?: ByteArray(0), groupMessages(list, zone),
-        msgs.lastOrNull { !it.outgoing && it.kind != MessageKind.SYSTEM_GROUP }?.localId,
+        msgs.lastOrNull { !it.outgoing && it.kind != MessageKind.SYSTEM_GROUP && it.kind != MessageKind.SYSTEM_RESET }?.localId,
         isGroup = isGroup, family = group?.group?.family == true, groupIdHex = conv?.groupId?.hex().orEmpty(),
         memberCount = group?.members?.size ?: 0,
         canWrite = !isGroup || group?.group?.iAmMember == true,

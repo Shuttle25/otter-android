@@ -17,12 +17,14 @@ data class MessageUi(
     val inGroup: Boolean = false,
     /** Photo message (text = caption). */
     val photo: PhotoUi? = null,
+    /** SYSTEM_RESET: this contact restored their account (D53); rendered as a centered chip with their name. */
+    val resetName: String? = null,
 ) {
-    val isEvent: Boolean get() = event != null
+    val isEvent: Boolean get() = event != null || resetName != null
 }
 
 /** What a photo bubble shows (guide §8–§9). */
-enum class PhotoState { Uploading, Ready, Remote, Downloading, Failed, Gone }
+enum class PhotoState { Uploading, Ready, Remote, Downloading, Failed, Gone, NotInBackup }
 
 data class PhotoUi(val width: Int, val height: Int, val state: PhotoState, val progress: Float? = null)
 

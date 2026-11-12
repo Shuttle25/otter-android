@@ -60,6 +60,12 @@ internal fun PrimaryButton(text: String, onClick: () -> Unit, enabled: Boolean =
 }
 
 @Composable
+internal fun SecondaryButton(text: String, onClick: () -> Unit, enabled: Boolean = true) {
+    androidx.compose.material3.OutlinedButton(onClick = onClick, enabled = enabled,
+        modifier = Modifier.fillMaxWidth().heightIn(min = Dimens.minTouch)) { Text(text) }
+}
+
+@Composable
 internal fun BodyText(text: String) {
     Text(text, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
 }

@@ -41,6 +41,8 @@ data class ChatRow(
     val event: GroupEvent? = null,
     /** Last message is a photo: «Фото» / «Фото: подпись». */
     val photo: Boolean = false,
+    /** Last item: this contact restored their account (D53). */
+    val resetBy: String? = null,
 )
 
 /** Display names by user id (hex), for group previews and events. */
@@ -61,7 +63,8 @@ fun chatRows(list: List<ConversationSummary>, nowMs: Long, zone: ZoneId, locale:
         val t = Instant.ofEpochMilli(s.lastActivityMs).atZone(zone)
         ChatRow(
             id = s.id, title = s.title, seed = s.seed,
-            preview = if (s.lastKind == MessageKind.SYSTEM_UNDECRYPTABLE || s.lastKind == MessageKind.SYSTEM_GROUP) "" else s.lastBody,
+            preview = if (s.lastKind == MessageKind.SYSTEM_UNDECRYPTABLE || s.lastKind == MessageKind.SYSTEM_GROUP ||
+                s.lastKind == MessageKind.SYSTEM_RESET) "" else s.lastBody,
             previewIsSystem = s.lastKind == MessageKind.SYSTEM_UNDECRYPTABLE,
             outgoing = s.lastOutgoing == true,
             status = if (s.lastOutgoing == true) s.lastStatus else null,
@@ -72,6 +75,7 @@ fun chatRows(list: List<ConversationSummary>, nowMs: Long, zone: ZoneId, locale:
                 s.lastSenderId?.let(names::of) else null,
             event = if (s.lastKind == MessageKind.SYSTEM_GROUP) parseGroupEvent(s.lastSystemData) else null,
             photo = s.lastKind == MessageKind.PHOTO,
+            resetBy = if (s.lastKind == MessageKind.SYSTEM_RESET) s.title else null, // resets live in direct chats
         )
     }
 }

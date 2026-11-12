@@ -216,7 +216,9 @@ fun ConversationScreen(
                 items(reversed, key = { it.key }) { item ->
                     when (item) {
                         is ConversationItem.DateChip -> DateChip(item.date)
-                        is ConversationItem.Bubble -> if (item.message.event != null) {
+                        is ConversationItem.Bubble -> if (item.message.resetName != null) {
+                            SystemEventChip(stringResource(R.string.conv_system_reset, item.message.resetName))
+                        } else if (item.message.event != null) {
                             SystemEventChip(groupEventText(item.message.event, ui.me, ui::nameOf))
                         } else {
                             val m = item.message

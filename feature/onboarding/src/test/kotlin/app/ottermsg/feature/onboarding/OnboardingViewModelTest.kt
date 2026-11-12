@@ -1,6 +1,8 @@
 package app.ottermsg.feature.onboarding
 
 import app.ottermsg.core.crypto.InviteLink
+import app.ottermsg.core.data.backup.RestoreError
+import app.ottermsg.core.data.backup.Restorer
 import app.ottermsg.core.data.registration.Registrar
 import app.ottermsg.core.data.registration.RegistrationError
 import app.ottermsg.proto.v1.InviteBundle
@@ -28,10 +30,20 @@ class OnboardingViewModelTest {
     }
 
     private val link = InviteLink.encode(InviteBundle.newBuilder().setSecret(ByteString.copyFrom(ByteArray(32))).setInviterName("Мама").build())
+    private class FakeRestorer : Restorer {
+        var password: Result<Unit> = Result.success(Unit); var words: Result<Unit> = Result.success(Unit)
+        var history: Result<Unit> = Result.success(Unit)
+        val calls = mutableListOf<String>()
+        override suspend fun withPassword(link: String, username: String, password: String) = this.password.also { calls += "password:$username:$password" }
+        override suspend fun withWords(link: String, words: List<String>) = this.words.also { calls += "words:${words.size}" }
+        override suspend fun addHistory(password: String) = history.also { calls += "history:$password" }
+    }
+
     private val reg = FakeRegistrar()
+    private val rest = FakeRestorer()
     private lateinit var vm: OnboardingViewModel
 
-    @Before fun setUp() { Dispatchers.setMain(UnconfinedTestDispatcher()); vm = OnboardingViewModel(reg) }
+    @Before fun setUp() { Dispatchers.setMain(UnconfinedTestDispatcher()); vm = OnboardingViewModel(reg, rest) }
     @After fun tearDown() = Dispatchers.resetMain()
 
     private fun toConfirm() {
@@ -97,7 +109,7 @@ class OnboardingViewModelTest {
         )
         for ((err, expected) in cases) {
             reg.result = Result.failure(err)
-            vm = OnboardingViewModel(reg)
+            vm = OnboardingViewModel(reg, rest)
             toConfirm(); typeCorrectWords(); vm.submitConfirm()
             assertEquals(err.toString(), expected.first, vm.state.value.registrationError)
             assertEquals(OnboardingStep.REGISTERING, vm.state.value.step)
@@ -115,4 +127,55 @@ class OnboardingViewModelTest {
         assertArrayEquals(first, reg.lastSeed)
         assertEquals(OnboardingStep.DONE, vm.state.value.step)
     }
+
+    private fun toRestoreMethod() { vm.startRestore(); vm.onLink(link); vm.submitRestoreLink() }
+
+    @Test fun restoreWithPasswordErrorsStayOnForm() {
+        vm.startRestore(); vm.onLink("nope"); vm.submitRestoreLink()
+        assertEquals(R.string.onb_invite_invalid, vm.state.value.linkError)
+        vm.onLink(link); vm.submitRestoreLink()
+        assertEquals(OnboardingStep.RESTORE_METHOD, vm.state.value.step)
+        vm.chooseMethod(words = false)
+        vm.onRestoreUsername(" Anna "); vm.onRestorePassword("secret pw")
+        rest.password = Result.failure(RestoreError.WrongPassword)
+        vm.submitRestore()
+        assertEquals(OnboardingStep.RESTORE_PASSWORD, vm.state.value.step)
+        assertEquals(R.string.onb_restore_err_password, vm.state.value.restoreError)
+        rest.password = Result.failure(RestoreError.TooManyAttempts)
+        vm.submitRestore()
+        assertEquals(R.string.onb_restore_err_many, vm.state.value.restoreError)
+        rest.password = Result.success(Unit)
+        vm.submitRestore()
+        assertEquals(OnboardingStep.DONE, vm.state.value.step)
+        assertEquals("password:anna:secret pw", rest.calls.last())
+    }
+
+    @Test fun restoreWithWordsThenHistoryOrSkip() {
+        toRestoreMethod(); vm.chooseMethod(words = true)
+        val phrase = Bip39Words.sample.joinToString(" ")
+        vm.onWord(0, "  $phrase  ") // paste into the first field fills all 24
+        assertEquals(Bip39Words.sample, vm.state.value.restoreWords)
+        vm.onWord(3, "WORD ")
+        assertEquals("word", vm.state.value.restoreWords[3])
+        vm.submitRestore()
+        assertEquals(OnboardingStep.RESTORE_HISTORY, vm.state.value.step)
+        vm.onRestorePassword("pw")
+        rest.history = Result.failure(RestoreError.WrongPassword)
+        vm.addHistory()
+        assertEquals(R.string.onb_restore_err_password, vm.state.value.restoreError)
+        assertEquals(OnboardingStep.RESTORE_HISTORY, vm.state.value.step)
+        vm.skipHistory()
+        assertEquals(OnboardingStep.DONE, vm.state.value.step)
+    }
+
+    @Test fun restoreBackNavigation() {
+        toRestoreMethod(); vm.chooseMethod(words = true)
+        vm.back(); assertEquals(OnboardingStep.RESTORE_METHOD, vm.state.value.step)
+        vm.back(); assertEquals(OnboardingStep.RESTORE_LINK, vm.state.value.step)
+        vm.back(); assertEquals(OnboardingStep.WELCOME, vm.state.value.step)
+    }
+}
+
+private object Bip39Words {
+    val sample: List<String> = app.ottermsg.core.crypto.Bip39.toMnemonic(ByteArray(32) { 7 })
 }

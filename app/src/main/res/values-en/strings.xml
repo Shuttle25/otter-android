@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Otter</string>
+    <string name="superseded_title">Account moved to another phone</string>
+    <string name="superseded_text">This account was restored on another phone. This phone no longer receives messages. To use Otter here, clear the app\'s data and restore the account again.</string>
 </resources>
