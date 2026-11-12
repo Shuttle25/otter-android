@@ -64,6 +64,12 @@ class ManifestUpdater @Inject constructor(
         return current + fallback
     }
 
+    /** News keys of the latest stored manifest (D65); empty if there is none. */
+    suspend fun newsKeys(): List<ByteArray> {
+        val latest = manifests.latest() ?: return emptyList()
+        return parse(latest.raw, settings.networkPub())?.newsKeysList?.map { it.toByteArray() } ?: emptyList()
+    }
+
     private fun parse(raw: ByteArray, networkPub: ByteArray): Manifest? =
         try { ManifestVerifier.verify(raw, networkPub, 0) } catch (e: ManifestException) { null }
 

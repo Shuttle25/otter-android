@@ -2,6 +2,8 @@ package app.ottermsg.core.network
 
 import app.ottermsg.core.crypto.AuthMessage
 import app.ottermsg.core.crypto.Ed25519
+import app.ottermsg.proto.v1.ApkChunk
+import app.ottermsg.proto.v1.ApkGetRequest
 import app.ottermsg.proto.v1.BackupAuthRequest
 import app.ottermsg.proto.v1.BackupAuthResponse
 import app.ottermsg.proto.v1.BackupFetchRequest
@@ -57,6 +59,10 @@ interface NodeApi {
     suspend fun backupPublish(meta: Record)
     /** PUSH_TOKEN record (D60). Default: no push support (fakes). */
     suspend fun registerPush(record: Record) {}
+    /** Every announcement and deletion the node holds, oldest first (D67). Default: none (fakes). */
+    suspend fun newsList(): List<Record> = emptyList()
+    /** One 1 MiB chunk of an APK stored on the node (D68). */
+    suspend fun apkGet(sha256: ByteArray, index: Int): ApkChunk = throw UnsupportedOperationException()
 }
 
 class RemoteNodeApi(private val rpc: RpcClient, private val clock: () -> Long = System::currentTimeMillis) : NodeApi {
@@ -101,4 +107,8 @@ class RemoteNodeApi(private val rpc: RpcClient, private val clock: () -> Long = 
             .setAuthSecret(ByteString.copyFrom(authSecret)).build()))
     override suspend fun backupPublish(meta: Record) { rpc.call("backup.publish", req(meta)) }
     override suspend fun registerPush(record: Record) { rpc.call("push.register", req(record)) }
+    override suspend fun newsList(): List<Record> =
+        RecordBatch.parseFrom(rpc.call("news.list", Empty.getDefaultInstance())).recordsList
+    override suspend fun apkGet(sha256: ByteArray, index: Int): ApkChunk =
+        ApkChunk.parseFrom(rpc.call("apk.get", ApkGetRequest.newBuilder().setSha256(ByteString.copyFrom(sha256)).setIndex(index).build()))
 }

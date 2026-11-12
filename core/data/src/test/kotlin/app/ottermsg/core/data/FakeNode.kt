@@ -48,11 +48,14 @@ private fun ByteString.hex() = toByteArray().hex()
  * directory, prekeys (one-time keys consumed), mailboxes with per-session push and ACK.
  */
 class FakeNode(private val clock: () -> Long) {
+    companion object { const val APK_CHUNK = 1 shl 20 }
     val nodeId = ByteArray(16) { 0x42 }
     val network = Ed25519.keyPairFromSeed(ByteArray(32) { 9 })
     /** Signs a manifest; [withSelf] lists this node, [extraHosts] adds other (fake) nodes. */
-    fun signManifest(version: Long, withSelf: Boolean = true, extraHosts: List<String> = emptyList()): Record {
+    fun signManifest(version: Long, withSelf: Boolean = true, extraHosts: List<String> = emptyList(),
+                     newsKeys: List<ByteArray> = emptyList()): Record {
         val b = Manifest.newBuilder().setVersion(version).setIssuedMs(version).setNetworkPub(bs(network.publicKey))
+        newsKeys.forEach { b.addNewsKeys(bs(it)) }
         if (withSelf) b.addNodes(NodeInfo.newBuilder().setNodeId(bs(nodeId)).setLabel("fake")
             .addEndpoints(Endpoint.newBuilder().setKind(Endpoint.Kind.WS_PLAIN).setHost("fake").setPort(1).setPath("/fakepath")))
         extraHosts.forEachIndexed { i, h -> b.addNodes(NodeInfo.newBuilder().setNodeId(bs(ByteArray(16) { (i + 1).toByte() })).setLabel(h)
@@ -70,6 +73,19 @@ class FakeNode(private val clock: () -> Long) {
             sessions.forEach { it.emit("manifest", app.ottermsg.proto.v1.ManifestResponse.newBuilder().setManifest(rec).build()) }
         }
     }
+
+    // ---- news (D66–D68) ----
+    private val newsRecords = mutableListOf<Record>()
+    private val apks = HashMap<String, ByteArray>()
+
+    /** Like news.publish on a real node (no validation here): stored and a `news` event to every logged-in session. */
+    fun publishNews(rec: Record) = synchronized(lock) {
+        newsRecords += rec
+        sessions.filter { it.user != null }.forEach { it.emit("news", app.ottermsg.proto.v1.Empty.getDefaultInstance()) }
+    }
+
+    /** Like `otter-node apk import`. */
+    fun importApk(data: ByteArray) = synchronized(lock) { apks[sha(data).hex()] = data }
 
     private class InviteState(val inviter: ByteArray, val expiresMs: Long, var usedBy: ByteArray? = null)
     private class User(val record: Record, val entry: DirectoryEntry)
@@ -346,6 +362,16 @@ class FakeNode(private val clock: () -> Long) {
         } }
 
         override suspend fun ping() { check() }
+
+        override suspend fun newsList(): List<Record> { check(); me(); return synchronized(lock) { newsRecords.toList() } }
+
+        override suspend fun apkGet(sha256: ByteArray, index: Int): app.ottermsg.proto.v1.ApkChunk { check(); me()
+            val data = synchronized(lock) { apks[sha256.hex()] } ?: fail(Status.STATUS_NOT_FOUND, "unknown apk")
+            val from = index.toLong() * APK_CHUNK
+            if (index < 0 || from >= data.size) fail(Status.STATUS_NOT_FOUND, "index past the end")
+            val chunk = data.copyOfRange(from.toInt(), minOf(data.size.toLong(), from + APK_CHUNK).toInt())
+            return app.ottermsg.proto.v1.ApkChunk.newBuilder().setData(bs(chunk)).setTotalSize(data.size.toLong()).build()
+        }
 
         override suspend fun registerPush(record: Record) { check(); synchronized(lock) {
             val b = verifyUser(record)

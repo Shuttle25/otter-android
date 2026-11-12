@@ -46,6 +46,17 @@ class ManifestUpdaterTest {
         assertTrue(m.candidates(allowPlaintext = false).isEmpty()) // release builds drop WS_PLAIN
     }
 
+    @Test fun newsKeysFromTheLatestManifest() = runBlocking {
+        assertTrue(m.newsKeys().isEmpty()) // nothing stored yet
+        g.register(node.bootstrapLink(), "Мама", "mama").getOrThrow() // v1: no news keys
+        assertTrue(m.newsKeys().isEmpty())
+        val k1 = ByteArray(32) { 1 }; val k2 = ByteArray(32) { 2 }
+        m.offer(node.signManifest(2, newsKeys = listOf(k1, k2)).toByteArray(), node.nodeId)
+        assertEquals(listOf(k1.toList(), k2.toList()), m.newsKeys().map { it.toList() })
+        m.offer(node.signManifest(3, newsKeys = listOf(k2)).toByteArray(), node.nodeId) // k1 revoked
+        assertEquals(listOf(k2.toList()), m.newsKeys().map { it.toList() })
+    }
+
     @Test fun reprobeNeedsThreeClearWins() {
         val p = ReprobePolicy()
         assertFalse(p.observe(100, 60)); assertFalse(p.observe(100, 60))
