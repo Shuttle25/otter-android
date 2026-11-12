@@ -41,6 +41,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -97,6 +98,11 @@ fun ConversationRoute(
     var saveAfterPermission by remember { mutableStateOf<Long?>(null) }
     // Visible conversation = read: on enter and whenever new incoming messages arrive while resumed.
     LaunchedEffect(ui.lastIncomingId) { lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { vm.markRead() } }
+    // While resumed this chat is the active one: incoming messages here post no notification (D62).
+    LifecycleResumeEffect(vm.conversationId) {
+        vm.onVisible(true)
+        onPauseOrDispose { vm.onVisible(false) }
+    }
     val unreadable = stringResource(R.string.conv_photo_unreadable)
     val saved = stringResource(R.string.conv_photo_saved)
     val saveFailed = stringResource(R.string.conv_photo_save_failed)

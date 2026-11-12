@@ -39,6 +39,7 @@ android {
         }
     }
     buildFeatures { compose = true; buildConfig = true }
+    testOptions { unitTests.isIncludeAndroidResources = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21; targetCompatibility = JavaVersion.VERSION_21
         isCoreLibraryDesugaringEnabled = true // required by libsignal-android
@@ -59,8 +60,10 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.navigation.compose); implementation(libs.hilt.navigation.compose)
     implementation(libs.androidx.lifecycle.process)
+    implementation(libs.room.runtime) // MessageNotifier reads OtterDatabase (a RoomDatabase)
     implementation(libs.hilt.android); ksp(libs.hilt.compiler)
-    testImplementation(libs.junit)
+    testImplementation(libs.junit); testImplementation(libs.robolectric); testImplementation(libs.androidx.test.core)
+    testImplementation(libs.coroutines.test)
     androidTestImplementation(libs.junit); androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit); androidTestImplementation(libs.androidx.test.espresso)
     androidTestImplementation(platform(libs.compose.bom)); androidTestImplementation(libs.compose.ui.test.junit4)

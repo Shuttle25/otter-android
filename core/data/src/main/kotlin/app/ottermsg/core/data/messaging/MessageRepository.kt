@@ -8,6 +8,7 @@ import app.ottermsg.core.data.media.BlobMetaBuilder
 import app.ottermsg.core.data.media.MediaFiles
 import app.ottermsg.core.data.media.MediaTransfers
 import app.ottermsg.core.data.media.PhotoPrep
+import app.ottermsg.core.data.push.MessageAlerts
 import app.ottermsg.core.database.entity.AttachmentEntity
 import app.ottermsg.core.database.model.AttachmentState
 import app.ottermsg.proto.v1.Record
@@ -69,6 +70,7 @@ class GroupView(val group: GroupEntity, val members: List<GroupMemberEntity>)
 class MessageRepository @Inject constructor(
     private val db: OtterDatabase, private val accounts: AccountRepository, private val outbox: Outbox, private val clock: Clock,
     private val files: MediaFiles, private val prep: PhotoPrep, private val media: MediaTransfers,
+    private val alerts: MessageAlerts = MessageAlerts.NONE,
 ) : ConversationStore {
     private val conversations = db.conversationDao()
     private val messages = db.messageDao()
@@ -253,6 +255,7 @@ class MessageRepository @Inject constructor(
 
     /** Clears unread and queues one READ receipt for incoming messages not yet reported as read. */
     override suspend fun markConversationRead(conversationId: Long) {
+        alerts.onRead(conversationId)
         val queued = db.withTransaction {
             conversations.clearUnread(conversationId)
             val conv = conversations.get(conversationId) ?: return@withTransaction false

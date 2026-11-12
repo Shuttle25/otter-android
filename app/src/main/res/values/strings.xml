@@ -2,4 +2,17 @@
     <string name="app_name">Otter</string>
     <string name="superseded_title">Аккаунт на другом телефоне</string>
     <string name="superseded_text">Аккаунт восстановлен на другом телефоне. Этот телефон больше не получает сообщения. Чтобы пользоваться Otter здесь, удалите данные приложения и восстановите аккаунт снова.</string>
+    <!-- notifications (D62) -->
+    <string name="notif_channel_messages">Сообщения</string>
+    <string name="notif_channel_groups">Группы</string>
+    <string name="notif_channel_sync">Синхронизация</string>
+    <string name="notif_public_title">Otter</string>
+    <string name="notif_public_text">Новое сообщение</string>
+    <string name="notif_photo">Фото</string>
+    <string name="notif_reply">Ответить</string>
+    <string name="notif_reply_hint">Сообщение</string>
+    <string name="notif_mark_read">Прочитано</string>
+    <string name="notif_me">Я</string>
+    <string name="notif_sync_text">Проверяем сообщения…</string>
+    <string name="notif_summary">Новые сообщения</string>
 </resources>

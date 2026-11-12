@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import app.ottermsg.core.data.media.PhotoStore
 import app.ottermsg.core.data.messaging.ConversationStore
 import app.ottermsg.core.data.messaging.GroupView
+import app.ottermsg.core.data.push.ActiveConversation
 import app.ottermsg.core.database.entity.AttachmentEntity
 import app.ottermsg.core.database.entity.ContactEntity
 import app.ottermsg.core.database.entity.ConversationEntity
@@ -88,6 +89,7 @@ fun conversationUi(
 @HiltViewModel
 class ConversationViewModel @Inject constructor(
     private val store: ConversationStore, private val photos: PhotoStore, private val savedState: SavedStateHandle,
+    private val active: ActiveConversation = ActiveConversation(),
 ) : ViewModel() {
     val conversationId: Long = checkNotNull(savedState.get<Long>(ARG_ID)) { "conversation id missing" }
     var zone: ZoneId = ZoneId.systemDefault()
@@ -206,6 +208,9 @@ class ConversationViewModel @Inject constructor(
     fun retry(localId: Long) = viewModelScope.launch { store.retry(localId) }
     fun delete(localId: Long) = viewModelScope.launch { store.deleteLocal(localId) }
     fun markRead() = viewModelScope.launch { store.markConversationRead(conversationId) }
+
+    /** D62: no notification for the chat on screen. */
+    fun onVisible(v: Boolean) { active.id = if (v) conversationId else active.id.takeIf { it != conversationId } }
 
     companion object {
         const val KEY_PENDING = "pending_photo"

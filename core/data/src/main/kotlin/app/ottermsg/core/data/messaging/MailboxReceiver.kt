@@ -8,6 +8,7 @@ import app.ottermsg.core.data.bs
 import app.ottermsg.core.data.directory.DirectorySync
 import app.ottermsg.core.data.media.IncomingAttachments
 import app.ottermsg.core.data.media.IncomingPhotos
+import app.ottermsg.core.data.push.MessageAlerts
 import app.ottermsg.core.data.signal.SignalService
 import app.ottermsg.core.database.OtterDatabase
 import app.ottermsg.core.database.entity.ContactEntity
@@ -36,6 +37,7 @@ class MailboxReceiver @Inject constructor(
     private val db: OtterDatabase, private val accounts: AccountRepository, private val signal: SignalService,
     private val directory: DirectorySync, private val outbox: Outbox, private val clock: Clock,
     private val groups: GroupReceiver, private val photos: IncomingPhotos, private val resets: SessionResets,
+    private val alerts: MessageAlerts = MessageAlerts.NONE,
 ) {
     private val seen = db.seenEnvelopeDao()
     private val contacts = db.contactDao()
@@ -84,7 +86,7 @@ class MailboxReceiver @Inject constructor(
                 Content.BodyCase.SESSION_RESET -> { resets.onReceived(sender.userId); acks += key; continue }
                 else -> {}
             }
-            db.withTransaction {
+            val shown = db.withTransaction {
                 // A receipt never creates a chat (group members we never wrote to send receipts too).
                 val cid = if (content?.bodyCase == Content.BodyCase.RECEIPT) conversations.byPeer(sender.userId)?.id ?: -1L
                     else conversations.getOrCreateDirect(sender.userId, sender.displayName, clock.now())
@@ -93,10 +95,12 @@ class MailboxReceiver @Inject constructor(
                         sentMs = body.createdMs, receivedMs = clock.now(), body = "", status = MessageStatus.DELIVERED,
                         kind = MessageKind.SYSTEM_UNDECRYPTABLE))
                     conversations.touch(cid, clock.now())
+                    null
                 } else {
-                    handleContent(cid, sender, content)
+                    cid.takeIf { handleContent(cid, sender, content) }
                 }
             }
+            if (shown != null) alerts.onIncoming(shown) // after the commit: the notifier reads the stored messages
             if (content == null) resets.onUndecryptable(sender.userId) // throttled (D53)
             acks += key
         }
@@ -108,7 +112,8 @@ class MailboxReceiver @Inject constructor(
         photos.kick()
     }
 
-    private suspend fun handleContent(cid: Long, sender: ContactEntity, content: Content) {
+    /** Stores [content]; true when it added a visible incoming message (text or photo). */
+    private suspend fun handleContent(cid: Long, sender: ContactEntity, content: Content): Boolean {
         when (content.bodyCase) {
             Content.BodyCase.DATA -> {
                 val d = content.data
@@ -125,6 +130,7 @@ class MailboxReceiver @Inject constructor(
                         .setType(ReceiptMessage.Type.DELIVERED).addMessageIds(d.messageId)).setSentMs(clock.now()).build()
                     outbox.enqueue(sender.userId, receipt, messageLocalId = null, urgent = false)
                 }
+                return id != -1L
             }
             Content.BodyCase.RECEIPT -> {
                 val status = if (content.receipt.type == ReceiptMessage.Type.READ) MessageStatus.READ else MessageStatus.DELIVERED
@@ -138,6 +144,7 @@ class MailboxReceiver @Inject constructor(
             }
             else -> {}
         }
+        return false
     }
 
     companion object { val SEEN_TTL_MS = 30.days.inWholeMilliseconds }

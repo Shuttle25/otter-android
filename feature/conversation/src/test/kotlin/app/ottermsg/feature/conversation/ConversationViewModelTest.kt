@@ -89,6 +89,18 @@ class ConversationViewModelTest {
         assertEquals("", vm.text.value)
     }
 
+    @Test fun visibleChatIsTheActiveOne() {
+        val active = app.ottermsg.core.data.push.ActiveConversation()
+        val v = ConversationViewModel(store, photos, SavedStateHandle(mapOf("id" to 7L)), active)
+        v.onVisible(true)
+        assertEquals(7L, active.id)
+        v.onVisible(false)
+        assertEquals(null, active.id)
+        active.id = 9L // another chat became active first: leaving this one keeps it
+        v.onVisible(false)
+        assertEquals(9L, active.id)
+    }
+
     @Test fun unreadablePhotoKeepsThePreview() = runTest(dispatcher) {
         runCurrent()
         vm.onPicked(Uri.parse("content://x/1")); runCurrent()

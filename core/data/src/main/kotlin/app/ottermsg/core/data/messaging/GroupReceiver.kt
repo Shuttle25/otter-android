@@ -7,6 +7,7 @@ import app.ottermsg.core.data.bs
 import app.ottermsg.core.data.group.GroupApplier
 import app.ottermsg.core.data.media.IncomingAttachments
 import app.ottermsg.core.data.media.IncomingPhotos
+import app.ottermsg.core.data.push.MessageAlerts
 import app.ottermsg.core.data.signal.SignalService
 import app.ottermsg.core.database.OtterDatabase
 import app.ottermsg.core.database.entity.ConversationType
@@ -42,6 +43,7 @@ class GroupReceiver @Inject constructor(
     private val db: OtterDatabase, private val accounts: AccountRepository, private val signal: SignalService,
     private val applier: GroupApplier, private val outbox: Outbox, private val clock: Clock,
     private val photos: IncomingPhotos, private val resets: SessionResets,
+    private val alerts: MessageAlerts = MessageAlerts.NONE,
 ) {
     private val groups = db.groupDao()
     private val conversations = db.conversationDao()
@@ -176,8 +178,10 @@ class GroupReceiver @Inject constructor(
             return
         }
         if (!g.iAmMember || groups.isMember(gid, me) == 0) { log.info("group message dropped: not a member"); return }
+        var cidOut = 0L
         val inserted = db.withTransaction {
             val cid = conversations.getOrCreateGroupConversation(gid, g.name, clock.now())
+            cidOut = cid
             val sent = if (content.sentMs > 0) content.sentMs else clock.now()
             val photo = IncomingAttachments.photoOrNull(d)
             val id = messages.insert(MessageEntity(messageId = d.messageId.toByteArray(), conversationId = cid, senderId = sender,
@@ -194,6 +198,7 @@ class GroupReceiver @Inject constructor(
             val receipt = Content.newBuilder().setReceipt(ReceiptMessage.newBuilder().setType(ReceiptMessage.Type.DELIVERED)
                 .addMessageIds(d.messageId)).setSentMs(clock.now()).build()
             outbox.enqueue(sender, receipt, messageLocalId = null, urgent = false)
+            alerts.onIncoming(cidOut)
         }
     }
 

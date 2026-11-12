@@ -59,6 +59,8 @@ class TestGraph(
     val db: OtterDatabase = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), OtterDatabase::class.java).build(),
     /** Media directory name; a restarted graph keeps it (same filesDir, like a real app restart). */
     private val graphId: String = java.util.UUID.randomUUID().toString(),
+    /** Notification hooks (D62); tests record them. */
+    val alerts: app.ottermsg.core.data.push.MessageAlerts = app.ottermsg.core.data.push.MessageAlerts.NONE,
 ) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val settings = Settings(db.settingsDao())
@@ -78,14 +80,14 @@ class TestGraph(
     val photos = MediaRepository(db, photoLoader, gallery, media, files)
     val applier = GroupApplier(db, accounts, directory, clock)
     val resets = app.ottermsg.core.data.messaging.SessionResets(db, signal, outbox, clock)
-    val groupReceiver = GroupReceiver(db, accounts, signal, applier, outbox, clock, incomingPhotos, resets)
-    val receiver = MailboxReceiver(db, accounts, signal, directory, outbox, clock, groupReceiver, incomingPhotos, resets)
+    val groupReceiver = GroupReceiver(db, accounts, signal, applier, outbox, clock, incomingPhotos, resets, alerts)
+    val receiver = MailboxReceiver(db, accounts, signal, directory, outbox, clock, groupReceiver, incomingPhotos, resets, alerts)
     val guard = app.ottermsg.core.data.backup.InstallGuard(db, accounts, settings, signal, resets, clock, directory)
     val backups = app.ottermsg.core.data.backup.BackupManager(ApplicationProvider.getApplicationContext(), db, accounts, settings,
         SeedVault(XorWrapper), { app.ottermsg.core.data.invite.OnlineApi { session } }, clock)
         .apply { derive = { pw, salt -> app.ottermsg.core.crypto.BackupKeys.derive(pw, salt, mKib = 1024, t = 1, p = 1) } }
     val groups = GroupRepository(db, accounts, applier, outbox, clock)
-    val messages = MessageRepository(db, accounts, outbox, clock, files, PhotoPrep(), media)
+    val messages = MessageRepository(db, accounts, outbox, clock, files, PhotoPrep(), media, alerts)
     val prekeys = PrekeyRefill(accounts, settings, signal, clock)
     @Volatile var session: FakeNode.Session? = null
     private var sessionScope: CoroutineScope? = null
@@ -135,7 +137,7 @@ class TestGraph(
     /** Simulates an app restart: this graph stops (database kept), a new graph opens on the same database. */
     suspend fun restart(): TestGraph {
         offline(); engine.stop(); scope.cancel(); closeDb = false
-        return TestGraph(node, clock, db, graphId).also { it.accounts.load() }
+        return TestGraph(node, clock, db, graphId, alerts).also { it.accounts.load() }
     }
 
     fun close() { offline(); engine.stop(); scope.cancel(); if (closeDb) db.close() }
