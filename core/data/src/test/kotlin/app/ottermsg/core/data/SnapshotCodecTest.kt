@@ -56,12 +56,16 @@ class SnapshotCodecTest {
         db.messageRecipientDao().insertAll(listOf(MessageRecipientEntity(gm, boris, deliveredMs = 8), MessageRecipientEntity(gm, vera)))
         db.groupDao().upsert(GroupEntity(gid, "Семья", family = true, version = 2, stateSigned = byteArrayOf(1, 2, 3), prevState = null, iAmMember = true, createdBy = me))
         db.groupDao().replaceMembers(gid, listOf(GroupMemberEntity(gid, me, true), GroupMemberEntity(gid, boris, false), GroupMemberEntity(gid, vera, false)))
+        val news = db.conversationDao().getOrCreateNews(300) // never backed up: news.list refills it (D67)
+        db.messageDao().insert(MessageEntity(messageId = ByteArray(32) { 60 }, conversationId = news, senderId = id(61), outgoing = false, sentMs = 9, receivedMs = 9, body = "новость", status = MessageStatus.DELIVERED, kind = MessageKind.NEWS))
         a.settings.setPhotoAutoDownload(Settings.AUTO_MANUAL); a.settings.setPhotoSaveToGallery(true); a.settings.setEntryVersion(4)
 
         val snap = SnapshotCodec.gunzip(SnapshotCodec.gzip(SnapshotCodec.export(db, a.me, a.settings, 999)).inputStream())
         assertArrayEquals(a.seed, snap.seed.toByteArray())
         assertEquals("mama", snap.username); assertEquals("Мама", snap.displayName); assertEquals(4, snap.entryVersion)
         assertEquals(a.me.createdMs, snap.registeredMs)
+        assertEquals(0, snap.conversationsList.count { it.type == ConversationType.NEWS })
+        assertEquals(0, snap.messagesList.count { it.kind == MessageKind.NEWS })
 
         val settings = Settings(fresh.settingsDao())
         SnapshotCodec.import(snap, fresh, settings)

@@ -11,6 +11,8 @@ data class ConversationSummary(
     val family: Boolean = false,
     @ColumnInfo(name = "last_sender_id") val lastSenderId: ByteArray? = null,
     @ColumnInfo(name = "last_system_data") val lastSystemData: ByteArray? = null,
+    /** ConversationType. */
+    val type: Int = app.ottermsg.core.database.entity.ConversationType.DIRECT,
 ) {
     /** Stable avatar seed: peer user id or group id. */
     val seed: ByteArray get() = peerUserId ?: groupId ?: ByteArray(0)

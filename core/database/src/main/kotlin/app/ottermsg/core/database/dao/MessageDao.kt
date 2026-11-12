@@ -32,4 +32,8 @@ import kotlinx.coroutines.flow.Flow
     suspend fun unreadReceiptsPending(cid: Long): List<MessageEntity>
     @Query("UPDATE messages SET read_receipt_sent = 1 WHERE local_id IN (:ids)") suspend fun markReadReceiptSent(ids: List<Long>)
     @Query("DELETE FROM messages WHERE local_id = :localId") suspend fun delete(localId: Long)
+    /** Deletes the news message with record key [messageId] (ANNOUNCEMENT_DELETED, revoked key). */
+    @Query("DELETE FROM messages WHERE message_id = :messageId AND kind = ${MessageKind.NEWS}") suspend fun deleteNews(messageId: ByteArray): Int
+    @Query("SELECT * FROM messages WHERE kind = ${MessageKind.NEWS} ORDER BY local_id") suspend fun allNews(): List<MessageEntity>
+    @Query("SELECT COUNT(*) FROM messages WHERE conversation_id = :cid") suspend fun count(cid: Long): Int
 }

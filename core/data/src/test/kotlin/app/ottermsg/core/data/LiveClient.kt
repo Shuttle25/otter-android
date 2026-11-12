@@ -73,7 +73,8 @@ class LiveClient {
     val stats = InMemoryEndpointStats()
     val selector = NodeSelector(transport, stats, clock::now)
     val manifests = ManifestUpdater(db.manifestDao(), settings, clock)
-    val engine: SyncEngine = SyncEngine(stats, selector, accounts, settings, manifests, directory, receiver, outbox, prekeys, profile, media, scope, true, clock, guard, backups)
+    val engine: SyncEngine = SyncEngine(stats, selector, accounts, settings, manifests, directory, receiver, outbox, prekeys, profile, media, scope, true, clock, guard, backups,
+        app.ottermsg.core.data.news.NewsRepository(db, manifests, clock, app.ottermsg.core.data.push.MessageAlerts.NONE))
     val invites = InviteRepository(accounts, settings, db.manifestDao(), engine, clock)
     val registration = Registration(db, TransportConnector(selector), SeedVault(XorWrapper), accounts, settings, clock, allowPlaintext = true)
     val restore = app.ottermsg.core.data.backup.RestoreManager(db, TransportConnector(selector), SeedVault(XorWrapper), accounts, settings, clock,

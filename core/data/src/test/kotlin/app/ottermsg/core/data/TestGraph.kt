@@ -106,10 +106,11 @@ class TestGraph(
     val transport = FakeNodeTransport(node)
     val manifests = app.ottermsg.core.data.sync.ManifestUpdater(db.manifestDao(), settings, clock)
     val pushMonitor = app.ottermsg.core.data.push.PushMonitor(settings, clock)
+    val news = app.ottermsg.core.data.news.NewsRepository(db, manifests, clock, alerts)
     private val endpointStats = app.ottermsg.core.network.InMemoryEndpointStats()
     val engine = SyncEngine(endpointStats, app.ottermsg.core.network.NodeSelector(transport, endpointStats, clock::now),
         accounts, settings, manifests, directory, receiver, outbox, prekeys, profile, media, scope, true, clock, guard, backups,
-        pushMonitor = pushMonitor)
+        news, pushMonitor = pushMonitor)
     val foreground = app.ottermsg.core.data.sync.ForegroundSync({ engine.acquire(SyncEngine.FOREGROUND) },
         { engine.release(SyncEngine.FOREGROUND) }, scope)
     val seed = ByteArray(32).also(SecureRandom()::nextBytes)

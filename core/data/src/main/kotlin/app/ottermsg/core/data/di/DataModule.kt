@@ -51,4 +51,5 @@ object DataModule {
     @Provides fun groupStore(r: GroupRepository): GroupStore = r
     @Provides fun networkInfo(n: AndroidNetworkInfo): NetworkInfo = n
     @Provides fun photoStore(r: MediaRepository): PhotoStore = r
+    @Provides fun newsKeys(m: app.ottermsg.core.data.sync.ManifestUpdater): app.ottermsg.core.data.sync.NewsKeys = m
 }

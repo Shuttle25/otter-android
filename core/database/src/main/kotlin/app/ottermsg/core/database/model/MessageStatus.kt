@@ -2,7 +2,9 @@ package app.ottermsg.core.database.model
 
 object MessageStatus { const val PENDING = 0; const val SENT = 1; const val DELIVERED = 2; const val READ = 3; const val FAILED = 4 }
 
-object MessageKind { const val TEXT = 0; const val SYSTEM_UNDECRYPTABLE = 1; const val SYSTEM_GROUP = 2; const val PHOTO = 3; const val SYSTEM_RESET = 4 }
+object MessageKind { const val TEXT = 0; const val SYSTEM_UNDECRYPTABLE = 1; const val SYSTEM_GROUP = 2; const val PHOTO = 3; const val SYSTEM_RESET = 4
+    /** A verified announcement (D66): body = text in the phone's language, system_data = Announcement bytes. */
+    const val NEWS = 5 }
 
 /** attachments.state (D48). */
 object AttachmentState {
