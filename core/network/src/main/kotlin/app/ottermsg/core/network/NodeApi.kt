@@ -2,6 +2,10 @@ package app.ottermsg.core.network
 
 import app.ottermsg.core.crypto.AuthMessage
 import app.ottermsg.core.crypto.Ed25519
+import app.ottermsg.proto.v1.BackupAuthRequest
+import app.ottermsg.proto.v1.BackupAuthResponse
+import app.ottermsg.proto.v1.BackupFetchRequest
+import app.ottermsg.proto.v1.BackupFetchResponse
 import app.ottermsg.proto.v1.BlobChunk
 import app.ottermsg.proto.v1.BlobGetRequest
 import app.ottermsg.proto.v1.BlobPutRequest
@@ -10,6 +14,7 @@ import app.ottermsg.proto.v1.Empty
 import app.ottermsg.proto.v1.Event
 import app.ottermsg.proto.v1.Hello
 import app.ottermsg.proto.v1.LoginRequest
+import app.ottermsg.proto.v1.LoginResponse
 import app.ottermsg.proto.v1.ManifestResponse
 import app.ottermsg.proto.v1.PreKeyBundle
 import app.ottermsg.proto.v1.PreKeyFetchRequest
@@ -27,7 +32,8 @@ interface NodeApi {
     suspend fun hello(): Hello
     suspend fun nodeId(): ByteArray = hello().nodeId.toByteArray()
     suspend fun register(req: RegisterRequest)
-    suspend fun login(userId: ByteArray, account: Ed25519.KeyPair)
+    /** auth.login; the answer names the newest install the node knows (D52). */
+    suspend fun login(userId: ByteArray, account: Ed25519.KeyPair): LoginResponse
     suspend fun manifest(): Record
     suspend fun directory(): List<Record>
     suspend fun uploadPrekeys(record: Record)
@@ -44,6 +50,11 @@ interface NodeApi {
     /** BLOB_FETCHED after a verified download, so nodes can delete the blob (D45). */
     suspend fun blobAck(record: Record)
     suspend fun ping()
+    /** Public: salt and KDF params for a username (fake but stable when there is no backup, D51). */
+    suspend fun backupAuth(username: String): BackupAuthResponse
+    /** Public: on success this connection may blob.get the backup blob (D51). */
+    suspend fun backupFetch(username: String, authSecret: ByteArray): BackupFetchResponse
+    suspend fun backupPublish(meta: Record)
 }
 
 class RemoteNodeApi(private val rpc: RpcClient, private val clock: () -> Long = System::currentTimeMillis) : NodeApi {
@@ -53,12 +64,13 @@ class RemoteNodeApi(private val rpc: RpcClient, private val clock: () -> Long = 
 
     override suspend fun register(req: RegisterRequest) { rpc.call("register", req) }
 
-    override suspend fun login(userId: ByteArray, account: Ed25519.KeyPair) {
+    override suspend fun login(userId: ByteArray, account: Ed25519.KeyPair): LoginResponse {
         val h = rpc.hello.await()
         val ts = clock()
         val sig = account.sign(AuthMessage.build(h.nodeId.toByteArray(), h.nonce.toByteArray(), ts))
-        rpc.call("auth.login", LoginRequest.newBuilder().setUserId(ByteString.copyFrom(userId)).setDeviceId(1)
-            .setTsMs(ts).setSignature(ByteString.copyFrom(sig)).build())
+        // an older node answers with an empty body: parses as zeros
+        return LoginResponse.parseFrom(rpc.call("auth.login", LoginRequest.newBuilder().setUserId(ByteString.copyFrom(userId))
+            .setDeviceId(1).setTsMs(ts).setSignature(ByteString.copyFrom(sig)).build()))
     }
 
     override suspend fun manifest(): Record = ManifestResponse.parseFrom(rpc.call("manifest.get", Empty.getDefaultInstance())).manifest
@@ -80,4 +92,10 @@ class RemoteNodeApi(private val rpc: RpcClient, private val clock: () -> Long = 
             .data.toByteArray()
     override suspend fun blobAck(record: Record) { rpc.call("blob.ack", req(record)) }
     override suspend fun ping() { rpc.call("ping", Empty.getDefaultInstance()) }
+    override suspend fun backupAuth(username: String): BackupAuthResponse =
+        BackupAuthResponse.parseFrom(rpc.call("backup.auth", BackupAuthRequest.newBuilder().setUsername(username).build()))
+    override suspend fun backupFetch(username: String, authSecret: ByteArray): BackupFetchResponse =
+        BackupFetchResponse.parseFrom(rpc.call("backup.fetch", BackupFetchRequest.newBuilder().setUsername(username)
+            .setAuthSecret(ByteString.copyFrom(authSecret)).build()))
+    override suspend fun backupPublish(meta: Record) { rpc.call("backup.publish", req(meta)) }
 }

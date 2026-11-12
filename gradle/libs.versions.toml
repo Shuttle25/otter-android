@@ -14,6 +14,8 @@ activityCompose = "1.11.0"
 lifecycle = "2.9.4"
 navigation = "2.9.5"
 tink = "1.19.0"
+bouncycastle = "1.80"
+zxcvbn = "1.9.0"
 protobuf = "4.32.1"
 protobufPlugin = "0.9.5"
 coroutines = "1.10.2"
@@ -51,6 +53,8 @@ room-testing = { module = "androidx.room:room-testing", version.ref = "room" }
 sqlite-ktx = { module = "androidx.sqlite:sqlite-ktx", version.ref = "sqlite" }
 sqlcipher = { module = "net.zetetic:sqlcipher-android", version.ref = "sqlcipher" }
 tink = { module = "com.google.crypto.tink:tink-android", version.ref = "tink" }
+bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
+zxcvbn = { module = "com.nulabinc.zxcvbn:zxcvbn", version.ref = "zxcvbn" }
 protobuf-javalite = { module = "com.google.protobuf:protobuf-javalite", version.ref = "protobuf" }
 protobuf-protoc = { module = "com.google.protobuf:protoc", version.ref = "protobuf" }
 coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }

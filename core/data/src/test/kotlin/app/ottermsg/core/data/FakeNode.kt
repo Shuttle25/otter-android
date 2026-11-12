@@ -7,6 +7,9 @@ import app.ottermsg.core.crypto.RecordCodec
 import app.ottermsg.core.network.NodeApi
 import app.ottermsg.core.network.RpcException
 import app.ottermsg.proto.v1.Ack
+import app.ottermsg.proto.v1.BackupAuthResponse
+import app.ottermsg.proto.v1.BackupFetchResponse
+import app.ottermsg.proto.v1.BackupMeta
 import app.ottermsg.proto.v1.BlobMeta
 import app.ottermsg.proto.v1.DirectoryEntry
 import app.ottermsg.proto.v1.Endpoint
@@ -15,6 +18,7 @@ import app.ottermsg.proto.v1.Event
 import app.ottermsg.proto.v1.Invite
 import app.ottermsg.proto.v1.InviteBundle
 import app.ottermsg.proto.v1.InviteUsed
+import app.ottermsg.proto.v1.LoginResponse
 import app.ottermsg.proto.v1.Manifest
 import app.ottermsg.proto.v1.NodeInfo
 import app.ottermsg.proto.v1.OneTimePreKey
@@ -69,7 +73,8 @@ class FakeNode(private val clock: () -> Long) {
 
     private class InviteState(val inviter: ByteArray, val expiresMs: Long, var usedBy: ByteArray? = null)
     private class User(val record: Record, val entry: DirectoryEntry)
-    private class Keys(val registrationId: Int, var signed: SignedPreKey, var kyber: SignedPreKey, val oneTime: ArrayDeque<OneTimePreKey>)
+    private class Keys(var registrationId: Int, var signed: SignedPreKey, var kyber: SignedPreKey, val oneTime: ArrayDeque<OneTimePreKey>,
+                       var installedMs: Long = 0)
 
     private val lock = Any()
     private val invites = HashMap<String, InviteState>()
@@ -108,7 +113,7 @@ class FakeNode(private val clock: () -> Long) {
     /** Accepted directory.update calls of [user]. */
     fun directoryUpdates(user: ByteArray): Int = synchronized(lock) { directoryUpdateCount[user.hex()] ?: 0 }
     // ---- blobs (D44/D45): same rules as the Go service, chunks kept in memory ----
-    private class FakeBlob(val meta: BlobMeta, val author: String, val chunks: MutableMap<Int, ByteArray> = HashMap(),
+    private class FakeBlob(val meta: BlobMeta, val author: String, val record: Record, val chunks: MutableMap<Int, ByteArray> = HashMap(),
                            val fetched: MutableSet<String> = HashSet())
     private val blobs = HashMap<String, FakeBlob>()
     private val goneBlobs = HashSet<String>()
@@ -191,16 +196,18 @@ class FakeNode(private val clock: () -> Long) {
             inv.usedBy = entry.userId.toByteArray()
             users[entry.userId.hex()] = User(req.directoryEntry, entry)
             keys[entry.userId.hex()] = Keys(pk.registrationId, pk.signedPrekey, pk.kyberPrekey,
-                ArrayDeque(pk.oneTimeList.filter { it.ownerNode.toByteArray().contentEquals(nodeId) }))
+                ArrayDeque(pk.oneTimeList.filter { it.ownerNode.toByteArray().contentEquals(nodeId) }), pk.installedMs)
             sessions.filter { it.user != null }.forEach { it.emit("directory", app.ottermsg.proto.v1.Empty.getDefaultInstance()) }
         } }
 
-        override suspend fun login(userId: ByteArray, account: Ed25519.KeyPair) { check(); synchronized(lock) {
+        override suspend fun login(userId: ByteArray, account: Ed25519.KeyPair): LoginResponse { check(); synchronized(lock) {
             val u = users[userId.hex()] ?: fail(Status.STATUS_UNAUTHORIZED, "unknown user")
             if (!u.entry.accountPub.toByteArray().contentEquals(account.publicKey)) fail(Status.STATUS_UNAUTHORIZED, "bad signature")
             if (user != null) fail(Status.STATUS_INVALID, "already logged in")
             user = userId
             deliver()
+            val k = keys[userId.hex()]
+            return LoginResponse.newBuilder().setRegistrationId(k?.registrationId ?: 0).setInstalledMs(k?.installedMs ?: 0).build()
         } }
 
         override suspend fun manifest(): Record { check(); return manifest }
@@ -211,7 +218,16 @@ class FakeNode(private val clock: () -> Long) {
             if (!b.author.toByteArray().contentEquals(me())) fail(Status.STATUS_UNAUTHORIZED, "author")
             val pk = PreKeys.parseFrom(b.payload)
             pk.oneTimeList.forEach { uploadedByOwner.merge(it.ownerNode.hex(), 1, Int::plus) }
-            keys[b.author.hex()]!!.oneTime.addAll(pk.oneTimeList.filter { it.ownerNode.toByteArray().contentEquals(nodeId) })
+            val k = keys[b.author.hex()]!!
+            // D52: the newest install wins; an older one (a replaced phone) is ignored; the same one merges
+            if (pk.installedMs < k.installedMs) return
+            if (pk.installedMs > k.installedMs) {
+                k.oneTime.clear(); k.installedMs = pk.installedMs
+            }
+            k.registrationId = pk.registrationId
+            if (pk.hasSignedPrekey()) k.signed = pk.signedPrekey
+            if (pk.hasKyberPrekey()) k.kyber = pk.kyberPrekey
+            k.oneTime.addAll(pk.oneTimeList.filter { it.ownerNode.toByteArray().contentEquals(nodeId) })
         } }
 
         override suspend fun fetchPrekeys(userId: ByteArray, device: Int): PreKeyBundle { check(); me(); failFetch?.let { fail(it, "fetch refused") }; return synchronized(lock) {
@@ -280,11 +296,13 @@ class FakeNode(private val clock: () -> Long) {
             if (!b.author.toByteArray().contentEquals(me())) fail(Status.STATUS_UNAUTHORIZED, "author")
             val m = BlobMeta.parseFrom(b.payload)
             val n = ((m.size + m.chunkSize - 1) / m.chunkSize).toInt()
-            if (m.chunkSize != 262144 || m.chunkSha256Count != n || m.readersCount == 0 || b.expiresMs == 0L)
-                fail(Status.STATUS_INVALID, "meta")
+            val shapeOk = if (m.persistent) m.readersCount == 0 && b.expiresMs == 0L else m.readersCount > 0 && b.expiresMs != 0L
+            if (m.chunkSize != 262144 || m.chunkSha256Count != n || !shapeOk) fail(Status.STATUS_INVALID, "meta")
+            if (m.persistent && blobs.values.count { it.meta.persistent && it.author == b.author.hex() } >= 3)
+                fail(Status.STATUS_QUOTA, "too many backup blobs")
             val key = keyOf(b).hex()
             if (key in goneBlobs) fail(Status.STATUS_NOT_FOUND, "deleted")
-            val blob = blobs.getOrPut(key) { FakeBlob(m, b.author.hex()) }
+            val blob = blobs.getOrPut(key) { FakeBlob(m, b.author.hex(), meta) }
             return app.ottermsg.proto.v1.BlobStatus.newBuilder().setChunks(n)
                 .addAllMissing((0 until n).filter { it !in blob.chunks }).build()
         } }
@@ -306,7 +324,8 @@ class FakeNode(private val clock: () -> Long) {
             if (blobGetDelayMs > 0) kotlinx.coroutines.delay(blobGetDelayMs)
             synchronized(lock) {
                 failBlobGet?.let { fail(it, "get refused") }
-                val u = me().hex()
+                val granted = user == null && grantBlob?.contentEquals(key) == true
+                val u = if (granted) key.copyOf(16).hex() else me().hex()
                 if (key.hex() in goneBlobs) fail(Status.STATUS_NOT_FOUND, "deleted")
                 val blob = blobs[key.hex()] ?: fail(Status.STATUS_RETRY_LATER, "not here yet")
                 if (blob.author != u && blob.meta.readersList.none { it.hex() == u }) fail(Status.STATUS_UNAUTHORIZED, "not a reader")
@@ -319,10 +338,62 @@ class FakeNode(private val clock: () -> Long) {
             if (b.type != RecordType.BLOB_FETCHED || !b.author.toByteArray().contentEquals(me())) fail(Status.STATUS_INVALID, "ack")
             val key = app.ottermsg.proto.v1.BlobFetched.parseFrom(b.payload).blobKey.hex()
             val blob = blobs[key] ?: return
+            if (blob.meta.persistent) return
             if (blob.meta.readersList.any { it.hex() == b.author.hex() }) blob.fetched += b.author.hex()
             if (blob.meta.readersList.all { it.hex() in blob.fetched }) { blobs.remove(key); goneBlobs += key }
         } }
 
         override suspend fun ping() { check() }
+
+        /** Set by a successful backup.fetch on a connection that is not logged in (D51). */
+        @Volatile var grantBlob: ByteArray? = null; private set
+
+        override suspend fun backupAuth(username: String): BackupAuthResponse { check(); synchronized(lock) {
+            val m = backupByName(username)?.second
+            return if (m != null) BackupAuthResponse.newBuilder().setSalt(m.salt).setKdfMKib(m.kdfMKib).setKdfT(m.kdfT).setKdfP(m.kdfP).build()
+            else BackupAuthResponse.newBuilder().setSalt(bs(fakeSalt(username))).setKdfMKib(65536).setKdfT(3).setKdfP(1).build()
+        } }
+
+        override suspend fun backupFetch(username: String, authSecret: ByteArray): BackupFetchResponse { check(); synchronized(lock) {
+            val now = clock()
+            val recent = authFailures.getOrPut(username) { mutableListOf() }.apply { removeAll { it < now - 3_600_000 } }
+            if (recent.size >= 5) fail(Status.STATUS_RETRY_LATER, "too many attempts")
+            val cur = backupByName(username)
+            if (cur == null || !sha(authSecret).contentEquals(cur.second.authVerifier.toByteArray())) {
+                recent += now
+                fail(Status.STATUS_UNAUTHORIZED, "wrong username or password")
+            }
+            val blobKey = cur.second.blobKey.toByteArray()
+            val blob = blobs[blobKey.hex()] ?: fail(Status.STATUS_RETRY_LATER, "backup not replicated here yet")
+            grantBlob = blobKey
+            return BackupFetchResponse.newBuilder().setBackupMeta(cur.first).setBlobMeta(blob.record).build()
+        } }
+
+        override suspend fun backupPublish(meta: Record) { check(); synchronized(lock) {
+            val b = verifyUser(meta)
+            if (b.type != RecordType.BACKUP_META || !b.author.toByteArray().contentEquals(me())) fail(Status.STATUS_INVALID, "not the author's backup meta")
+            val m = BackupMeta.parseFrom(b.payload)
+            val blob = blobs[m.blobKey.hex()] ?: fail(Status.STATUS_INVALID, "backup blob unknown here")
+            if (blob.author != b.author.hex() || !blob.meta.persistent) fail(Status.STATUS_INVALID, "not the author's persistent blob")
+            val cur = backups[b.author.hex()]
+            if (cur != null && cur.second.version >= m.version) return // latest version wins (D50)
+            backups[b.author.hex()] = meta to m
+            if (cur != null && cur.second.blobKey != m.blobKey) { blobs.remove(cur.second.blobKey.hex()); goneBlobs += cur.second.blobKey.hex() }
+        } }
     }
+
+    // ---- backups (D50–D52) ----
+    private val backups = HashMap<String, Pair<Record, BackupMeta>>()
+    private val authFailures = HashMap<String, MutableList<Long>>()
+    private val fakeKey = ByteArray(32).also(SecureRandom()::nextBytes)
+    private fun fakeSalt(username: String): ByteArray =
+        javax.crypto.Mac.getInstance("HmacSHA256").apply { init(javax.crypto.spec.SecretKeySpec(fakeKey, "HmacSHA256")) }
+            .doFinal(username.toByteArray()).copyOf(16)
+    private fun backupByName(username: String): Pair<Record, BackupMeta>? {
+        val id = users.values.firstOrNull { it.entry.username == username }?.entry?.userId?.hex() ?: return null
+        return backups[id]
+    }
+    /** Test hooks. */
+    fun backupOf(user: ByteArray): BackupMeta? = synchronized(lock) { backups[user.hex()]?.second }
+    fun loginInfo(user: ByteArray): Pair<Int, Long> = synchronized(lock) { keys[user.hex()]!!.let { it.registrationId to it.installedMs } }
 }

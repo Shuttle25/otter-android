@@ -20,7 +20,7 @@ private object FakeApi : NodeApi {
     override val events = kotlinx.coroutines.flow.emptyFlow<app.ottermsg.proto.v1.Event>()
     override suspend fun hello() = TODO()
     override suspend fun register(req: app.ottermsg.proto.v1.RegisterRequest) = TODO()
-    override suspend fun login(userId: ByteArray, account: app.ottermsg.core.crypto.Ed25519.KeyPair) = TODO()
+    override suspend fun login(userId: ByteArray, account: app.ottermsg.core.crypto.Ed25519.KeyPair): app.ottermsg.proto.v1.LoginResponse = TODO()
     override suspend fun manifest() = TODO()
     override suspend fun directory() = TODO()
     override suspend fun uploadPrekeys(record: app.ottermsg.proto.v1.Record) = TODO()
@@ -33,5 +33,8 @@ private object FakeApi : NodeApi {
     override suspend fun blobPut(key: ByteArray, index: Int, data: ByteArray) = TODO()
     override suspend fun blobGet(key: ByteArray, index: Int) = TODO()
     override suspend fun blobAck(record: app.ottermsg.proto.v1.Record) = TODO()
+    override suspend fun backupAuth(username: String): app.ottermsg.proto.v1.BackupAuthResponse = TODO()
+    override suspend fun backupFetch(username: String, authSecret: ByteArray): app.ottermsg.proto.v1.BackupFetchResponse = TODO()
+    override suspend fun backupPublish(meta: app.ottermsg.proto.v1.Record) = TODO()
     override suspend fun ping() = TODO()
 }
