@@ -46,6 +46,7 @@ object DataModule {
     @Provides @Singleton @ApplicationScope fun appScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     @Provides fun onlineApi(engine: SyncEngine): OnlineApi = engine
     @Provides fun registrar(r: Registration): Registrar = r
+    @Provides fun restorer(r: app.ottermsg.core.data.backup.RestoreManager): app.ottermsg.core.data.backup.Restorer = r
     @Provides fun conversationStore(r: MessageRepository): ConversationStore = r
     @Provides fun groupStore(r: GroupRepository): GroupStore = r
     @Provides fun networkInfo(n: AndroidNetworkInfo): NetworkInfo = n

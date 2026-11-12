@@ -64,7 +64,7 @@ class LiveClient {
     val resets = app.ottermsg.core.data.messaging.SessionResets(db, signal, outbox, clock)
     val groupReceiver = GroupReceiver(db, accounts, signal, applier, outbox, clock, incomingPhotos, resets)
     val receiver = MailboxReceiver(db, accounts, signal, directory, outbox, clock, groupReceiver, incomingPhotos, resets)
-    val guard = app.ottermsg.core.data.backup.InstallGuard(db, accounts, settings, signal, resets, clock)
+    val guard = app.ottermsg.core.data.backup.InstallGuard(db, accounts, settings, signal, resets, clock, directory)
     val backups = app.ottermsg.core.data.backup.BackupManager(ApplicationProvider.getApplicationContext(), db, accounts, settings,
         SeedVault(XorWrapper), { engine as app.ottermsg.core.data.invite.OnlineApi }, clock)
     val groups = GroupRepository(db, accounts, applier, outbox, clock)

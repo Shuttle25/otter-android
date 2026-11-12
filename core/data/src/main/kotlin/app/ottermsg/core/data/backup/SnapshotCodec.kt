@@ -73,7 +73,11 @@ object SnapshotCodec {
         return b.build()
     }
 
-    /** Writes [s] into an empty database (restore). The account row is written by RestoreManager. */
+    /**
+     * Writes [s] into the database (restore). Normally the database is empty; after a words-only restore it may already
+     * hold contacts, chats and newer group states, which are kept (rows are merged, never replaced by older ones).
+     * The account row is written by RestoreManager.
+     */
     suspend fun import(s: BackupSnapshot, db: OtterDatabase, settings: Settings) = db.withTransaction {
         s.contactsList.forEach { c ->
             db.contactDao().upsert(ContactEntity(c.userId.toByteArray(), c.username, c.displayName, c.accountPub.toByteArray(),
@@ -81,9 +85,11 @@ object SnapshotCodec {
         }
         val ids = HashMap<Long, Long>()
         s.conversationsList.forEach { c ->
-            ids[c.id] = db.conversationDao().insert(ConversationEntity(peerUserId = c.peerUserId.toByteArray().takeIf { it.isNotEmpty() },
-                title = c.title, lastActivityMs = c.lastActivityMs, unread = c.unread, draft = c.draft,
-                groupId = c.groupId.toByteArray().takeIf { it.isNotEmpty() }, type = c.type))
+            val peer = c.peerUserId.toByteArray().takeIf { it.isNotEmpty() }
+            val group = c.groupId.toByteArray().takeIf { it.isNotEmpty() }
+            val id = db.conversationDao().insert(ConversationEntity(peerUserId = peer, title = c.title, lastActivityMs = c.lastActivityMs,
+                unread = c.unread, draft = c.draft, groupId = group, type = c.type))
+            ids[c.id] = if (id > 0) id else (peer?.let { db.conversationDao().byPeer(it) } ?: group?.let { db.conversationDao().byGroup(it) })?.id ?: -1
         }
         s.messagesList.forEach { m ->
             val cid = ids[m.conversationId]?.takeIf { it > 0 } ?: return@forEach
@@ -105,13 +111,15 @@ object SnapshotCodec {
             })
         }
         s.groupsList.forEach { g ->
+            val have = db.groupDao().get(g.groupId.toByteArray())
+            if (have != null && have.version >= g.version) return@forEach
             db.groupDao().upsert(GroupEntity(g.groupId.toByteArray(), g.name, g.family, g.version, g.stateSigned.toByteArray(),
                 g.prevState.toByteArray().takeIf { it.isNotEmpty() }, g.iAmMember, g.createdBy.toByteArray()))
             db.groupDao().replaceMembers(g.groupId.toByteArray(), g.membersList.map { GroupMemberEntity(g.groupId.toByteArray(), it.userId.toByteArray(), it.admin) })
         }
         settings.setPhotoAutoDownload(s.photoAutoDownload)
         settings.setPhotoSaveToGallery(s.photoSaveToGallery)
-        settings.setEntryVersion(s.entryVersion)
+        settings.setEntryVersion(maxOf(settings.entryVersion(), s.entryVersion))
     }
 
     fun gzip(s: BackupSnapshot): ByteArray = ByteArrayOutputStream().also { o -> GZIPOutputStream(o).use { s.writeTo(it) } }.toByteArray()

@@ -4,6 +4,7 @@ import app.ottermsg.core.crypto.ManifestVerifier
 import app.ottermsg.core.crypto.RecordCodec
 import app.ottermsg.core.data.Clock
 import app.ottermsg.core.data.account.AccountRepository
+import app.ottermsg.core.data.directory.DirectorySync
 import app.ottermsg.core.data.messaging.SessionResets
 import app.ottermsg.core.data.registration.Registration
 import app.ottermsg.core.data.settings.Settings
@@ -22,6 +23,7 @@ import javax.inject.Singleton
 class InstallGuard @Inject constructor(
     private val db: OtterDatabase, private val accounts: AccountRepository, private val settings: Settings,
     private val signal: SignalService, private val resets: SessionResets, private val clock: Clock,
+    private val directory: DirectorySync,
 ) {
     /** False when this install is superseded: the caller must stop syncing. */
     suspend fun afterLogin(api: NodeApi, resp: LoginResponse): Boolean {
@@ -48,6 +50,7 @@ class InstallGuard @Inject constructor(
         settings.setNextOneTimeId(next)
         api.uploadPrekeys(RecordCodec.sign(RecordCodec.body(RecordType.PREKEYS, me.userId, payload.toByteArray(), createdMs = now), me.accountKey))
         settings.setRestorePending(false)
+        directory.sync(api) // a words-only restore has no contacts yet: everyone must get the reset
         resets.sendToAll()
     }
 }

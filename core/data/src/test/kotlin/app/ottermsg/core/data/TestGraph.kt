@@ -81,7 +81,7 @@ class TestGraph(
     val resets = app.ottermsg.core.data.messaging.SessionResets(db, signal, outbox, clock)
     val groupReceiver = GroupReceiver(db, accounts, signal, applier, outbox, clock, incomingPhotos, resets)
     val receiver = MailboxReceiver(db, accounts, signal, directory, outbox, clock, groupReceiver, incomingPhotos, resets)
-    val guard = app.ottermsg.core.data.backup.InstallGuard(db, accounts, settings, signal, resets, clock)
+    val guard = app.ottermsg.core.data.backup.InstallGuard(db, accounts, settings, signal, resets, clock, directory)
     val backups = app.ottermsg.core.data.backup.BackupManager(ApplicationProvider.getApplicationContext(), db, accounts, settings,
         SeedVault(XorWrapper), { app.ottermsg.core.data.invite.OnlineApi { session } }, clock)
         .apply { derive = { pw, salt -> app.ottermsg.core.crypto.BackupKeys.derive(pw, salt, mKib = 1024, t = 1, p = 1) } }
@@ -99,6 +99,8 @@ class TestGraph(
         }
     }
     val registration get() = Registration(db, connector, SeedVault(XorWrapper), accounts, settings, clock, allowPlaintext = true)
+    val restore get() = app.ottermsg.core.data.backup.RestoreManager(db, connector, SeedVault(XorWrapper), accounts, settings, clock, allowPlaintext = true)
+        .apply { derive = { pw, salt, _, _, _ -> app.ottermsg.core.crypto.BackupKeys.derive(pw, salt, mKib = 1024, t = 1, p = 1) } }
     private val noTransport = object : Transport { override suspend fun connect(candidate: app.ottermsg.core.network.Candidate) = throw IOException("unused") }
     val manifests = app.ottermsg.core.data.sync.ManifestUpdater(db.manifestDao(), settings, clock)
     val engine = SyncEngine(app.ottermsg.core.network.InMemoryEndpointStats(),
