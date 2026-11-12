@@ -28,6 +28,7 @@ class SmokeTest {
             compose.onAllNodes(androidx.compose.ui.test.hasText(ctx.getString(OnboardingR.string.onb_welcome_join))).fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText(ctx.getString(OnboardingR.string.onb_welcome_title)).assertExists()
+        compose.onNodeWithText(ctx.getString(OnboardingR.string.onb_welcome_restore)).assertExists() // M6: restore entry
         compose.onNodeWithTag(ILLUSTRATION_TAG).assertExists()
     }
 

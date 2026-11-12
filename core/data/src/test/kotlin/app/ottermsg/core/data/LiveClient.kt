@@ -76,6 +76,18 @@ class LiveClient {
     val engine: SyncEngine = SyncEngine(stats, selector, accounts, settings, manifests, directory, receiver, outbox, prekeys, profile, media, scope, true, clock, guard, backups)
     val invites = InviteRepository(accounts, settings, db.manifestDao(), engine, clock)
     val registration = Registration(db, TransportConnector(selector), SeedVault(XorWrapper), accounts, settings, clock, allowPlaintext = true)
+    val restore = app.ottermsg.core.data.backup.RestoreManager(db, TransportConnector(selector), SeedVault(XorWrapper), accounts, settings, clock,
+        allowPlaintext = true)
+
+    /** Before a restore (no manifest stored yet): makes the race start at node [label] of the invite's network. */
+    suspend fun preferFor(link: String, label: String?) {
+        if (label == null) return
+        val m = app.ottermsg.core.crypto.ManifestVerifier.verify(app.ottermsg.core.crypto.InviteLink.decode(link).manifest.toByteArray(),
+            app.ottermsg.core.crypto.InviteLink.decode(link).networkPub.toByteArray(), 0)
+        for (c in app.ottermsg.core.network.Endpoints.candidates(m, true)) {
+            if (c.label == label) stats.success(c.key, 1, clock.now()) else stats.failure(c.key, clock.now())
+        }
+    }
     val me get() = accounts.require()
 
     suspend fun register(link: String, name: String, username: String) =
