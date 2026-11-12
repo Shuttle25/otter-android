@@ -78,7 +78,41 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
     fun observeBackupError(): Flow<Int> = observeInt(BACKUP_ERROR, 0)
     fun observeBackupEnabled(): Flow<Boolean> = dao.observe(BACKUP_SECRET).map { it != null }
 
+    // ---- push (D60/D61) and notifications (D62) ----
+    suspend fun pushToken(): String? = dao.get(PUSH_TOKEN)?.decodeToString()
+    suspend fun setPushToken(v: String) = dao.put(SettingEntity(PUSH_TOKEN, v.encodeToByteArray()))
+    fun observePushToken(): Flow<String?> = dao.observe(PUSH_TOKEN).map { it?.decodeToString() }
+    suspend fun pushTokenSent(): String? = dao.get(PUSH_TOKEN_SENT)?.decodeToString()
+    suspend fun setPushTokenSent(v: String) = dao.put(SettingEntity(PUSH_TOKEN_SENT, v.encodeToByteArray()))
+    /** Google Play services + Firebase configured in this build (set by the app at start). */
+    suspend fun pushAvailable(): Boolean = (int(PUSH_AVAILABLE) ?: 0) != 0
+    suspend fun setPushAvailable(v: Boolean) = putInt(PUSH_AVAILABLE, if (v) 1 else 0)
+    fun observePushAvailable(): Flow<Boolean> = observeInt(PUSH_AVAILABLE, 0).map { it != 0 }
+    suspend fun pushLastWakeMs(): Long = long(PUSH_LAST_WAKE_MS) ?: 0
+    suspend fun setPushLastWakeMs(v: Long) = putLong(PUSH_LAST_WAKE_MS, v)
+    /** Times of recent missed FCM wake-ups (D61). */
+    suspend fun pushMisses(): List<Long> = parseMisses(dao.get(PUSH_MISSES))
+    suspend fun setPushMisses(v: List<Long>) = dao.put(SettingEntity(PUSH_MISSES, v.joinToString(",").encodeToByteArray()))
+    fun observePushMisses(): Flow<List<Long>> = dao.observe(PUSH_MISSES).map(::parseMisses)
+    private fun parseMisses(b: ByteArray?): List<Long> = b?.decodeToString()?.split(',')?.mapNotNull { it.toLongOrNull() } ?: emptyList()
+    /** When the engine last went fully offline (no lease); 0 = never. */
+    suspend fun lastOfflineMs(): Long = long(LAST_OFFLINE_MS) ?: 0
+    suspend fun setLastOfflineMs(v: Long) = putLong(LAST_OFFLINE_MS, v)
+    suspend fun notificationsEnabled(): Boolean = (int(NOTIF_ENABLED) ?: 1) != 0
+    suspend fun setNotificationsEnabled(v: Boolean) = putInt(NOTIF_ENABLED, if (v) 1 else 0)
+    fun observeNotificationsEnabled(): Flow<Boolean> = observeInt(NOTIF_ENABLED, 1).map { it != 0 }
+    suspend fun notificationPermissionAsked(): Boolean = (int(NOTIF_ASKED) ?: 0) != 0
+    suspend fun setNotificationPermissionAsked() = putInt(NOTIF_ASKED, 1)
+
     companion object {
+        const val PUSH_TOKEN = "push_token"
+        const val PUSH_TOKEN_SENT = "push_token_sent"
+        const val PUSH_AVAILABLE = "push_available"
+        const val PUSH_LAST_WAKE_MS = "push_last_wake_ms"
+        const val PUSH_MISSES = "push_misses"
+        const val LAST_OFFLINE_MS = "last_offline_ms"
+        const val NOTIF_ENABLED = "notifications_enabled"
+        const val NOTIF_ASKED = "notifications_permission_asked"
         const val INSTALLED_MS = "installed_ms"
         const val RESTORE_PENDING = "restore_pending"
         const val SUPERSEDED = "superseded"

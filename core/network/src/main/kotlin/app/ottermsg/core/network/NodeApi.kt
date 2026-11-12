@@ -55,6 +55,8 @@ interface NodeApi {
     /** Public: on success this connection may blob.get the backup blob (D51). */
     suspend fun backupFetch(username: String, authSecret: ByteArray): BackupFetchResponse
     suspend fun backupPublish(meta: Record)
+    /** PUSH_TOKEN record (D60). Default: no push support (fakes). */
+    suspend fun registerPush(record: Record) {}
 }
 
 class RemoteNodeApi(private val rpc: RpcClient, private val clock: () -> Long = System::currentTimeMillis) : NodeApi {
@@ -98,4 +100,5 @@ class RemoteNodeApi(private val rpc: RpcClient, private val clock: () -> Long = 
         BackupFetchResponse.parseFrom(rpc.call("backup.fetch", BackupFetchRequest.newBuilder().setUsername(username)
             .setAuthSecret(ByteString.copyFrom(authSecret)).build()))
     override suspend fun backupPublish(meta: Record) { rpc.call("backup.publish", req(meta)) }
+    override suspend fun registerPush(record: Record) { rpc.call("push.register", req(record)) }
 }

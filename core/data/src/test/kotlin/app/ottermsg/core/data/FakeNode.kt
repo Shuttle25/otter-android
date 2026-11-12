@@ -99,6 +99,8 @@ class FakeNode(private val clock: () -> Long) {
         mailboxes.remove(user.hex())
     }
     var sends = 0; private set
+    /** Current push token per user (hex), from push.register (D60). */
+    val pushTokens = mutableMapOf<String, String>()
 
     fun bootstrapLink(ttlMs: Long = 3_600_000): String {
         val secret = ByteArray(32).also(SecureRandom()::nextBytes)
@@ -344,6 +346,12 @@ class FakeNode(private val clock: () -> Long) {
         } }
 
         override suspend fun ping() { check() }
+
+        override suspend fun registerPush(record: Record) { check(); synchronized(lock) {
+            val b = verifyUser(record)
+            if (b.type != RecordType.PUSH_TOKEN || !b.author.toByteArray().contentEquals(me())) fail(Status.STATUS_INVALID, "push token")
+            pushTokens[b.author.hex()] = app.ottermsg.proto.v1.PushToken.parseFrom(b.payload).token
+        } }
 
         /** Set by a successful backup.fetch on a connection that is not logged in (D51). */
         @Volatile var grantBlob: ByteArray? = null; private set
