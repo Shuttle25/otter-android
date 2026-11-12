@@ -84,6 +84,7 @@ fun ChatListRoute(myName: String, mySeed: ByteArray, onOpen: (Long) -> Unit, onN
 
 @Composable
 internal fun ChatRowItem(row: ChatRow, me: ByteArray, names: Names, onClick: () -> Unit) {
+    val title = if (row.news) stringResource(R.string.news_title) else row.title
     val body = when {
         !row.photo -> row.preview
         row.preview.isNullOrBlank() -> stringResource(R.string.chats_preview_photo)
@@ -104,15 +105,15 @@ internal fun ChatRowItem(row: ChatRow, me: ByteArray, names: Names, onClick: () 
         Modifier.fillMaxWidth().heightIn(min = Dimens.settingsRowWithCaptionMin).clickable(onClick = onClick)
             .padding(horizontal = Dimens.screenGutter, vertical = Dimens.s8)
             .semantics(mergeDescendants = true) {
-                contentDescription = listOfNotNull(row.title, preview.ifEmpty { null }, statusLabel, row.time, unreadLabel).joinToString(", ")
+                contentDescription = listOfNotNull(title, preview.ifEmpty { null }, statusLabel, row.time, unreadLabel).joinToString(", ")
             },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        OtterAvatar(row.title, row.seed, family = row.family)
+        OtterAvatar(title, row.seed, family = row.family, news = row.news)
         Spacer(Modifier.width(Dimens.s12))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(row.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 Text(row.time, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {

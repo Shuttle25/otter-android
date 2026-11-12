@@ -19,6 +19,8 @@ data class MessageUi(
     val photo: PhotoUi? = null,
     /** SYSTEM_RESET: this contact restored their account (D53); rendered as a centered chip with their name. */
     val resetName: String? = null,
+    /** kind = NEWS: the signed announcement (text picked in the phone's language at display time, D69). */
+    val news: app.ottermsg.proto.v1.Announcement? = null,
 ) {
     val isEvent: Boolean get() = event != null || resetName != null
 }

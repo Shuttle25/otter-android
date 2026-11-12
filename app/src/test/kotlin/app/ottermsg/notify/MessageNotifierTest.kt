@@ -101,4 +101,32 @@ class MessageNotifierTest {
         notifier.onIncoming(cid)
         assertTrue(shadowNm.allNotifications.isEmpty())
     }
+
+    @Test fun newsUsesTheNewsChannelWithoutReply() = runBlocking {
+        val news = db.conversationDao().getOrCreateNews(1)
+        val now = System.currentTimeMillis()
+        val old = now - 10 * 86_400_000L
+        for ((i, p) in listOf(old to "старая", now to "Вышла версия 0.6.0").withIndex()) {
+            db.messageDao().insert(MessageEntity(messageId = ByteArray(32) { (i + 1).toByte() }, conversationId = news,
+                senderId = ByteArray(16) { 7 }, outgoing = false, sentMs = p.first, receivedMs = now, body = p.second,
+                status = MessageStatus.DELIVERED, kind = MessageKind.NEWS))
+            db.conversationDao().incrementUnread(news)
+        }
+        notifier.onIncoming(news)
+        val n = shadowNm.getNotification(news.toInt())!!
+        assertEquals(Channels.NEWS, n.channelId)
+        assertEquals(Notification.VISIBILITY_PRIVATE, n.visibility)
+        assertEquals("Новое сообщение", n.publicVersion.extras.getCharSequence(Notification.EXTRA_TEXT).toString())
+        assertEquals(listOf("Прочитано"), n.actions.map { it.title.toString() })
+        val style = NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(n)!!
+        assertEquals("Новости Выдры", style.conversationTitle.toString())
+        assertEquals(false, style.isGroupConversation)
+        assertEquals(listOf("Вышла версия 0.6.0"), style.messages.map { it.text.toString() }) // older than 3 days: no line
+        assertEquals("Выдра", style.messages[0].person!!.name.toString())
+        val channel = app.getSystemService(NotificationManager::class.java).getNotificationChannel(Channels.NEWS)
+        assertEquals("Новости", channel.name.toString())
+        assertEquals(NotificationManager.IMPORTANCE_DEFAULT, channel.importance)
+        notifier.onRead(news)
+        assertNull(shadowNm.getNotification(news.toInt()))
+    }
 }

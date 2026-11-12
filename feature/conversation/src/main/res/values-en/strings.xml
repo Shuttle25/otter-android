@@ -49,4 +49,11 @@
     <string name="viewer_back">Back</string>
     <string name="conv_system_reset">%1$s restored their account</string>
     <string name="conv_photo_not_in_backup">Not in the backup</string>
+    <!-- M6.5: Otter News (D64, D69) -->
+    <string name="news_title">Otter News</string>
+    <string name="news_sender">Otter</string>
+    <string name="news_link_title">Open link?</string>
+    <string name="news_link_open">Open</string>
+    <string name="news_link_cancel">Cancel</string>
+    <string name="news_link_label">Link: %1$s</string>
 </resources>

@@ -79,4 +79,15 @@ class ChatListViewModelTest {
         assertEquals(true, rows[0].photo); assertEquals("Дача", rows[0].preview)
         assertEquals(false, rows[1].photo)
     }
+
+    @Test fun newsRowPicksTextInPhoneLanguage() {
+        val a = app.ottermsg.proto.v1.Announcement.newBuilder().setTextRu("Привет").setTextEn("Hello").build()
+        val s = ConversationSummary(7, "", null, 1, now, "Привет", MessageStatus.DELIVERED, false, MessageKind.NEWS,
+            lastSenderId = ByteArray(16), lastSystemData = a.toByteArray(), type = app.ottermsg.core.database.entity.ConversationType.NEWS)
+        val en = chatRows(listOf(s), now, zone, Locale.ENGLISH).single()
+        assertTrue(en.news)
+        assertEquals("Hello", en.preview)
+        assertNull(en.authorName)
+        assertEquals("Привет", chatRows(listOf(s), now, zone, Locale.forLanguageTag("ru")).single().preview)
+    }
 }

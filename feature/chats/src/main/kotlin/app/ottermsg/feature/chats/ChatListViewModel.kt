@@ -9,6 +9,8 @@ import app.ottermsg.feature.chats.Names.Companion.hex
 import app.ottermsg.proto.v1.GroupEvent
 import app.ottermsg.core.data.messaging.MessageRepository
 import app.ottermsg.core.data.sync.SyncEngine
+import app.ottermsg.core.data.news.NewsText
+import app.ottermsg.core.database.entity.ConversationType
 import app.ottermsg.core.database.model.ConversationSummary
 import app.ottermsg.core.database.model.MessageKind
 import app.ottermsg.core.network.ConnectionState
@@ -43,6 +45,8 @@ data class ChatRow(
     val photo: Boolean = false,
     /** Last item: this contact restored their account (D53). */
     val resetBy: String? = null,
+    /** The «Новости Выдры» chat (D64): localized title and the otter avatar in the UI. */
+    val news: Boolean = false,
 )
 
 /** Display names by user id (hex), for group previews and events. */
@@ -64,7 +68,8 @@ fun chatRows(list: List<ConversationSummary>, nowMs: Long, zone: ZoneId, locale:
         ChatRow(
             id = s.id, title = s.title, seed = s.seed,
             preview = if (s.lastKind == MessageKind.SYSTEM_UNDECRYPTABLE || s.lastKind == MessageKind.SYSTEM_GROUP ||
-                s.lastKind == MessageKind.SYSTEM_RESET) "" else s.lastBody,
+                s.lastKind == MessageKind.SYSTEM_RESET) "" else if (s.lastKind == MessageKind.NEWS)
+                NewsText.of(s.lastSystemData, locale.language) ?: s.lastBody else s.lastBody,
             previewIsSystem = s.lastKind == MessageKind.SYSTEM_UNDECRYPTABLE,
             outgoing = s.lastOutgoing == true,
             status = if (s.lastOutgoing == true) s.lastStatus else null,
@@ -76,6 +81,7 @@ fun chatRows(list: List<ConversationSummary>, nowMs: Long, zone: ZoneId, locale:
             event = if (s.lastKind == MessageKind.SYSTEM_GROUP) parseGroupEvent(s.lastSystemData) else null,
             photo = s.lastKind == MessageKind.PHOTO,
             resetBy = if (s.lastKind == MessageKind.SYSTEM_RESET) s.title else null, // resets live in direct chats
+            news = s.type == ConversationType.NEWS,
         )
     }
 }

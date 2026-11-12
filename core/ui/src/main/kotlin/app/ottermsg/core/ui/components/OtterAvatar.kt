@@ -28,11 +28,18 @@ private val FamilyCircle = Color(0xFFDCF1E3)
 
 /**
  * Avatar (D34). [family] groups show the Otter family art fitted inside a mint circle (never cropped);
+ * [news] (the «Новости Выдры» chat, D64) shows the app-icon otter, full-bleed inside the circle;
  * everyone else gets coloured initials whose colour comes from [seed] (user id / group id), so it survives renames.
  * Decorative: the surrounding row already names the person or group (guide §12).
  */
 @Composable
-fun OtterAvatar(name: String, seed: ByteArray, size: Dp = Dimens.avatarList, modifier: Modifier = Modifier, family: Boolean = false) {
+fun OtterAvatar(name: String, seed: ByteArray, size: Dp = Dimens.avatarList, modifier: Modifier = Modifier, family: Boolean = false,
+    news: Boolean = false) {
+    if (news) {
+        Image(painterResource(R.drawable.otter_news_avatar), contentDescription = null, contentScale = ContentScale.Crop,
+            modifier = modifier.size(size).clip(CircleShape).clearAndSetSemantics {})
+        return
+    }
     if (family) {
         Box(modifier.size(size).clip(CircleShape).background(FamilyCircle).clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
             Image(painterResource(R.drawable.otter_family_avatar), contentDescription = null, contentScale = ContentScale.Fit,

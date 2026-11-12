@@ -31,4 +31,10 @@ class NotificationContentTest {
             msg(2, "", MessageKind.SYSTEM_GROUP, 6), msg(9, "мой", t = 7, outgoing = true)), emptyMap(), "Фото")
         assertEquals(listOf("Семья" to "a", "Семья" to "b"), c.lines.map { it.sender to it.text })
     }
+
+    @Test fun newsLinesUseTheLocalizedSender() {
+        val c = NotificationContent.build("Новости Выдры", false, listOf(msg(5, "Вышла версия 0.6.0", MessageKind.NEWS, 1)),
+            emptyMap(), "Фото", newsSender = "Выдра")
+        assertEquals(listOf("Выдра" to "Вышла версия 0.6.0"), c.lines.map { it.sender to it.text })
+    }
 }

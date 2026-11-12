@@ -24,4 +24,5 @@
     <string name="chats_preview_photo">Photo</string>
     <string name="chats_preview_photo_caption">Photo: %1$s</string>
     <string name="chats_system_reset">%1$s restored their account</string>
+    <string name="news_title">Otter News</string>
 </resources>

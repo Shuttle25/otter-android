@@ -13,6 +13,8 @@ import app.ottermsg.core.data.push.ActiveConversation
 import app.ottermsg.core.database.entity.AttachmentEntity
 import app.ottermsg.core.database.entity.ContactEntity
 import app.ottermsg.core.database.entity.ConversationEntity
+import app.ottermsg.core.database.entity.ConversationType
+import app.ottermsg.proto.v1.Announcement
 import app.ottermsg.core.database.entity.MessageEntity
 import app.ottermsg.core.ui.components.parseGroupEvent
 import app.ottermsg.core.database.model.MessageKind
@@ -48,6 +50,8 @@ data class ConversationUi(
     val me: ByteArray = ByteArray(0),
     /** Display names by user id hex, for group events. */
     val names: Map<String, String> = emptyMap(),
+    /** The «Новости Выдры» chat (D64): localized title, otter avatar, no composer. */
+    val isNews: Boolean = false,
 ) {
     fun nameOf(id: ByteArray): String = names[id.hex()] ?: "?"
 }
@@ -64,6 +68,7 @@ fun conversationUi(
     val title = conv?.title.orEmpty()
     val names = contacts.associate { it.userId.hex() to it.displayName }
     val isGroup = conv?.groupId != null
+    val isNews = conv?.type == ConversationType.NEWS
     val list = msgs.map {
         val author = when {
             it.outgoing -> ""
@@ -75,14 +80,15 @@ fun conversationUi(
             event = if (it.kind == MessageKind.SYSTEM_GROUP) parseGroupEvent(it.systemData) else null,
             inGroup = isGroup && !it.outgoing,
             photo = if (it.kind == MessageKind.PHOTO) attachments[it.localId]?.let(::photoUi) else null,
-            resetName = if (it.kind == MessageKind.SYSTEM_RESET) (names[it.senderId.hex()] ?: title) else null)
+            resetName = if (it.kind == MessageKind.SYSTEM_RESET) (names[it.senderId.hex()] ?: title) else null,
+            news = if (it.kind == MessageKind.NEWS) it.systemData?.let { d -> runCatching { Announcement.parseFrom(d) }.getOrNull() } else null)
     }
     return ConversationUi(true, title, conv?.peerUserId ?: conv?.groupId ?: ByteArray(0), groupMessages(list, zone),
         msgs.lastOrNull { !it.outgoing && it.kind != MessageKind.SYSTEM_GROUP && it.kind != MessageKind.SYSTEM_RESET }?.localId,
         isGroup = isGroup, family = group?.group?.family == true, groupIdHex = conv?.groupId?.hex().orEmpty(),
         memberCount = group?.members?.size ?: 0,
-        canWrite = !isGroup || group?.group?.iAmMember == true,
-        me = me, names = names)
+        canWrite = !isNews && (!isGroup || group?.group?.iAmMember == true),
+        me = me, names = names, isNews = isNews)
 }
 
 @OptIn(FlowPreview::class)
