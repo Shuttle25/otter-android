@@ -34,15 +34,19 @@ class NodeSelector(
             { if (group(it.third) == 0) it.third!!.rttMs else 0L }, { it.second.priority }, { it.first })).map { it.second }
     }
 
-    /** Returns the first candidate that completes transport + hello, or null if all fail. [scope] owns the winner's RpcClient. */
-    suspend fun race(cands: List<Candidate>, scope: CoroutineScope): Winner? = coroutineScope {
+    /**
+     * Returns the first candidate that completes transport + hello, or null if all fail. [scope] owns the winner's RpcClient.
+     * With [headStartMs] > 0 and a recently good first candidate, the others start only after [headStartMs] (wake-ups, D61).
+     */
+    suspend fun race(cands: List<Candidate>, scope: CoroutineScope, headStartMs: Long = 0): Winner? = coroutineScope {
         val ordered = order(cands)
         if (ordered.isEmpty()) return@coroutineScope null
+        val lead = headStartMs > 0 && ordered.size > 1 && recentlyGood(ordered[0])
         val results = Channel<Pair<Candidate, Winner?>>(Channel.UNLIMITED)
         val gate = Semaphore(maxParallel)
         val jobs = ordered.mapIndexed { i, c ->
             launch {
-                delay(i * staggerMs)
+                delay(if (i == 0) 0 else if (lead) headStartMs + (i - 1) * staggerMs else i * staggerMs)
                 gate.withPermit {
                     val t0 = clock()
                     val w = try {
@@ -103,6 +107,12 @@ class NodeSelector(
                 }
             }
         }.awaitAll().filterNotNull().minOrNull()
+    }
+
+    private suspend fun recentlyGood(c: Candidate): Boolean {
+        val s = stats.get(c.key) ?: return false
+        val now = clock()
+        return s.lastSuccessMs > 0 && now - s.lastSuccessMs < RECENT_SUCCESS_MS && s.lastSuccessMs >= s.lastFailureMs
     }
 
     private companion object {

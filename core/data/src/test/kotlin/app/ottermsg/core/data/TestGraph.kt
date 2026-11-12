@@ -31,7 +31,6 @@ import app.ottermsg.core.data.sync.SyncEngine
 import app.ottermsg.core.database.OtterDatabase
 import app.ottermsg.core.database.key.KeyWrapper
 import app.ottermsg.core.network.NodeApi
-import app.ottermsg.core.network.Transport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -101,11 +100,16 @@ class TestGraph(
     val registration get() = Registration(db, connector, SeedVault(XorWrapper), accounts, settings, clock, allowPlaintext = true)
     val restore get() = app.ottermsg.core.data.backup.RestoreManager(db, connector, SeedVault(XorWrapper), accounts, settings, clock, allowPlaintext = true)
         .apply { derive = { pw, salt, _, _, _ -> app.ottermsg.core.crypto.BackupKeys.derive(pw, salt, mKib = 1024, t = 1, p = 1) } }
-    private val noTransport = object : Transport { override suspend fun connect(candidate: app.ottermsg.core.network.Candidate) = throw IOException("unused") }
+    /** The engine's own connections (start / acquire) reach [node] through this. */
+    val transport = FakeNodeTransport(node)
     val manifests = app.ottermsg.core.data.sync.ManifestUpdater(db.manifestDao(), settings, clock)
-    val engine = SyncEngine(app.ottermsg.core.network.InMemoryEndpointStats(),
-        app.ottermsg.core.network.NodeSelector(noTransport, app.ottermsg.core.network.InMemoryEndpointStats(), clock::now),
-        accounts, settings, manifests, directory, receiver, outbox, prekeys, profile, media, scope, true, clock, guard, backups)
+    val pushMonitor = app.ottermsg.core.data.push.PushMonitor(settings, clock)
+    private val endpointStats = app.ottermsg.core.network.InMemoryEndpointStats()
+    val engine = SyncEngine(endpointStats, app.ottermsg.core.network.NodeSelector(transport, endpointStats, clock::now),
+        accounts, settings, manifests, directory, receiver, outbox, prekeys, profile, media, scope, true, clock, guard, backups,
+        pushMonitor = pushMonitor)
+    val foreground = app.ottermsg.core.data.sync.ForegroundSync({ engine.acquire(SyncEngine.FOREGROUND) },
+        { engine.release(SyncEngine.FOREGROUND) }, scope)
     val seed = ByteArray(32).also(SecureRandom()::nextBytes)
     val me get() = accounts.require()
 
@@ -130,11 +134,11 @@ class TestGraph(
 
     /** Simulates an app restart: this graph stops (database kept), a new graph opens on the same database. */
     suspend fun restart(): TestGraph {
-        offline(); scope.cancel(); closeDb = false
+        offline(); engine.stop(); scope.cancel(); closeDb = false
         return TestGraph(node, clock, db, graphId).also { it.accounts.load() }
     }
 
-    fun close() { offline(); scope.cancel(); if (closeDb) db.close() }
+    fun close() { offline(); engine.stop(); scope.cancel(); if (closeDb) db.close() }
 }
 
 suspend fun eventually(timeoutMs: Long = 15_000, what: String = "condition", cond: suspend () -> Boolean) {

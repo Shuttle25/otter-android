@@ -1,18 +1,24 @@
 package app.ottermsg.core.data
 
+import app.ottermsg.core.data.push.AppVisibility
 import app.ottermsg.core.data.sync.ForegroundSync
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ForegroundSyncTest {
     @Test fun stopsTenSecondsAfterBackgroundUnlessReturning() = runTest {
         var starts = 0; var stops = 0
-        val fs = ForegroundSync({ starts++ }, { stops++ }, backgroundScope)
+        val visibility = AppVisibility()
+        val fs = ForegroundSync({ starts++ }, { stops++ }, backgroundScope, {}, visibility)
         fs.foreground()
+        assertTrue(visibility.visible)
         fs.background()
+        assertFalse(visibility.visible)
         advanceTimeBy(9_000); runCurrent()
         fs.foreground() // came back in time: no stop
         advanceTimeBy(20_000); runCurrent()
@@ -27,7 +33,7 @@ class ForegroundSyncTest {
     @Test fun foregroundRetriesWhenWaiting() = runTest {
         var state: app.ottermsg.core.network.ConnectionState = app.ottermsg.core.network.ConnectionState.Waiting(Long.MAX_VALUE, "backoff")
         var retries = 0
-        val fs = ForegroundSync({}, {}, backgroundScope) { if (state is app.ottermsg.core.network.ConnectionState.Waiting) retries++ }
+        val fs = ForegroundSync({}, {}, backgroundScope, { if (state is app.ottermsg.core.network.ConnectionState.Waiting) retries++ })
         fs.foreground()
         assertEquals(1, retries)
         state = app.ottermsg.core.network.ConnectionState.Connecting

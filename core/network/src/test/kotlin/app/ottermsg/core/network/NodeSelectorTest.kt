@@ -57,4 +57,29 @@ class NodeSelectorTest {
         val order = sel.order(listOf(cand("broken", 0), cand("new2", 2), cand("ok-slow", 9), cand("stale", 3), cand("old-fail", 1), cand("ok-fast", 9)))
         assertEquals(listOf("ok-fast", "ok-slow", "old-fail", "new2", "stale", "broken"), order.map { it.url })
     }
+
+    @Test fun headStartGivesTheLastGoodNodeTwoSeconds() = runTest {
+        val t = FakeTransport(delays = mapOf("good" to 1_500, "other" to 10)) { ok() }
+        val stats = InMemoryEndpointStats()
+        val clock = { 1_000L + currentTime }                      // lastSuccessMs = 0 means "never"
+        stats.success("good", 40, clock())                        // recently successful → ordered first
+        val w = NodeSelector(t, stats, clock).race(listOf(cand("other"), cand("good")), backgroundScope, headStartMs = 2_000)!!
+        assertEquals("good", w.candidate.url)
+        assertTrue("other must not even be dialed", t.byUrl["other"].isNullOrEmpty())
+    }
+
+    @Test fun headStartIgnoredWithoutAKnownGoodNode() = runTest {
+        val t = FakeTransport(delays = mapOf("a" to 1_500, "b" to 10)) { ok() }
+        val w = NodeSelector(t, InMemoryEndpointStats(), { currentTime }).race(listOf(cand("a"), cand("b")), backgroundScope, headStartMs = 2_000)!!
+        assertEquals("b", w.candidate.url)
+    }
+
+    @Test fun withoutHeadStartTheOthersStillRace() = runTest {
+        val t = FakeTransport(delays = mapOf("good" to 1_500, "other" to 10)) { ok() }
+        val stats = InMemoryEndpointStats()
+        val clock = { 1_000L + currentTime }
+        stats.success("good", 40, clock())
+        val w = NodeSelector(t, stats, clock).race(listOf(cand("other"), cand("good")), backgroundScope)!!
+        assertEquals("other", w.candidate.url)
+    }
 }

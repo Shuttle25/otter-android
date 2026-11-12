@@ -38,6 +38,8 @@ class ConnectionManager(
     val state: StateFlow<ConnectionState> = _state
     private var job: Job? = null
     @Volatile private var rpc: RpcClient? = null
+    /** Head start for the last-good endpoint in the next race only (wake-ups, D61); reset when used. */
+    @Volatile var nextHeadStartMs = 0L
     @Volatile private var raceNow = false
     @Volatile private var resetBackoff = false
     private val wake = Channel<Unit>(Channel.CONFLATED)
@@ -82,7 +84,7 @@ class ConnectionManager(
             var remaining = candidates()
             var lastError = if (remaining.isEmpty()) "no endpoints" else "unreachable"
             while (remaining.isNotEmpty()) {
-                val w = selector.race(remaining, scope) ?: break
+                val w = selector.race(remaining, scope, nextHeadStartMs.also { nextHeadStartMs = 0 }) ?: break
                 val session = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job]))
                 rpc = w.rpc
                 try {

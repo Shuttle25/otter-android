@@ -12,6 +12,8 @@ import app.ottermsg.core.data.directory.DirectorySync
 import app.ottermsg.core.data.invite.OnlineApi
 import app.ottermsg.core.data.messaging.MailboxReceiver
 import app.ottermsg.core.data.messaging.Outbox
+import app.ottermsg.core.data.push.PushMonitor
+import app.ottermsg.core.data.push.PushRegistrar
 import app.ottermsg.core.data.settings.Settings
 import app.ottermsg.core.data.signal.PrekeyRefill
 import app.ottermsg.core.network.Candidate
@@ -24,6 +26,7 @@ import app.ottermsg.proto.v1.Event
 import app.ottermsg.proto.v1.ManifestResponse
 import app.ottermsg.proto.v1.PrekeysLow
 import app.ottermsg.proto.v1.RecordBatch
+import app.ottermsg.proto.v1.RecordBody
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.StateFlow
@@ -47,11 +50,33 @@ class SyncEngine @Inject constructor(
     private val accounts: AccountRepository, private val settings: Settings, private val manifests: ManifestUpdater,
     private val directory: DirectorySync, private val receiver: MailboxReceiver, private val outbox: Outbox,
     private val prekeys: PrekeyRefill, private val profile: ProfileRepository, private val media: MediaTransfers,
-    @ApplicationScope scope: CoroutineScope, @param:AllowPlaintext private val allowPlaintext: Boolean, private val clock: Clock,
-    private val guard: InstallGuard, private val backups: BackupManager,
+    @ApplicationScope private val appScope: CoroutineScope, @param:AllowPlaintext private val allowPlaintext: Boolean,
+    private val clock: Clock, private val guard: InstallGuard, private val backups: BackupManager,
+    private val pushRegistrar: PushRegistrar = PushRegistrar(accounts, settings, clock),
+    private val pushMonitor: PushMonitor = PushMonitor(settings, clock),
 ) : OnlineApi {
-    private val manager = ConnectionManager(selector, ::candidates, stats, scope, { api -> runSession(api, this) }, clock::now)
+    private val manager = ConnectionManager(selector, ::candidates, stats, appScope, { api -> runSession(api, this) }, clock::now)
     val connection: StateFlow<ConnectionState> = manager.state
+
+    private val leases = mutableSetOf<String>()
+    /** Last login or `envelopes` event (BackgroundSync's idle clock). */
+    @Volatile var lastActivityMs: Long = 0L; private set
+    @Volatile private var sessionStartMs = 0L
+    @Volatile private var sessionId = 0L
+
+    /** Runs while at least one lease is held (D61): [FOREGROUND] (app visible) or [WAKE] (push / battery saver). */
+    @Synchronized fun acquire(tag: String) { val idle = leases.isEmpty(); leases += tag; if (idle) start() }
+    @Synchronized fun release(tag: String) {
+        if (!leases.remove(tag) || leases.isNotEmpty()) return
+        stop()
+        appScope.launch { pushMonitor.onOffline() }
+    }
+    @Synchronized fun holds(tag: String) = tag in leases
+
+    /** A push or the battery saver: give the last-good node a 2 s head start, then race (docs/05). */
+    fun startWake() { manager.nextHeadStartMs = WAKE_HEAD_START_MS; acquire(WAKE) }
+
+    suspend fun outboxHasDue(): Boolean = outbox.hasDue()
 
     /** Set once another phone restored this account (D52): the engine never connects again. */
     @Volatile private var superseded = false
@@ -80,6 +105,12 @@ class SyncEngine @Inject constructor(
             stop() // this install was replaced by a restore on another phone; the UI shows it (settings.superseded)
             return
         }
+        sessionStartMs = clock.now(); sessionId++; lastActivityMs = sessionStartMs
+        session.launch {
+            try { pushRegistrar.registerIfNeeded(api) }
+            catch (e: CancellationException) { throw e }
+            catch (e: Exception) { log.log(Level.WARNING, "push token registration failed", e) } // retried next login
+        }
         if (manifests.checkAfterLogin(api) == ManifestUpdater.Result.STORED_NODE_REMOVED) {
             reconnect() // this node is no longer part of the network
             return
@@ -94,7 +125,7 @@ class SyncEngine @Inject constructor(
     }
 
     /**
-     * Every 30 min while online (the engine only runs in the foreground): probe the other candidates and move
+     * Every 30 min while online: probe the other candidates and move
      * when one is clearly faster (RTT < 70 % of ours) three times in a row.
      */
     private suspend fun reprobeLoop(api: NodeApi) {
@@ -115,7 +146,13 @@ class SyncEngine @Inject constructor(
     private suspend fun onEvent(api: NodeApi, e: Event) {
         try {
             when (e.type) {
-                "envelopes" -> receiver.handle(api, RecordBatch.parseFrom(e.body).recordsList)
+                "envelopes" -> {
+                    lastActivityMs = clock.now()
+                    val records = RecordBatch.parseFrom(e.body).recordsList
+                    receiver.handle(api, records)
+                    pushMonitor.onDelivered(records.map { RecordBody.parseFrom(it.body).createdMs }, sessionStartMs, sessionId)
+                    lastActivityMs = clock.now()
+                }
                 "directory" -> directory.sync(api)
                 "prekeys_low" -> prekeys.refill(api, PrekeysLow.parseFrom(e.body).ownerNode.toByteArray())
                 "manifest" -> {
@@ -133,6 +170,9 @@ class SyncEngine @Inject constructor(
 
     companion object {
         const val REPROBE_EVERY_MS = 30 * 60_000L
+        const val FOREGROUND = "foreground"
+        const val WAKE = "wake"
+        const val WAKE_HEAD_START_MS = 2_000L
         private val log: Logger = Logger.getLogger("SyncEngine")
     }
 }

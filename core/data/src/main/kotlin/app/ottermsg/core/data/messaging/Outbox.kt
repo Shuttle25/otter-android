@@ -60,6 +60,9 @@ class Outbox @Inject constructor(
         }
     }
 
+    /** Something is due now (BackgroundSync keeps the engine up until it is sent). */
+    suspend fun hasDue(): Boolean = outbox.due(clock.now(), 1).isNotEmpty()
+
     /** Processes every due item once, in order. */
     suspend fun drainOnce(api: NodeApi) = mutex.withLock {
         val me = accounts.require()
