@@ -55,4 +55,14 @@
     <string name="backup_quota">Not enough space on the server</string>
     <string name="backup_failed">Backup failed. We\'ll try again later</string>
     <string name="backup_mismatch">Passwords don\'t match</string>
+    <!-- notifications (M5, D61/D62) -->
+    <string name="settings_notifications_section">Notifications</string>
+    <string name="settings_notifications">Notifications</string>
+    <string name="notif_mode_fast">Fast notifications</string>
+    <string name="notif_mode_fast_hint">Delivered via Google, almost immediately</string>
+    <string name="notif_mode_saver">Battery saver</string>
+    <string name="notif_mode_saver_hint">Checking every 15 minutes: Google services are unavailable or not responding</string>
+    <string name="notif_show">Show notifications</string>
+    <string name="notif_system">Android settings</string>
+    <string name="notif_blocked">Notifications are blocked in Android settings</string>
 </resources>

@@ -55,4 +55,14 @@
     <string name="backup_quota">На сервере не хватает места для копии</string>
     <string name="backup_failed">Не удалось создать копию. Попробуем позже</string>
     <string name="backup_mismatch">Пароли не совпадают</string>
+    <!-- notifications (M5, D61/D62) -->
+    <string name="settings_notifications_section">Уведомления</string>
+    <string name="settings_notifications">Уведомления</string>
+    <string name="notif_mode_fast">Быстрые уведомления</string>
+    <string name="notif_mode_fast_hint">Приходят через Google, почти сразу</string>
+    <string name="notif_mode_saver">Экономия батареи</string>
+    <string name="notif_mode_saver_hint">Проверяем каждые 15 минут: сервисы Google недоступны или не отвечают</string>
+    <string name="notif_show">Показывать уведомления</string>
+    <string name="notif_system">Настройки Android</string>
+    <string name="notif_blocked">Уведомления запрещены в настройках Android</string>
 </resources>

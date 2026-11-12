@@ -26,6 +26,7 @@ import app.ottermsg.feature.conversation.PhotoViewerRoute
 import app.ottermsg.feature.conversation.PhotoViewerViewModel
 import app.ottermsg.feature.settings.EditNameRoute
 import app.ottermsg.feature.settings.BackupRoute
+import app.ottermsg.feature.settings.NotificationsRoute
 import app.ottermsg.feature.settings.PhotoStorageRoute
 import app.ottermsg.feature.settings.ProfileRoute
 import app.ottermsg.feature.settings.SettingsRoute
@@ -44,6 +45,7 @@ object Routes {
     const val EDIT_NAME = "settings/profile/name"
     const val PHOTOS = "settings/photos"
     const val BACKUP = "settings/backup"
+    const val NOTIFICATIONS = "settings/notifications"
     const val PHOTO = "photo/{${PhotoViewerViewModel.ARG_LOCAL_ID}}"
     fun photo(localId: Long) = "photo/$localId"
     const val NEW_GROUP = "newGroup"
@@ -110,7 +112,8 @@ fun AppNavHost(hasAccount: Boolean, account: StateFlow<LocalAccount?>,
         composable(Routes.SETTINGS) {
             SettingsRoute(onBack = { nav.popBackStack() }, onInvite = { nav.navigate(Routes.INVITE) },
                 onProfile = { nav.navigate(Routes.PROFILE) }, onPhotos = { nav.navigate(Routes.PHOTOS) },
-                onBackup = { nav.navigate(Routes.BACKUP) }, versionText = AppVersion.current)
+                onBackup = { nav.navigate(Routes.BACKUP) }, onNotifications = { nav.navigate(Routes.NOTIFICATIONS) },
+                versionText = AppVersion.current)
         }
         composable(Routes.PROFILE) {
             ProfileRoute(onBack = { nav.popBackStack() }, onEditName = { nav.navigate(Routes.EDIT_NAME) })
@@ -118,6 +121,7 @@ fun AppNavHost(hasAccount: Boolean, account: StateFlow<LocalAccount?>,
         composable(Routes.EDIT_NAME) { EditNameRoute(onBack = { nav.popBackStack() }) }
         composable(Routes.PHOTOS) { PhotoStorageRoute(onBack = { nav.popBackStack() }) }
         composable(Routes.BACKUP) { BackupRoute(onBack = { nav.popBackStack() }) }
+        composable(Routes.NOTIFICATIONS) { NotificationsRoute(onBack = { nav.popBackStack() }) }
         composable(Routes.PHOTO, arguments = listOf(navArgument(PhotoViewerViewModel.ARG_LOCAL_ID) { type = NavType.LongType })) {
             PhotoViewerRoute(onBack = { nav.popBackStack() })
         }
