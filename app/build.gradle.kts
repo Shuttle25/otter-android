@@ -54,6 +54,17 @@ android {
     }
 }
 kotlin { jvmToolchain(21) }
+// WakeFlowTest reuses core:data's FakeNode / TestGraph. They use core:data internals, so they cannot be compiled here;
+// their compiled classes go on the unit-test classpath as a jar (AGP ignores plain class directories there). Internal
+// names are mangled per variant, so debug tests get core:data's debug test classes and release/staging the release ones.
+fun coreDataTestJar(variant: String) = tasks.register<Jar>("coreData${variant}TestJar") {
+    dependsOn(":core:data:compile${variant}UnitTestKotlin")
+    from(rootProject.project(":core:data").layout.buildDirectory.dir("tmp/kotlin-classes/${variant.lowercase()}UnitTest"))
+    archiveFileName.set("core-data-${variant.lowercase()}-test.jar")
+    destinationDirectory.set(layout.buildDirectory.dir("core-data-test"))
+}
+val coreDataDebugTestJar = coreDataTestJar("Debug")
+val coreDataReleaseTestJar = coreDataTestJar("Release")
 dependencies {
     implementation(project(":core:ui")); implementation(project(":core:database")); implementation(project(":core:crypto"))
     implementation(project(":core:data"))
@@ -71,6 +82,8 @@ dependencies {
     implementation(libs.androidx.hilt.work); ksp(libs.androidx.hilt.compiler)
     testImplementation(libs.junit); testImplementation(libs.robolectric); testImplementation(libs.androidx.test.core)
     testImplementation(libs.coroutines.test); testImplementation(libs.androidx.work.testing)
+    "testDebugImplementation"(files(coreDataDebugTestJar))
+    "testReleaseImplementation"(files(coreDataReleaseTestJar)); "testStagingImplementation"(files(coreDataReleaseTestJar))
     androidTestImplementation(libs.junit); androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit); androidTestImplementation(libs.androidx.test.espresso)
     androidTestImplementation(platform(libs.compose.bom)); androidTestImplementation(libs.compose.ui.test.junit4)
