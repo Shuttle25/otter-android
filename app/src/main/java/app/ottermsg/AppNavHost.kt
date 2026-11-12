@@ -98,7 +98,7 @@ fun AppNavHost(hasAccount: Boolean, account: StateFlow<LocalAccount?>) {
         composable(Routes.SETTINGS) {
             SettingsRoute(onBack = { nav.popBackStack() }, onInvite = { nav.navigate(Routes.INVITE) },
                 onProfile = { nav.navigate(Routes.PROFILE) }, onPhotos = { nav.navigate(Routes.PHOTOS) },
-                onBackup = { nav.navigate(Routes.BACKUP) })
+                onBackup = { nav.navigate(Routes.BACKUP) }, versionText = AppVersion.current)
         }
         composable(Routes.PROFILE) {
             ProfileRoute(onBack = { nav.popBackStack() }, onEditName = { nav.navigate(Routes.EDIT_NAME) })

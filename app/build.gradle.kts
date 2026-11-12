@@ -5,6 +5,11 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
 }
+// Short git hash for the Settings version line (D63); "dev" outside a git checkout. Configuration-cache safe.
+val gitHash: Provider<String> = providers.exec {
+    commandLine("git", "rev-parse", "--short=7", "HEAD")
+    isIgnoreExitValue = true
+}.standardOutput.asText.map { it.trim().ifEmpty { "dev" } }.orElse("dev")
 android {
     namespace = "app.ottermsg"
     compileSdk = 36
@@ -12,7 +17,8 @@ android {
     defaultConfig {
         applicationId = "app.ottermsg"
         minSdk = 26; targetSdk = 36
-        versionCode = 1; versionName = "0.1.0"
+        versionCode = 5; versionName = "0.5.0"
+        buildConfigField("String", "GIT_HASH", "\"${gitHash.get()}\"")
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

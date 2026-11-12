@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -56,7 +57,7 @@ fun connectionLabel(state: ConnectionState): Int = when (state) {
 /** Settings: profile, family invite, connection. Other sections of guide §10 arrive with their features. */
 @Composable
 fun SettingsRoute(onBack: () -> Unit, onInvite: () -> Unit, onProfile: () -> Unit, onPhotos: () -> Unit = {}, onBackup: () -> Unit = {},
-                  vm: SettingsViewModel = hiltViewModel()) {
+                  versionText: String = "", vm: SettingsViewModel = hiltViewModel()) {
     val account by vm.account.collectAsStateWithLifecycle()
     val connection by vm.connection.collectAsStateWithLifecycle()
     Scaffold(containerColor = MaterialTheme.colorScheme.background,
@@ -74,8 +75,17 @@ fun SettingsRoute(onBack: () -> Unit, onInvite: () -> Unit, onProfile: () -> Uni
             val online = connection as? ConnectionState.Online
             OtterSettingsRow(stringResource(connectionLabel(connection)), subtitle = online?.let { "${it.nodeLabel} · ${it.url}" },
                 icon = Icons.Outlined.Wifi)
+            if (versionText.isNotEmpty()) VersionFooter(versionText)
         }
     }
+}
+
+/** «Otter 0.5.0 (abc1234)» at the very bottom of Settings (D63). */
+@Composable
+fun VersionFooter(text: String) {
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Dimens.screenGutter, vertical = Dimens.s24))
 }
 
 /** Avatar 48 dp, name, @username and a chevron; the whole row opens Profile. */
