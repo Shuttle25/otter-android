@@ -46,7 +46,7 @@ class NewsRepository @Inject constructor(
                 when (val n = AnnouncementVerifier.verify(r, newsKeys)) {
                     is News.Item -> {
                         val a = n.announcement
-                        val cid = db.conversationDao().getOrCreateNews(now)
+                        val cid = db.conversationDao().getOrCreateNews(n.createdMs) // dated by the news, not by its arrival
                         val id = db.messageDao().insert(MessageEntity(messageId = n.key, conversationId = cid, senderId = n.author,
                             outgoing = false, sentMs = n.createdMs, receivedMs = now,
                             body = NewsText.pick(a.textRu, a.textEn, language),

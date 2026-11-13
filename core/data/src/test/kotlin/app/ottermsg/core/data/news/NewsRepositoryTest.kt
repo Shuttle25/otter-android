@@ -83,6 +83,14 @@ class NewsRepositoryTest {
         assertEquals(1, incoming.size)
     }
 
+    @Test fun newMemberChatIsDatedByTheNewestNewsNotByItsArrival() = runBlocking {
+        val day = 86_400_000L
+        val yesterday = clock.now() - day
+        repo.apply(listOf(item("Позавчера", createdMs = yesterday - day), item("Вчера", createdMs = yesterday)))
+        // the chat list sorts and dates by last_activity_ms: a member joining today must not see yesterday's news as new
+        assertEquals(yesterday, db.conversationDao().news()!!.lastActivityMs)
+    }
+
     @Test fun englishPhoneGetsEnglishBody() = runBlocking {
         Locale.setDefault(Locale.ENGLISH)
         repo.apply(listOf(item("Привет", "Hello")))
