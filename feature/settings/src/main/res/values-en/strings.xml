@@ -69,4 +69,7 @@
     <string name="notif_show">Show notifications</string>
     <string name="notif_system">Android settings</string>
     <string name="notif_blocked">Notifications are blocked in Android settings</string>
+    <string name="settings_calls_relay_only">Calls only through the server</string>
+    <string name="settings_calls_relay_only_sub">The other person won\'t see your IP address</string>
+    <string name="settings_calls_fsi">Allow calls on the lock screen</string>
 </resources>

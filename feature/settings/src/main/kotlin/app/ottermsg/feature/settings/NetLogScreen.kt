@@ -43,7 +43,7 @@ class NetLogViewModel @Inject constructor(dao: NetLogDao) : ViewModel() {
     val rows = dao.observe().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 }
 
-/** One log line: time span (local), node, endpoint, network (+operator), result, ×count, detail for failures (D74). */
+/** One log line: time span (local), node, endpoint, network (+operator), result, ×count, detail for failures (D74); call lines always show outcome, duration and RTT. */
 internal fun formatLine(e: NetLogEntity, zone: ZoneId, mobileLabel: String): String {
     val fmt = DateTimeFormatter.ofPattern("dd.MM HH:mm").withZone(zone)
     val hm = DateTimeFormatter.ofPattern("HH:mm").withZone(zone)
@@ -54,7 +54,13 @@ internal fun formatLine(e: NetLogEntity, zone: ZoneId, mobileLabel: String): Str
         "mobile" -> listOf(mobileLabel, e.operator).filter { it.isNotBlank() }.joinToString(" ")
         else -> e.network
     }
-    val tail = if (e.result != "ok" && e.detail.isNotBlank()) " (${e.detail})" else ""
+    val tail = when {
+        // call lines (M8): outcome + duration and the media RTT are the point of the line, also when it worked
+        e.endpoint.startsWith("call:") -> " (" + listOfNotNull(e.detail.ifBlank { null }, e.rttMs.takeIf { it > 0 }?.let { "$it ms" })
+            .joinToString(", ") + ")"
+        e.result != "ok" && e.detail.isNotBlank() -> " (${e.detail})"
+        else -> ""
+    }.takeIf { it != " ()" }.orEmpty()
     return "$span  ${e.nodeLabel}  ${e.endpoint}  $net  ${e.result}  ×${e.count}$tail"
 }
 

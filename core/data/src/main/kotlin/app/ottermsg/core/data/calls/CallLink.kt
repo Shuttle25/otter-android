@@ -14,6 +14,8 @@ interface CallLink {
     suspend fun api(timeoutMs: Long): NodeApi?
     fun acquire(tag: String)
     fun release(tag: String)
+    /** Label of the node we are connected to, for the connection log; null when offline. */
+    fun nodeLabel(): String? = null
 }
 
 /** Provider: SyncEngine → MailboxReceiver → CallInbox (CallManager) → CallLink would otherwise be a cycle. */
@@ -25,4 +27,5 @@ class SyncCallLink @Inject constructor(private val engine: Provider<SyncEngine>)
     }
     override fun acquire(tag: String) = engine.get().acquire(tag)
     override fun release(tag: String) = engine.get().release(tag)
+    override fun nodeLabel() = (engine.get().connection.value as? ConnectionState.Online)?.nodeLabel
 }

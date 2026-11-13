@@ -3,6 +3,9 @@ package app.ottermsg.core.data.calls
 import app.ottermsg.core.data.Clock
 import app.ottermsg.core.data.di.ApplicationScope
 import app.ottermsg.core.data.settings.Settings
+import app.ottermsg.core.network.FailureClass
+import app.ottermsg.core.network.NetLog
+import app.ottermsg.core.network.NetLogEntry
 import app.ottermsg.proto.v1.CallAnswer
 import app.ottermsg.proto.v1.CallHangup
 import app.ottermsg.proto.v1.CallMessage
@@ -50,6 +53,7 @@ class CallManager @Inject constructor(
     private val link: CallLink,
     private val settings: Settings,
     private val alerts: CallAlerts,
+    private val netLog: NetLog,
     private val clock: Clock,
     @ApplicationScope private val scope: CoroutineScope,
 ) : CallInbox, CallStarter {
@@ -202,11 +206,24 @@ class CallManager @Inject constructor(
             }
             is CallEffect.SendHangup -> transport.send(e.peer.id,
                 msg(e.id).setHangup(CallHangup.newBuilder().setReason(CallHangup.Reason.valueOf(e.reason.name))).build())
-            is CallEffect.Line -> lastLineChat = lines.write(e.peer, e.outcome, e.durationS, e.atMs)
+            is CallEffect.Line -> {
+                val path = try { engine?.path() } catch (c: CancellationException) { throw c } catch (_: Exception) { null } // before Release closes the engine
+                lastLineChat = lines.write(e.peer, e.outcome, e.durationS, e.atMs)
+                logCall(e, path)
+            }
             is CallEffect.Missed -> alerts.missed(e.peer, lastLineChat)
             is CallEffect.Ended -> _ended.emit(e.outcome)
             CallEffect.Release -> release()
         }
+    }
+
+    /** One «Журнал подключений» line per call (D74 merge rule): FAILED → timeout, every other outcome → ok. */
+    private suspend fun logCall(e: CallEffect.Line, p: PathInfo?) {
+        val d = String.format(java.util.Locale.ROOT, "%d:%02d", e.durationS / 60, e.durationS % 60)
+        runCatching {
+            netLog.add(NetLogEntry(link.nodeLabel() ?: "-", "call:" + (p?.path ?: "none"),
+                if (e.outcome == CallOutcome.FAILED) FailureClass.TIMEOUT else FailureClass.OK, "${e.outcome.name} $d", p?.rttMs ?: 0))
+        }.onFailure { if (it is CancellationException) throw it; log.log(Level.WARNING, "call log line failed", it) }
     }
 
     /**

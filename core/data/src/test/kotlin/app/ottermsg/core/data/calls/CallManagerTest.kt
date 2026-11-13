@@ -7,6 +7,9 @@ import app.ottermsg.core.data.FakeNode
 import app.ottermsg.core.data.settings.Settings
 import app.ottermsg.core.database.OtterDatabase
 import app.ottermsg.core.database.model.MessageKind
+import app.ottermsg.core.network.FailureClass
+import app.ottermsg.core.network.NetLog
+import app.ottermsg.core.network.NetLogEntry
 import app.ottermsg.core.network.NodeApi
 import app.ottermsg.core.network.RpcException
 import app.ottermsg.proto.v1.CallAnswer
@@ -66,11 +69,17 @@ class TurnApi(@Volatile var turn: TurnCredentials?) : NodeApi by FakeNode({ 0L }
     override suspend fun turnCredentials() = turn ?: throw RpcException(Status.STATUS_UNAVAILABLE, "turn off")
 }
 
-class FakeLink(val api: NodeApi?) : CallLink {
+class FakeLink(val api: NodeApi?, val label: String? = "ru-1") : CallLink {
     val leases: MutableSet<String> = Collections.synchronizedSet(mutableSetOf())
     override suspend fun api(timeoutMs: Long) = api
+    override fun nodeLabel() = label
     override fun acquire(tag: String) { leases += tag }
     override fun release(tag: String) { leases -= tag }
+}
+
+class CallNetLog : NetLog {
+    val entries: MutableList<NetLogEntry> = Collections.synchronizedList(mutableListOf())
+    override suspend fun add(e: NetLogEntry) { entries += e }
 }
 
 class RecordingAlerts : CallAlerts {
@@ -98,9 +107,10 @@ class CallManagerTest {
     private val link = FakeLink(api)
     private val transport = RecordingTransport()
     private val alerts = RecordingAlerts()
+    private val netLog = CallNetLog()
     private val engines: MutableList<FakeEngine> = Collections.synchronizedList(mutableListOf())
     private val manager = CallManager(transport, CallLines(db, clock), { FakeEngine().also { engines += it } }, TurnCache(clock),
-        link, settings, alerts, clock, scope)
+        link, settings, alerts, netLog, clock, scope)
     private val peer = Peer.of(ByteArray(16) { 5 }, "Анна")
 
     @After fun tearDown() { job.cancel(); test.cancel(); db.close() }
@@ -178,6 +188,36 @@ class CallManagerTest {
         assertTrue(engine().closed)
         assertFalse(CallManager.LEASE in link.leases)
         assertEquals(CallState.Idle, manager.state.value)
+    }
+
+    @Test fun aFinishedCallAddsOneConnectionLogLine() {
+        val out = dialToOutgoing()
+        deliver(msg(out.id).setAnswer(CallAnswer.newBuilder().setSdp("answer-sdp")).build())
+        settle("answer applied") { "apply:answer-sdp" in engine().calls }
+        engine().listener!!.onIce(IcePhase.CONNECTED)
+        settle("active") { manager.state.value is CallState.Active }
+        test.advanceTimeBy(65_000)
+        manager.hangUp()
+        settle("released") { alerts.released == 1 }
+        val e = netLog.entries.single()
+        assertEquals("ru-1", e.nodeLabel)
+        assertEquals("call:relay-udp", e.endpoint)
+        assertEquals(FailureClass.OK, e.result)
+        assertEquals(40L, e.rttMs)
+        assertTrue(e.detail, e.detail.matches(Regex("OUTGOING 1:0[4-6]")))
+    }
+
+    @Test fun aCallThatFailedToConnectIsLoggedAsTimeout() {
+        val id = CallId.random()
+        deliver(msg(id).setOffer(CallOffer.newBuilder().setSdp("their-offer")).build())
+        settle("alerted") { alerts.incoming.isNotEmpty() }
+        manager.accept()
+        settle("answer sent") { transport.sent.isNotEmpty() }
+        test.advanceTimeBy(CallTimers.ICE_CONNECT_MS + 1_500)
+        settle("released") { alerts.released == 1 }
+        val e = netLog.entries.single()
+        assertEquals(FailureClass.TIMEOUT, e.result)
+        assertTrue(e.detail, e.detail.startsWith("FAILED "))
     }
 
     @Test fun lateCandidatesAreBatched() {
