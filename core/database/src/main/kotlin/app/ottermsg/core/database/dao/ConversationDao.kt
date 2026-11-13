@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.Flow
     @Query("UPDATE conversations SET unread = 0 WHERE id = :id") suspend fun clearUnread(id: Long)
     @Query("UPDATE conversations SET draft = :draft WHERE id = :id") suspend fun setDraft(id: Long, draft: String)
     @Query("UPDATE conversations SET title = :title WHERE peer_user_id = :peer") suspend fun setTitle(peer: ByteArray, title: String)
+    /** The chat list. The news chat only while it has a message: deleted or revoked news leave nothing to show (D65). */
     @Query("""
         SELECT c.id, c.title, c.peer_user_id, c.unread, c.last_activity_ms,
                m.body AS last_body, m.status AS last_status, m.outgoing AS last_outgoing, m.kind AS last_kind,
@@ -41,6 +42,7 @@ import kotlinx.coroutines.flow.Flow
         FROM conversations c
         LEFT JOIN groups g ON g.group_id = c.group_id
         LEFT JOIN messages m ON m.local_id = (SELECT local_id FROM messages WHERE conversation_id = c.id ORDER BY sent_ms DESC, local_id DESC LIMIT 1)
+        WHERE c.type != ${ConversationType.NEWS} OR m.local_id IS NOT NULL
         ORDER BY c.last_activity_ms DESC""")
     fun observeSummaries(): Flow<List<ConversationSummary>>
 }

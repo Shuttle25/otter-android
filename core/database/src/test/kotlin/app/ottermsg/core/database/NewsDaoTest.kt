@@ -38,7 +38,19 @@ class NewsDaoTest {
         assertEquals(a, c.getOrCreateNews(2))
         assertEquals(ConversationType.NEWS, c.get(a)!!.type)
         assertEquals("", c.get(a)!!.title)
+        assertTrue(c.observeSummaries().first().isEmpty()) // no news message yet
+        db.messageDao().insert(news(1, a))
         assertEquals(ConversationType.NEWS, c.observeSummaries().first().single().type)
+    }
+
+    @Test fun emptyNewsChatIsHiddenFromTheChatList() = runTest {
+        val c = db.conversationDao()
+        val cid = c.getOrCreateNews(1)
+        db.messageDao().insert(news(1, cid))
+        val direct = c.getOrCreateDirect(ByteArray(16) { 9 }, "Аня", 2) // an empty direct chat stays listed
+        assertEquals(listOf(direct, cid), c.observeSummaries().first().map { it.id })
+        db.messageDao().deleteNews(ByteArray(32) { 1 }) // deleted or revoked: nothing left to show
+        assertEquals(listOf(direct), c.observeSummaries().first().map { it.id })
     }
 
     @Test fun deleteNewsTouchesOnlyNews() = runTest {
