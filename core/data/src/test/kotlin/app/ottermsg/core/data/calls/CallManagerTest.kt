@@ -51,7 +51,8 @@ class FakeEngine : MediaEngine {
     override suspend fun applyAnswer(sdp: String) { calls += "apply:$sdp" }
     override fun addCandidates(c: List<Candidate>) { calls += "cands:${c.size}" }
     override fun setMuted(muted: Boolean) { calls += "muted:$muted" }
-    override suspend fun path() = PathInfo("relay-udp", 40)
+    @Volatile var livePath: PathInfo? = PathInfo("relay-udp", 40) // null = no selected pair (e.g. the peer already closed)
+    override suspend fun path() = livePath
     override fun close() { closed = true }
 }
 
@@ -308,5 +309,21 @@ class CallManagerTest {
         assertEquals(listOf(CallOutcome.BUSY), ended)
         assertNotNull(callLines().singleOrNull { it.callOutcome == CallOutcome.BUSY.code })
         assertTrue(engine().closed)
+    }
+
+    @Test fun remoteHangupAfterConnectingStillLogsThePathSeenWhileConnected() {
+        val out = dialToOutgoing()
+        deliver(msg(out.id).setAnswer(CallAnswer.newBuilder().setSdp("answer-sdp")).build())
+        settle("answer applied") { "apply:answer-sdp" in engine().calls }
+        engine().listener!!.onIce(IcePhase.CONNECTED)
+        settle("active") { manager.state.value is CallState.Active }
+        test.advanceTimeBy(30_000)
+        test.runCurrent()
+        engine().livePath = null // the peer closed its side first: no selected candidate pair any more
+        deliver(msg(out.id).setHangup(CallHangup.newBuilder().setReason(CallHangup.Reason.NORMAL)).build())
+        settle("released") { alerts.released == 1 }
+        val e = netLog.entries.single()
+        assertEquals("call:relay-udp", e.endpoint)
+        assertEquals(40L, e.rttMs)
     }
 }

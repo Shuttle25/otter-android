@@ -83,6 +83,8 @@ class CallManager @Inject constructor(
     // Event-loop state; the @Volatile ones are also read from other threads.
     @Volatile private var engine: MediaEngine? = null
     @Volatile private var trickleTo: Pair<CallId, Peer>? = null
+    /** Path seen shortly after ICE connected: when the peer hangs up first, the live stats no longer have a pair. */
+    @Volatile private var lastPath: PathInfo? = null
     private var remoteReady = false
     private var remotePending: Pair<CallId, MutableList<Candidate>>? = null
     private val pending = mutableListOf<Candidate>()
@@ -207,7 +209,8 @@ class CallManager @Inject constructor(
             is CallEffect.SendHangup -> transport.send(e.peer.id,
                 msg(e.id).setHangup(CallHangup.newBuilder().setReason(CallHangup.Reason.valueOf(e.reason.name))).build())
             is CallEffect.Line -> {
-                val path = try { engine?.path() } catch (c: CancellationException) { throw c } catch (_: Exception) { null } // before Release closes the engine
+                val path = (try { engine?.path() } catch (c: CancellationException) { throw c } catch (_: Exception) { null }) // before Release closes the engine
+                    ?: lastPath
                 lastLineChat = lines.write(e.peer, e.outcome, e.durationS, e.atMs)
                 logCall(e, path)
             }
@@ -251,7 +254,14 @@ class CallManager @Inject constructor(
         engine = eng
         remoteReady = false
         eng.open(listOf(IceServerSpec(creds.urlsList, creds.username, creds.password)), settings.callsRelayOnly(), object : MediaListener {
-            override fun onIce(phase: IcePhase) = post(if (phase == IcePhase.CONNECTED) CallEvent.IceConnected(clock.now()) else CallEvent.IceLost(clock.now()))
+            override fun onIce(phase: IcePhase) {
+                post(if (phase == IcePhase.CONNECTED) CallEvent.IceConnected(clock.now()) else CallEvent.IceLost(clock.now()))
+                if (phase == IcePhase.CONNECTED) scope.launch {
+                    delay(PATH_SAMPLE_MS)
+                    val eng = engine ?: return@launch
+                    runCatching { eng.path() }.getOrNull()?.let { if (engine === eng) lastPath = it }
+                }
+            }
             override fun onCandidate(c: Candidate) { if (engine === eng) { synchronized(pending) { pending += c }; scheduleFlush() } }
         })
         if (_muted.value) eng.setMuted(true)
@@ -317,7 +327,7 @@ class CallManager @Inject constructor(
 
     private fun dropEngine() {
         runCatching { engine?.close() }
-        engine = null; trickleTo = null; remoteReady = false
+        engine = null; trickleTo = null; remoteReady = false; lastPath = null
         flush?.cancel(); flush = null
         synchronized(pending) { pending.clear() }
     }
@@ -353,6 +363,7 @@ class CallManager @Inject constructor(
         const val LEASE = "call"
         const val TRICKLE_MS = 300L
         const val CONNECT_WAIT_MS = 10_000L
+        const val PATH_SAMPLE_MS = 2_000L // after ICE connects: the selected pair is settled by then
         private val log = Logger.getLogger("CallManager")
     }
 }
