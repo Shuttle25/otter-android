@@ -326,4 +326,23 @@ class CallManagerTest {
         assertEquals("call:relay-udp", e.endpoint)
         assertEquals(40L, e.rttMs)
     }
+
+    @Test fun aScreenOpenedAfterTheNoticeStillSeesItAndTheNextDialClearsIt() {
+        api.turn = null
+        manager.dial(peer)
+        settle("released") { alerts.released == 1 }
+        val late = mutableListOf<CallNotice>()
+        val job = scope.launch { manager.notices.collect { late += it } } // the call screen subscribes only now
+        test.runCurrent()
+        assertEquals(listOf<CallNotice>(CallNotice.NotAvailable), late)
+        job.cancel()
+        api.turn = TurnCredentials.newBuilder().setUsername("9999999999:abcd").setPassword("p").setTtlS(43_200)
+            .addUrls("turn:203.0.113.7:3478?transport=udp").build()
+        manager.dial(peer)
+        settle("outgoing") { manager.state.value is CallState.Outgoing }
+        val next = mutableListOf<CallNotice>()
+        scope.launch { manager.notices.collect { next += it } }
+        test.runCurrent()
+        assertTrue("an old notice must not show on the next call: $next", next.isEmpty())
+    }
 }

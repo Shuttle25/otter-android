@@ -72,7 +72,8 @@ class CallManager @Inject constructor(
     private val _ended = MutableSharedFlow<CallOutcome>(extraBufferCapacity = 4)
     /** Outcome of every call that had a call screen (not emitted for missed / declined incoming calls). */
     val ended: SharedFlow<CallOutcome> = _ended.asSharedFlow()
-    private val _notices = MutableSharedFlow<CallNotice>(extraBufferCapacity = 4)
+    /** Replays the last notice: the call screen opened by a dial subscribes after a fast abort. Cleared per call. */
+    private val _notices = MutableSharedFlow<CallNotice>(replay = 1, extraBufferCapacity = 4)
     override val notices: SharedFlow<CallNotice> = _notices.asSharedFlow()
     private val _muted = MutableStateFlow(false)
     val muted: StateFlow<Boolean> = _muted.asStateFlow()
@@ -112,7 +113,10 @@ class CallManager @Inject constructor(
         }
     }
 
-    override fun dial(peer: Peer) = post(CallEvent.Dial(CallId.random(), peer, clock.now()))
+    override fun dial(peer: Peer) {
+        @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class) _notices.resetReplayCache()
+        post(CallEvent.Dial(CallId.random(), peer, clock.now()))
+    }
     fun accept() = post(CallEvent.Accept(clock.now()))
     fun decline() = post(CallEvent.Decline(clock.now()))
     fun hangUp() = post(CallEvent.HangUp(clock.now()))
@@ -164,7 +168,10 @@ class CallManager @Inject constructor(
         val before = machine.state
         val fx = machine.on(ev)
         _state.value = machine.state
-        if (before == CallState.Idle && machine.state != CallState.Idle) onBusy()
+        if (before == CallState.Idle && machine.state != CallState.Idle) {
+            @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class) _notices.resetReplayCache() // a new call (either way)
+            onBusy()
+        }
         for (e in fx) {
             try {
                 run(e)
