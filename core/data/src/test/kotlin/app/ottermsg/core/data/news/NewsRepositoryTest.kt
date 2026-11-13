@@ -37,9 +37,10 @@ class NewsRepositoryTest {
     private val other = Ed25519.keyPairFromSeed(ByteArray(32) { 4 })
     @Volatile private var allowed: List<ByteArray> = listOf(key.publicKey)
     private val incoming: MutableList<Long> = Collections.synchronizedList(mutableListOf())
+    private val cleared: MutableList<Long> = Collections.synchronizedList(mutableListOf())
     private val alerts = object : MessageAlerts {
         override suspend fun onIncoming(conversationId: Long) { incoming += conversationId }
-        override fun onRead(conversationId: Long) {}
+        override fun onRead(conversationId: Long) { cleared += conversationId }
     }
     private val repo = NewsRepository(db, object : NewsKeys { override suspend fun newsKeys() = allowed }, clock, alerts)
     private val savedLocale = Locale.getDefault()
@@ -113,6 +114,23 @@ class NewsRepositoryTest {
         val r2 = item("Сразу удалено")
         repo.apply(listOf(r2, deletion(r2)))
         assertEquals(listOf("Остаётся"), db.messageDao().allNews().map { it.body })
+    }
+
+    @Test fun removedNewsTakesItsNotificationAlong() = runBlocking {
+        val r = item("Ошибка")
+        repo.apply(listOf(r))
+        val cid = db.conversationDao().news()!!.id
+        assertTrue(cleared.isEmpty())
+        repo.apply(listOf(deletion(r))) // a deleted announcement must not stay readable in the notification shade
+        assertEquals(listOf(cid), cleared.toList())
+        repo.apply(listOf(deletion(r))) // nothing removed this time
+        assertEquals(1, cleared.size)
+        repo.apply(listOf(item("Новое")))
+        allowed = emptyList()
+        repo.purgeRevoked()
+        assertEquals(listOf(cid, cid), cleared.toList())
+        repo.purgeRevoked()
+        assertEquals(2, cleared.size)
     }
 
     @Test fun revokedKeyIsPurged() = runBlocking {

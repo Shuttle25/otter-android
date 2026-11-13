@@ -40,6 +40,7 @@ class NewsRepository @Inject constructor(
         val now = clock.now()
         val language = Locale.getDefault().language
         var notify: Long? = null
+        var removed = false
         var ignored = 0
         db.withTransaction {
             for (r in records) {
@@ -57,24 +58,33 @@ class NewsRepository @Inject constructor(
                             if (n.createdMs > now - NOTIFY_WINDOW_MS) notify = cid
                         }
                     }
-                    is News.Deleted -> db.messageDao().deleteNews(n.target)
+                    is News.Deleted -> if (db.messageDao().deleteNews(n.target) > 0) removed = true
                     null -> ignored++
                 }
             }
             fixUnread()
         }
         if (ignored > 0) log.info("$ignored news record(s) ignored (unknown or revoked key, or malformed)")
+        if (removed) clearNotification()
         notify?.let { alerts.onIncoming(it) } // after the commit: the notifier reads the stored messages
     }
 
     /** After a manifest update: drop news signed by keys no longer listed (D65). */
     suspend fun purgeRevoked() = mutex.withLock {
         val allowed = keys.newsKeys().map { Ids.id16(it).toList() }.toSet()
+        var removed = false
         db.withTransaction {
-            for (m in db.messageDao().allNews()) if (m.senderId.toList() !in allowed) db.messageDao().deleteNews(m.messageId)
+            for (m in db.messageDao().allNews()) if (m.senderId.toList() !in allowed && db.messageDao().deleteNews(m.messageId) > 0) removed = true
             fixUnread()
         }
+        if (removed) clearNotification()
     }
+
+    /**
+     * A deleted or revoked announcement must not stay readable in the notification shade: the news notification goes
+     * (re-posting the rest would alert again; the chat list still shows the unread count).
+     */
+    private suspend fun clearNotification() { db.conversationDao().news()?.let { alerts.onRead(it.id) } }
 
     /** unread never exceeds the number of news messages left (deletions may remove unread ones). */
     private suspend fun fixUnread() {
