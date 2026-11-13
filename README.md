@@ -53,6 +53,17 @@ Release signing: create `keystore.properties` next to `settings.gradle.kts` with
 must uninstall to update). Without it `assembleRelease` is debug-signed, and `deploy/release-apk.sh` refuses such an
 APK. Switching a phone from the debug to the release signature needs one uninstall: make a backup first.
 
+## Connection log and demotion (M7)
+
+Every connection attempt of `NodeSelector` gets a failure class (`timeout`, `refused`, `reset`, `reset_after_kb`,
+`tls`, `handshake`, `ok`); an endpoint whose connection drops after ≥ 1 KB three times within 24 h (the throttling
+signature) is tried last for 24 h. Attempts go into a merged 200-line log (Room `net_log`, DB v7) with the network
+type (Wi-Fi / mobile) and operator: Settings → «Журнал подключений», «Поделиться» sends it as text. Nothing is
+uploaded automatically, and the app still speaks only WSS (REALITY runs between nodes, D70–D75). Code:
+`core/network` (`FailureClass`, `NetLog`, `NodeSelector`, `ConnectionManager`), `core/data/.../network`
+(`RoomNetLog`, `CurrentNetwork`), `feature/settings` (`NetLogScreen`). Manual checks:
+[`docs/m7-manual-test.md`](docs/m7-manual-test.md).
+
 ## Private files (never commit)
 
 | File | Where it lives | Why it is private |
