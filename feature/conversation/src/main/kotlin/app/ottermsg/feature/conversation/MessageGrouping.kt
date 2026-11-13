@@ -21,9 +21,14 @@ data class MessageUi(
     val resetName: String? = null,
     /** kind = NEWS: the signed announcement (text picked in the phone's language at display time, D69). */
     val news: app.ottermsg.proto.v1.Announcement? = null,
+    /** kind = CALL: a local call line (D80), rendered as a tappable chip. */
+    val call: CallLineUi? = null,
 ) {
-    val isEvent: Boolean get() = event != null || resetName != null
+    val isEvent: Boolean get() = event != null || resetName != null || call != null
 }
+
+/** [outcome] is CallOutcome.code. */
+data class CallLineUi(val outcome: Int, val durationS: Long)
 
 /** What a photo bubble shows (guide §8–§9). */
 enum class PhotoState { Uploading, Ready, Remote, Downloading, Failed, Gone, NotInBackup }

@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -134,5 +135,19 @@ class OutboxTest {
         b.receiver.handle(s, node.mailbox(b.me.userId))
         assertEquals(MessageStatus.DELIVERED, b.db.messageDao().get(local)!!.status)
         assertTrue(b.db.outboxDao().due(Long.MAX_VALUE).isEmpty())
+    }
+    @Test fun expiredItemIsDroppedAndLiveItemCarriesExpiry() = runBlocking {
+        val (_, s) = setup()
+        val content = app.ottermsg.proto.v1.Content.newBuilder().setSentMs(1).build()
+        val dead = b.outbox.enqueue(a.me.userId, content, messageLocalId = null, urgent = true, expiresMs = clock.now() - 1)
+        val expires = clock.now() + 120_000
+        b.outbox.enqueue(a.me.userId, content, messageLocalId = null, urgent = true, expiresMs = expires)
+        assertEquals(expires, b.db.outboxDao().due(Long.MAX_VALUE).last().expiresMs)
+        b.outbox.drainOnce(s)
+        assertNull(b.db.outboxDao().get(dead))
+        assertEquals(1, node.sends) // only the live item went out
+        val sent = node.mailbox(a.me.userId).single()
+        assertEquals(expires, app.ottermsg.proto.v1.RecordBody.parseFrom(sent.body).expiresMs)
+        assertTrue(b.db.outboxDao().due(Long.MAX_VALUE).isEmpty()) // not a data message: not kept for the 24 h resend
     }
 }

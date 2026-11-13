@@ -38,7 +38,7 @@ import kotlinx.coroutines.flow.Flow
         SELECT c.id, c.title, c.peer_user_id, c.unread, c.last_activity_ms,
                m.body AS last_body, m.status AS last_status, m.outgoing AS last_outgoing, m.kind AS last_kind,
                c.group_id, COALESCE(g.family, 0) AS family, m.sender_id AS last_sender_id, m.system_data AS last_system_data,
-               c.type AS type
+               c.type AS type, m.call_outcome AS last_call_outcome, m.call_duration_s AS last_call_duration_s
         FROM conversations c
         LEFT JOIN groups g ON g.group_id = c.group_id
         LEFT JOIN messages m ON m.local_id = (SELECT local_id FROM messages WHERE conversation_id = c.id ORDER BY sent_ms DESC, local_id DESC LIMIT 1)

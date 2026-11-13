@@ -14,6 +14,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import app.ottermsg.core.ui.callLineText
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.compose.foundation.layout.Box
@@ -179,6 +180,8 @@ fun ConversationScreen(
     onOpenGroupInfo: () -> Unit = {}, onMessageInfo: (Long) -> Unit = {},
     photoActions: PhotoActions = PhotoActions(), snackbar: SnackbarHostState = remember { SnackbarHostState() },
     update: NewsUpdate = NewsUpdate(),
+    /** Tap on a call line: call this contact back (wired in Task 12). */
+    onCallBack: () -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -205,6 +208,7 @@ fun ConversationScreen(
     val infoLabel = stringResource(R.string.conv_info)
     val saveLabel = stringResource(R.string.conv_photo_save)
     val language = LocalConfiguration.current.locales[0].language
+    val res = LocalContext.current.resources
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -234,7 +238,11 @@ fun ConversationScreen(
                 items(reversed, key = { it.key }) { item ->
                     when (item) {
                         is ConversationItem.DateChip -> DateChip(item.date)
-                        is ConversationItem.Bubble -> if (item.message.resetName != null) {
+                        is ConversationItem.Bubble -> if (item.message.call != null) {
+                            val c = item.message.call
+                            CallLineChip(callLineText(res, c.outcome, c.durationS), item.message.outgoing,
+                                missed = c.outcome == app.ottermsg.core.data.calls.CallOutcome.MISSED.code, onClick = onCallBack)
+                        } else if (item.message.resetName != null) {
                             SystemEventChip(stringResource(R.string.conv_system_reset, item.message.resetName))
                         } else if (item.message.event != null) {
                             SystemEventChip(groupEventText(item.message.event, ui.me, ui::nameOf))

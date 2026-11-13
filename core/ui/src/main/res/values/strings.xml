@@ -25,4 +25,11 @@
     <string name="ui_ev_unadmin_me">Вы сняли права администратора: %1$s</string>
     <string name="ui_ev_undecryptable">Не удалось прочитать сообщение от %1$s</string>
     <string name="ui_ev_unknown">Изменение в группе</string>
+    <string name="call_line_outgoing">Исходящий звонок · %1$s</string>
+    <string name="call_line_incoming">Входящий звонок · %1$s</string>
+    <string name="call_line_missed">Пропущенный звонок</string>
+    <string name="call_line_declined">Отклонён</string>
+    <string name="call_line_no_answer">Не отвечает</string>
+    <string name="call_line_busy">Занято</string>
+    <string name="call_line_failed">Не удалось соединиться</string>
 </resources>

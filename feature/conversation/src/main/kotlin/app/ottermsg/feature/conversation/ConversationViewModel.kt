@@ -96,7 +96,8 @@ fun conversationUi(
             inGroup = isGroup && !it.outgoing,
             photo = if (it.kind == MessageKind.PHOTO) attachments[it.localId]?.let(::photoUi) else null,
             resetName = if (it.kind == MessageKind.SYSTEM_RESET) (names[it.senderId.hex()] ?: title) else null,
-            news = if (it.kind == MessageKind.NEWS) it.systemData?.let { d -> runCatching { Announcement.parseFrom(d) }.getOrNull() } else null)
+            news = if (it.kind == MessageKind.NEWS) it.systemData?.let { d -> runCatching { Announcement.parseFrom(d) }.getOrNull() } else null,
+            call = if (it.kind == MessageKind.CALL) CallLineUi(it.callOutcome, it.callDurationS) else null)
     }
     return ConversationUi(true, title, conv?.peerUserId ?: conv?.groupId ?: ByteArray(0), groupMessages(list, zone),
         msgs.lastOrNull { !it.outgoing && it.kind != MessageKind.SYSTEM_GROUP && it.kind != MessageKind.SYSTEM_RESET }?.localId,

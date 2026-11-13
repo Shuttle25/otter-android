@@ -90,4 +90,13 @@ class ChatListViewModelTest {
         assertNull(en.authorName)
         assertEquals("Привет", chatRows(listOf(s), now, zone, Locale.forLanguageTag("ru")).single().preview)
     }
+    @Test fun callLinePreviewCarriesOutcomeAndNoStatus() {
+        val call = ConversationSummary(5, "Анна", ByteArray(16), 1, at(2026, 11, 10, 9, 0), "", MessageStatus.READ, true, MessageKind.CALL,
+            lastCallOutcome = 1, lastCallDurationS = 192)
+        val text = summary(6, at(2026, 11, 10, 9, 0), "hi", outgoing = true, status = MessageStatus.READ)
+        val rows = chatRows(listOf(call, text), now, zone, Locale.forLanguageTag("ru"))
+        assertEquals(1, rows[0].callOutcome); assertEquals(192L, rows[0].callDurationS)
+        assertNull(rows[0].status) // a call line shows no delivery ticks
+        assertNull(rows[1].callOutcome)
+    }
 }

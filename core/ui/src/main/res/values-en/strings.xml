@@ -25,4 +25,11 @@
     <string name="ui_ev_unadmin_me">You removed admin rights from %1$s</string>
     <string name="ui_ev_undecryptable">Couldn’t read a message from %1$s</string>
     <string name="ui_ev_unknown">Group changed</string>
+    <string name="call_line_outgoing">Outgoing call · %1$s</string>
+    <string name="call_line_incoming">Incoming call · %1$s</string>
+    <string name="call_line_missed">Missed call</string>
+    <string name="call_line_declined">Declined</string>
+    <string name="call_line_no_answer">No answer</string>
+    <string name="call_line_busy">Busy</string>
+    <string name="call_line_failed">Couldn’t connect</string>
 </resources>

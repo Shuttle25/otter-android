@@ -88,4 +88,18 @@ class MigrationTest {
             db.query("SELECT COUNT(*) FROM net_log").use { c -> c.moveToFirst(); assertEquals(0, c.getInt(0)) }
         }
     }
+    @Test fun migrate7To8AddsCallColumnsAndOutboxExpiry() {
+        helper.createDatabase("m8.db", 7).use {
+            it.execSQL("INSERT INTO conversations(id, peer_user_id, title, last_activity_ms, unread, draft, type) VALUES (1, x'02', 'Anna', 1, 0, '', 0)")
+            it.execSQL("""INSERT INTO messages(local_id, message_id, conversation_id, sender_id, outgoing, sent_ms, received_ms, body, status, kind, read_receipt_sent)
+                          VALUES (1, x'01', 1, x'02', 0, 5, 6, 'hi', 2, 0, 0)""")
+            it.execSQL("INSERT INTO outbox(recipient_user_id, content_bytes, message_local_id, urgent, record_bytes, attempts, next_attempt_ms, created_ms, sent_ms, resent, held) VALUES (x'02', x'03', 1, 1, NULL, 0, 0, 5, NULL, 0, 0)")
+        }
+        helper.runMigrationsAndValidate("m8.db", 8, true).use { db ->
+            db.query("SELECT body, call_outcome, call_duration_s FROM messages").use { c ->
+                c.moveToFirst(); assertEquals("hi", c.getString(0)); assertEquals(0, c.getInt(1)); assertEquals(0L, c.getLong(2))
+            }
+            db.query("SELECT COUNT(*) FROM outbox WHERE expires_ms = 0").use { c -> c.moveToFirst(); assertEquals(1, c.getInt(0)) }
+        }
+    }
 }

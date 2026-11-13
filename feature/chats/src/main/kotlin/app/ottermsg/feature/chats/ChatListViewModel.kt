@@ -47,6 +47,8 @@ data class ChatRow(
     val resetBy: String? = null,
     /** The «Новости Выдры» chat (D64): localized title and the otter avatar in the UI. */
     val news: Boolean = false,
+    /** Last item is a call line (D80): CallOutcome.code and duration; the preview is its text. */
+    val callOutcome: Int? = null, val callDurationS: Long = 0,
 )
 
 /** Display names by user id (hex), for group previews and events. */
@@ -65,6 +67,7 @@ fun chatRows(list: List<ConversationSummary>, nowMs: Long, zone: ZoneId, locale:
     val dm = DateTimeFormatter.ofPattern("d MMM", locale)
     return list.map { s ->
         val t = Instant.ofEpochMilli(s.lastActivityMs).atZone(zone)
+        val call = s.lastKind == MessageKind.CALL
         ChatRow(
             id = s.id, title = s.title, seed = s.seed,
             preview = if (s.lastKind == MessageKind.SYSTEM_UNDECRYPTABLE || s.lastKind == MessageKind.SYSTEM_GROUP ||
@@ -72,7 +75,7 @@ fun chatRows(list: List<ConversationSummary>, nowMs: Long, zone: ZoneId, locale:
                 NewsText.of(s.lastSystemData, locale.language) ?: s.lastBody else s.lastBody,
             previewIsSystem = s.lastKind == MessageKind.SYSTEM_UNDECRYPTABLE,
             outgoing = s.lastOutgoing == true,
-            status = if (s.lastOutgoing == true) s.lastStatus else null,
+            status = if (s.lastOutgoing == true && !call) s.lastStatus else null,
             time = if (t.toLocalDate() == today) hm.format(t) else dm.format(t),
             unread = s.unread,
             isGroup = s.groupId != null, family = s.family,
@@ -82,6 +85,7 @@ fun chatRows(list: List<ConversationSummary>, nowMs: Long, zone: ZoneId, locale:
             photo = s.lastKind == MessageKind.PHOTO,
             resetBy = if (s.lastKind == MessageKind.SYSTEM_RESET) s.title else null, // resets live in direct chats
             news = s.type == ConversationType.NEWS,
+            callOutcome = if (call) s.lastCallOutcome ?: 0 else null, callDurationS = if (call) s.lastCallDurationS ?: 0 else 0,
         )
     }
 }
