@@ -82,4 +82,40 @@ class NodeSelectorTest {
         val w = NodeSelector(t, stats, clock).race(listOf(cand("other"), cand("good")), backgroundScope)!!
         assertEquals("other", w.candidate.url)
     }
+
+    @Test fun demotedGoesLast() = runTest {
+        val stats = InMemoryEndpointStats()
+        val now = 10 * DAY_MS
+        val sel = NodeSelector(FakeTransport { ok() }, stats, clock = { now })
+        val a = cand("a"); val b = cand("b"); val c = cand("c")
+        stats.failure(b.key, now - 1_000)                  // recently failed → group 2
+        repeat(3) { stats.throttled(a.key, now - 5_000) }   // demoted → group 3
+        assertEquals(listOf("c", "b", "a"), sel.order(listOf(a, b, c)).map { it.label })
+    }
+
+    @Test fun throttleWindowAndDemotion() {
+        var s = EndpointStat()
+        s = s.withThrottle(1_000).withThrottle(2_000)
+        assertEquals(2, s.throttleCount); assertEquals(0L, s.demotedUntilMs)
+        s = s.withThrottle(1_000 + DAY_MS) // window expired: starts over
+        assertEquals(1, s.throttleCount); assertEquals(0L, s.demotedUntilMs)
+        s = s.withThrottle(2_000 + DAY_MS).withThrottle(3_000 + DAY_MS)
+        assertEquals(3, s.throttleCount); assertEquals(3_000 + 2 * DAY_MS, s.demotedUntilMs)
+    }
+
+    @Test fun logsEveryAttempt() = runTest {
+        val t = FakeTransport(failUrls = setOf("wss://bad:1/p"), silentUrls = setOf("wss://mute:1/p")) { ok() }
+        val log = RecordingNetLog()
+        val sel = NodeSelector(t, InMemoryEndpointStats(), { currentTime }, helloTimeoutMs = 1_000, netLog = log)
+        assertNull(sel.race(listOf(cand("wss://bad:1/p"), cand("wss://mute:1/p")), backgroundScope))
+        assertEquals(listOf("wss://bad:1" to FailureClass.RESET, "wss://mute:1" to FailureClass.HANDSHAKE),
+            log.entries.map { it.endpoint to it.result }.sortedBy { it.first })
+        log.entries.clear()
+        val w = sel.race(listOf(cand("wss://good:1/p")), backgroundScope)!!
+        assertEquals(listOf(NetLogEntry("wss://good:1/p", "wss://good:1", FailureClass.OK, rttMs = w.rttMs)), log.entries)
+        log.entries.clear()
+        sel.probe(listOf(cand("wss://good:1/p"), cand("wss://bad:1/p")), backgroundScope)
+        assertEquals(2, log.entries.size)
+        assertEquals(setOf(FailureClass.RESET, FailureClass.OK), log.entries.map { it.result }.toSet())
+    }
 }

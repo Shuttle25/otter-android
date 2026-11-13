@@ -37,8 +37,10 @@ class FakeTransport(
     class FakeConnection(private val handler: (Request) -> Response) : Connection {
         override val incoming = Channel<ByteArray>(Channel.UNLIMITED)
         var closed = false
+        /** Received-bytes counter as a real transport would report it. */
+        override var bytesIn: Long = 0
         fun push(f: Frame) { incoming.trySend(f.toByteArray()) }
-        fun drop() { incoming.close(IOException("dropped")) }
+        fun drop(cause: Throwable = IOException("dropped")) { incoming.close(cause) }
         override fun send(bytes: ByteArray): Boolean {
             if (closed) return false
             val req = Frame.parseFrom(bytes).request
@@ -54,3 +56,8 @@ fun err(s: Status, msg: String): Response = Response.newBuilder().setStatus(s).s
 
 /** Candidate for tests: url doubles as label. */
 fun cand(url: String, priority: Int = 0) = Candidate(url.toByteArray(), url, url, url, emptyList(), priority)
+
+class RecordingNetLog : NetLog {
+    val entries = java.util.Collections.synchronizedList(mutableListOf<NetLogEntry>())
+    override suspend fun add(e: NetLogEntry) { entries += e }
+}

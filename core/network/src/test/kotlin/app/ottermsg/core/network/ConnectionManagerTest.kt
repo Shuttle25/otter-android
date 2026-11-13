@@ -12,8 +12,9 @@ import kotlin.random.Random
 
 class ConnectionManagerTest {
     private fun manager(t: FakeTransport, cands: List<Candidate>, scope: kotlinx.coroutines.CoroutineScope, clock: () -> Long,
-                        stats: EndpointStats = InMemoryEndpointStats(), onConnected: suspend (NodeApi) -> Unit = {}) =
-        ConnectionManager(NodeSelector(t, stats, clock), { cands }, stats, scope, { onConnected(it) }, clock, Random(1))
+                        stats: EndpointStats = InMemoryEndpointStats(), netLog: NetLog = NetLog.None,
+                        onConnected: suspend (NodeApi) -> Unit = {}) =
+        ConnectionManager(NodeSelector(t, stats, clock), { cands }, stats, scope, { onConnected(it) }, clock, Random(1), netLog)
 
     @Test fun failsOverAndReconnects() = runTest {
         val t = FakeTransport(failUrls = setOf("bad")) { ok() }
@@ -112,6 +113,42 @@ class ConnectionManagerTest {
         cm.networkChanged() // still unreachable on the new network
         val w = cm.state.first { it is ConnectionState.Waiting && it.retryAtMs - currentTime < 2_000 } as ConnectionState.Waiting
         assertTrue(w.retryAtMs - currentTime in 800..1200)
+        cm.stop()
+    }
+
+    @Test fun resetAfterKbCountsAsThrottle() = runTest {
+        val t = FakeTransport { ok() }
+        val stats = InMemoryEndpointStats()
+        val log = RecordingNetLog()
+        val cm = manager(t, listOf(cand("wss://ru:443/p")), backgroundScope, { currentTime }, stats, log)
+        cm.start()
+        cm.state.first { it is ConnectionState.Online }
+        advanceTimeBy(1_000)
+        t.connections.last().apply { bytesIn = 4096 }.drop(java.io.IOException("reset by peer"))
+        cm.state.first { it is ConnectionState.Waiting }
+        assertEquals(1, stats.get("wss://ru:443/p")!!.throttleCount)
+        val e = log.entries.single { it.result == FailureClass.RESET_AFTER_KB }
+        assertEquals("wss://ru:443", e.endpoint)
+        assertTrue(e.detail, e.detail.startsWith("4096 bytes in 1 s"))
+        cm.stop()
+    }
+
+    @Test fun smallOrCleanSessionEndsAreNotThrottles() = runTest {
+        val t = FakeTransport { ok() }
+        val stats = InMemoryEndpointStats()
+        val log = RecordingNetLog()
+        val cm = manager(t, listOf(cand("x")), backgroundScope, { currentTime }, stats, log)
+        cm.start()
+        cm.state.first { it is ConnectionState.Online }
+        t.connections.last().apply { bytesIn = 100 }.drop() // too little data
+        cm.state.first { it is ConnectionState.Waiting }
+        advanceTimeBy(2_000)
+        cm.state.first { it is ConnectionState.Online }
+        t.connections.last().bytesIn = 4096
+        cm.reconnect() // our own close: not the censor
+        cm.state.first { it is ConnectionState.Online && t.connections.size == 3 }
+        assertEquals(0, stats.get("x")!!.throttleCount)
+        assertTrue(log.entries.none { it.result == FailureClass.RESET_AFTER_KB })
         cm.stop()
     }
 }

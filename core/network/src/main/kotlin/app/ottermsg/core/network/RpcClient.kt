@@ -33,6 +33,8 @@ class RpcClient(private val conn: Connection, scope: CoroutineScope, private val
     val hello = CompletableDeferred<Hello>()
     /** Completes when the connection ends (with the cause, or null on clean close). */
     val closed = CompletableDeferred<Throwable?>()
+    /** Bytes received on the underlying connection so far. */
+    val bytesIn: Long get() = conn.bytesIn
 
     private val reader = scope.launch {
         var cause: Throwable? = null

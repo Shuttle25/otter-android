@@ -24,6 +24,7 @@ sealed interface ConnectionState {
  * Keeps one node connection alive while started. Candidates are raced ([NodeSelector]); [onConnected] runs after
  * hello with a session scope (cancelled when the connection ends). If it throws (e.g. RETRY_LATER: this node lacks
  * our account yet), the remaining candidates are raced immediately; when all fail → backoff 1 s → 60 s ±20 %.
+ * A session that dies with an error after ≥ 1 KB within 2 min counts as a throttle of that endpoint (D73).
  */
 class ConnectionManager(
     private val selector: NodeSelector,
@@ -33,6 +34,7 @@ class ConnectionManager(
     private val onConnected: suspend CoroutineScope.(NodeApi) -> Unit,
     private val clock: () -> Long = System::currentTimeMillis,
     private val random: Random = Random.Default,
+    private val netLog: NetLog = NetLog.None,
 ) {
     private val _state = MutableStateFlow<ConnectionState>(ConnectionState.Offline)
     val state: StateFlow<ConnectionState> = _state
@@ -87,12 +89,20 @@ class ConnectionManager(
                 val w = selector.race(remaining, scope, nextHeadStartMs.also { nextHeadStartMs = 0 }) ?: break
                 val session = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job]))
                 rpc = w.rpc
+                val connectedAt = clock()
                 try {
                     val api = RemoteNodeApi(w.rpc, clock)
                     session.onConnected(api)
                     _state.value = ConnectionState.Online(api, w.candidate.url, w.candidate.label)
                     backoffMs = 1_000L
-                    w.rpc.closed.await()
+                    val cause = w.rpc.closed.await()
+                    val lived = clock() - connectedAt
+                    // Our own close (stop, reconnect, network change) ends the reader by cancellation: not the censor.
+                    if (cause != null && cause !is CancellationException && lived < THROTTLE_WINDOW_MS && w.rpc.bytesIn >= THROTTLE_BYTES) {
+                        stats.throttled(w.candidate.key, clock())
+                        netLog.add(NetLogEntry(w.candidate.label, w.candidate.logName(), FailureClass.RESET_AFTER_KB,
+                            "${w.rpc.bytesIn} bytes in ${lived / 1000} s: ${cause.message}"))
+                    }
                     lastError = "connection lost"
                     remaining = emptyList() // session ended: race all again (after a short wait unless reconnect())
                 } catch (e: CancellationException) {
@@ -113,5 +123,9 @@ class ConnectionManager(
             withTimeoutOrNull(wait) { wake.receive() }
             backoffMs = (backoffMs * 2).coerceAtMost(60_000)
         }
+    }
+
+    private companion object {
+        const val THROTTLE_WINDOW_MS = 120_000L
     }
 }
