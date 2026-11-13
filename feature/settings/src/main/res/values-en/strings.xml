@@ -8,6 +8,10 @@
     <string name="settings_online">Connected</string>
     <string name="settings_connecting">Connecting…</string>
     <string name="settings_offline">No connection</string>
+    <string name="settings_netlog">Connection log</string>
+    <string name="netlog_empty">Nothing yet</string>
+    <string name="netlog_share">Share</string>
+    <string name="netlog_mobile">mobile</string>
     <string name="profile_title">Profile</string>
     <string name="profile_name">Name</string>
     <string name="profile_username">Username</string>

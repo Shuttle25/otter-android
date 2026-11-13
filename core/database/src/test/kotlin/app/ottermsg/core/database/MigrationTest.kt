@@ -74,4 +74,18 @@ class MigrationTest {
             db.query("SELECT username, reset_ms FROM contacts").use { c -> c.moveToFirst(); assertEquals("anna", c.getString(0)); assertEquals(0, c.getInt(1)) }
         }
     }
+
+    @Test fun migrate6To7AddsThrottleColumnsAndNetLog() {
+        helper.createDatabase("m7.db", 6).use {
+            it.execSQL("INSERT INTO endpoint_stats(`key`, last_success_ms, last_failure_ms, rtt_ms, failures) VALUES ('wss://a', 5, 6, 40, 2)")
+        }
+        helper.runMigrationsAndValidate("m7.db", 7, true).use { db ->
+            db.query("SELECT rtt_ms, failures, throttle_count, throttle_window_start_ms, demoted_until_ms FROM endpoint_stats").use { c ->
+                c.moveToFirst()
+                assertEquals(40, c.getInt(0)); assertEquals(2, c.getInt(1))
+                assertEquals(0, c.getInt(2)); assertEquals(0, c.getInt(3)); assertEquals(0, c.getInt(4))
+            }
+            db.query("SELECT COUNT(*) FROM net_log").use { c -> c.moveToFirst(); assertEquals(0, c.getInt(0)) }
+        }
+    }
 }

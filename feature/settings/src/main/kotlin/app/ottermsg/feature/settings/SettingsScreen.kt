@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.ListAlt
 import androidx.compose.material3.Icon
 import androidx.compose.ui.Alignment
 import app.ottermsg.core.ui.components.OtterAvatar
@@ -58,7 +59,7 @@ fun connectionLabel(state: ConnectionState): Int = when (state) {
 /** Settings: profile, family invite, connection. Other sections of guide §10 arrive with their features. */
 @Composable
 fun SettingsRoute(onBack: () -> Unit, onInvite: () -> Unit, onProfile: () -> Unit, onPhotos: () -> Unit = {}, onBackup: () -> Unit = {},
-                  onNotifications: () -> Unit = {}, versionText: String = "", vm: SettingsViewModel = hiltViewModel()) {
+                  onNotifications: () -> Unit = {}, onNetLog: () -> Unit = {}, versionText: String = "", vm: SettingsViewModel = hiltViewModel()) {
     val account by vm.account.collectAsStateWithLifecycle()
     val connection by vm.connection.collectAsStateWithLifecycle()
     Scaffold(containerColor = MaterialTheme.colorScheme.background,
@@ -78,6 +79,7 @@ fun SettingsRoute(onBack: () -> Unit, onInvite: () -> Unit, onProfile: () -> Uni
             val online = connection as? ConnectionState.Online
             OtterSettingsRow(stringResource(connectionLabel(connection)), subtitle = online?.let { "${it.nodeLabel} · ${it.url}" },
                 icon = Icons.Outlined.Wifi)
+            OtterSettingsRow(stringResource(R.string.settings_netlog), icon = Icons.AutoMirrored.Outlined.ListAlt, onClick = onNetLog)
             if (versionText.isNotEmpty()) VersionFooter(versionText)
         }
     }
