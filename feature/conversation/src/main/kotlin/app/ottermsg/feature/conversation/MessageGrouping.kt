@@ -50,7 +50,7 @@ const val GROUP_GAP_MS = 5 * 60 * 1000L
  * change or a pause of more than five minutes (guide §7).
  */
 fun groupMessages(list: List<MessageUi>, zone: ZoneId): List<ConversationItem> {
-    fun date(m: MessageUi) = LocalDate.ofInstant(Instant.ofEpochMilli(m.sentMs), zone)
+    fun date(m: MessageUi): LocalDate = Instant.ofEpochMilli(m.sentMs).atZone(zone).toLocalDate() // API 26: no LocalDate.ofInstant
     fun breaks(a: MessageUi, b: MessageUi) =
         a.outgoing != b.outgoing || a.authorKey != b.authorKey || a.system || b.system || a.isEvent || b.isEvent ||
             date(a) != date(b) || b.sentMs - a.sentMs > GROUP_GAP_MS

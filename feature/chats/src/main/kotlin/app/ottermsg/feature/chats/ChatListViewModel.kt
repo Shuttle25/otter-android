@@ -62,7 +62,7 @@ class Names(private val byId: Map<String, String>) {
 
 /** Pure mapping, unit-tested: time "HH:mm" today, "d MMM" otherwise, in the device locale. */
 fun chatRows(list: List<ConversationSummary>, nowMs: Long, zone: ZoneId, locale: Locale, names: Names = Names.Empty): List<ChatRow> {
-    val today = LocalDate.ofInstant(Instant.ofEpochMilli(nowMs), zone)
+    val today: LocalDate = Instant.ofEpochMilli(nowMs).atZone(zone).toLocalDate() // API 26: no LocalDate.ofInstant
     val hm = DateTimeFormatter.ofPattern("HH:mm", locale)
     val dm = DateTimeFormatter.ofPattern("d MMM", locale)
     return list.map { s ->
