@@ -1,6 +1,6 @@
 # otter-android
 
-The OtterMSG Android client (Gradle multi-module: `app`, `core:proto`, `core:crypto`, `core:database`, `core:ui`). Protobuf schemas and cross-language test vectors come from `../otter-server`; refresh them with `scripts/sync-proto.sh`. Build and test with `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew assembleDebug test` (modules compile with a JDK 17 toolchain). Specs are in [`../docs`](../docs).
+The OtterMSG Android client (Gradle multi-module: `app`, `core:proto`, `core:crypto`, `core:database`, `core:ui`). Protobuf schemas and cross-language test vectors come from `../otter-server`; refresh them with `scripts/sync-proto.sh`. Build and test with `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew assembleDebug test` (modules compile with a JDK 17 toolchain). Specs are in [otter-docs](https://github.com/Shuttle25/otter-docs) (checked out next to this repo as `../docs`).
 
 
 Backup and restore (M6): Settings → Безопасность → Резервная копия turns on an encrypted password backup (Argon2id, Tink streaming AEAD, uploaded to the nodes as a persistent blob). On a wiped phone, «Восстановить аккаунт» restores from the network link plus username and password (account and history) or from the 24 words (account only). Code: `core/data/.../backup` (`BackupManager`, `RestoreManager`, `InstallGuard`), `messaging/SessionResets`. Manual checks: [`docs/m6-manual-test.md`](docs/m6-manual-test.md).
@@ -37,6 +37,21 @@ network Android 15 blocks. Code: `core/data/.../push` (`PushRegistrar`, `PushMon
 (`NotificationsScreen`). Manual checks: [`docs/m5-manual-test.md`](docs/m5-manual-test.md).
 
 The bottom of Settings shows «Otter <versionName> (<short git hash>)» (`"dev"` outside a git checkout).
+
+## News and in-app updates (M6.5)
+
+The app fetches `news.list` after login and on the `news` event, verifies every announcement against the news keys of
+its stored manifest and shows it in the read-only chat «Новости Выдры» (hidden while empty; links ask «Открыть
+ссылку?»; notifications on the «Новости» channel only for news from the last 3 days). An announcement with an update
+shows «Обновить до X» when its versionCode is higher than the installed one; the APK comes from the nodes (`apk.get`,
+1 MiB chunks, resumable), its size and SHA-256 are checked and the system installer opens. Code: `core/crypto` (`AnnouncementVerifier`), `core/data/.../news`
+(`NewsRepository`, `ApkUpdater`), `app/.../update` (`ApkInstaller`, `ApkFileProvider`).
+Manual checks: [`docs/m6.5-manual-test.md`](docs/m6.5-manual-test.md).
+
+Release signing: create `keystore.properties` next to `settings.gradle.kts` with `storeFile`, `storePassword`,
+`keyAlias`, `keyPassword` (both it and the `.jks` are gitignored; back the keystore up — a lost key means every phone
+must uninstall to update). Without it `assembleRelease` is debug-signed, and `deploy/release-apk.sh` refuses such an
+APK. Switching a phone from the debug to the release signature needs one uninstall: make a backup first.
 
 ## Private files (never commit)
 
