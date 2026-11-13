@@ -22,6 +22,7 @@ import app.ottermsg.core.network.ConnectionManager
 import app.ottermsg.core.network.ConnectionState
 import app.ottermsg.core.network.NodeApi
 import app.ottermsg.core.network.EndpointStats
+import app.ottermsg.core.network.NetLog
 import app.ottermsg.core.network.NodeSelector
 import app.ottermsg.proto.v1.Event
 import app.ottermsg.proto.v1.ManifestResponse
@@ -54,10 +55,12 @@ class SyncEngine @Inject constructor(
     @ApplicationScope private val appScope: CoroutineScope, @param:AllowPlaintext private val allowPlaintext: Boolean,
     private val clock: Clock, private val guard: InstallGuard, private val backups: BackupManager,
     private val news: NewsRepository,
+    netLog: NetLog = NetLog.None,
     private val pushRegistrar: PushRegistrar = PushRegistrar(accounts, settings, clock),
     private val pushMonitor: PushMonitor = PushMonitor(settings, clock),
 ) : OnlineApi {
-    private val manager = ConnectionManager(selector, ::candidates, stats, appScope, { api -> runSession(api, this) }, clock::now)
+    private val manager = ConnectionManager(selector, ::candidates, stats, appScope, { api -> runSession(api, this) }, clock::now,
+        netLog = netLog)
     val connection: StateFlow<ConnectionState> = manager.state
 
     private val leases = mutableSetOf<String>()
