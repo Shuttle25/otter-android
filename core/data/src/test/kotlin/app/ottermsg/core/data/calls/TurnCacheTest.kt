@@ -30,24 +30,35 @@ class TurnCacheTest {
         }
     }
 
-    @Test fun reusesUntilAnHourBeforeExpiry() = runBlocking {
+    @Test fun asksTheNodeOnEveryCall() = runBlocking {
         val api = Api(clock = { now })
-        val first = cache.get(api)!!
-        now += 10 * 3_600_000L
-        assertSame(first, cache.get(api))
-        assertEquals(1, api.rpcs)
-        now += 90 * 60_000L // 11.5 h after issue: less than 1 h left
-        val second = cache.get(api)!!
+        cache.get(api)
+        now += 60_000
+        assertEquals("p2", cache.get(api)!!.password)
         assertEquals(2, api.rpcs)
-        assertEquals("p2", second.password)
     }
 
-    @Test fun anotherNodeGetsItsOwnCredentials() = runBlocking {
+    @Test fun turnSwitchedOffOnTheSameNodeIsSeenAtOnce() = runBlocking {
         val api = Api(clock = { now })
+        cache.get(api)!!
+        api.fail = Status.STATUS_UNAVAILABLE
+        assertNull(cache.get(api)) // not the cached credentials of a relay that is gone
+        api.fail = Status.STATUS_RETRY_LATER
+        assertTrue(runCatching { cache.get(api) }.isFailure) // and the cache was dropped
+    }
+
+    @Test fun aFailedRequestFallsBackToValidCredentialsOfThatNode() = runBlocking {
+        val api = Api(clock = { now })
+        val first = cache.get(api)!!
+        api.fail = Status.STATUS_RETRY_LATER
+        now += 10 * 3_600_000L
+        assertSame(first, cache.get(api))
+        now += 90 * 60_000L // less than 1 h left: no fallback
+        assertTrue(runCatching { cache.get(api) }.isFailure)
+        api.fail = null; api.node = 2
         cache.get(api)
-        api.node = 2
-        cache.get(api)
-        assertEquals(2, api.rpcs)
+        api.fail = Status.STATUS_RETRY_LATER; api.node = 1
+        assertTrue(runCatching { cache.get(api) }.isFailure) // node 1's credentials were replaced by node 2's
     }
 
     @Test fun nodesWithoutTurnGiveNull() = runBlocking {

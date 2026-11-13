@@ -10,7 +10,11 @@ import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** TURN-REST credentials of the connected node (D77), reused until 1 h before they expire. */
+/**
+ * TURN-REST credentials of the connected node (D77). Asked for on every call, so a relay that was switched off or got
+ * a new secret is noticed at once; the last answer of the same node is only a fallback when the request itself fails
+ * (and only until 1 h before it expires).
+ */
 @Singleton
 class TurnCache @Inject constructor(private val clock: Clock) {
     private val lock = Mutex()
@@ -19,13 +23,18 @@ class TurnCache @Inject constructor(private val clock: Clock) {
     /** Credentials for the node behind [api]; null when calls are not available there. Other errors propagate. */
     suspend fun get(api: NodeApi): TurnCredentials? = lock.withLock {
         val node = api.nodeId().joinToString("") { "%02x".format(it) }
-        cached?.let { (n, c) -> if (n == node && expiryMs(c) - clock.now() > MARGIN_MS) return@withLock c }
         try {
             api.turnCredentials().also { cached = node to it }
         } catch (e: RpcException) {
-            if (e.status in NOT_AVAILABLE) null else throw e
+            if (e.status in NOT_AVAILABLE) { cached = null; return@withLock null }
+            fallback(node) ?: throw e
+        } catch (e: java.io.IOException) {
+            fallback(node) ?: throw e
         }
     }
+
+    private fun fallback(node: String): TurnCredentials? =
+        cached?.let { (n, c) -> c.takeIf { n == node && expiryMs(c) - clock.now() > MARGIN_MS } }
 
     /** TURN-REST username: "<unix expiry>:<user>". */
     private fun expiryMs(c: TurnCredentials) = (c.username.substringBefore(':').toLongOrNull() ?: 0) * 1000
