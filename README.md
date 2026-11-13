@@ -64,6 +64,21 @@ uploaded automatically, and the app still speaks only WSS (REALITY runs between 
 (`RoomNetLog`, `CurrentNetwork`), `feature/settings` (`NetLogScreen`). Manual checks:
 [`docs/m7-manual-test.md`](docs/m7-manual-test.md).
 
+## Calls (M8)
+
+1:1 audio calls from the call button in a 1:1 chat. A pure `CallStateMachine` (45 s ringing, 15 s ICE connect, one
+ICE restart with 20 s, glare: the smaller `call_id` wins) is driven by `CallManager`; signaling is a Signal-encrypted
+`Content.call` through the outbox (urgent, 2-minute expiry); media is WebRTC M150 (`io.github.webrtc-sdk:android`,
+only in `:feature:calls` behind `MediaEngine`: Opus mono with DTX, DTLS-SRTP) through the TURN relay of the phone's
+own node, with TURN credentials asked for on every call. «Звонки только через сервер» (Settings → Подключение, on by
+default) offers relay candidates only, so the other side never sees the phone's IP. Ringing is a full-screen CallStyle
+notification; the call runs in a `phoneCall|microphone` foreground service registered with Telecom
+(`androidx.core:core-telecom` 1.0.1, plain `AudioManager` fallback). Call lines («Исходящий звонок · 2:55»,
+«Пропущенный звонок», …) are local rows in the chat (Room v8) and each call adds a line to «Журнал подключений».
+Phones without push cannot ring (the caller is warned). Release APKs ship arm64-v8a + armeabi-v7a only (x86_64 in
+debug/staging for the emulator). Code: `core/data/.../calls`, `feature/calls`, `app/.../calls`. Decisions D76–D81;
+manual checks: [`docs/m8-manual-test.md`](docs/m8-manual-test.md).
+
 ## Private files (never commit)
 
 | File | Where it lives | Why it is private |
