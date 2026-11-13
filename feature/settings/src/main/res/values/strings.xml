@@ -8,6 +8,10 @@
     <string name="settings_online">Подключено</string>
     <string name="settings_connecting">Подключаемся…</string>
     <string name="settings_offline">Нет подключения</string>
+    <string name="settings_netlog">Журнал подключений</string>
+    <string name="netlog_empty">Пока пусто</string>
+    <string name="netlog_share">Поделиться</string>
+    <string name="netlog_mobile">моб.</string>
     <string name="profile_title">Профиль</string>
     <string name="profile_name">Имя</string>
     <string name="profile_username">Имя пользователя</string>
