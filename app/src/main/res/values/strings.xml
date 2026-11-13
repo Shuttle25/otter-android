@@ -15,4 +15,8 @@
     <string name="notif_me">Я</string>
     <string name="notif_sync_text">Проверяем сообщения…</string>
     <string name="notif_summary">Новые сообщения</string>
+    <string name="notif_channel_news">Новости</string>
+    <string name="news_title">Новости Выдры</string>
+    <string name="news_sender">Выдра</string>
+    <string name="news_install_permission">Разрешите Otter устанавливать обновления, затем нажмите «Обновить» ещё раз</string>
 </resources>

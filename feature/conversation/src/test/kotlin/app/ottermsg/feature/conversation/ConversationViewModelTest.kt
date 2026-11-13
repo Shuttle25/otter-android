@@ -173,4 +173,45 @@ class ConversationViewModelTest {
         vm.markRead(); advanceUntilIdle()
         assertEquals(1, store.reads)
     }
+
+    private class FakeDownloader : app.ottermsg.core.data.news.UpdateDownloader {
+        var result: () -> app.ottermsg.core.data.news.UpdateResult = { app.ottermsg.core.data.news.UpdateResult.Offline }
+        var gate: CompletableDeferred<Unit>? = null; var calls = 0
+        override suspend fun download(u: app.ottermsg.proto.v1.AppUpdate, progress: (Float) -> Unit): app.ottermsg.core.data.news.UpdateResult {
+            calls++; progress(0.42f); gate?.await(); return result()
+        }
+    }
+
+    @Test fun updateDownloadsOnceThenInstalls() = runTest(dispatcher) {
+        val d = FakeDownloader(); val installed = mutableListOf<File>()
+        val v = ConversationViewModel(store, photos, SavedStateHandle(mapOf("id" to 7L)), downloader = d,
+            installedVersion = app.ottermsg.core.data.news.InstalledVersion { 5 },
+            installer = app.ottermsg.core.data.news.UpdateInstaller { installed += it })
+        assertEquals(5, v.installedCode)
+        val u = app.ottermsg.proto.v1.AppUpdate.newBuilder().setVersionName("0.6.0").setVersionCode(6).build()
+        d.gate = CompletableDeferred(); d.result = { app.ottermsg.core.data.news.UpdateResult.Ready(File("x.apk")) }
+        v.startUpdate(u); v.startUpdate(u); runCurrent()
+        assertEquals(UpdateUi.Downloading(42), v.updateState.value)
+        d.gate!!.complete(Unit); advanceUntilIdle()
+        assertEquals(1, d.calls)
+        assertEquals(listOf(File("x.apk")), installed)
+        assertEquals(UpdateUi.Idle, v.updateState.value)
+    }
+
+    @Test fun updateErrorsMapToMessages() = runTest(dispatcher) {
+        val d = FakeDownloader()
+        val v = ConversationViewModel(store, photos, SavedStateHandle(mapOf("id" to 7L)), downloader = d)
+        val u = app.ottermsg.proto.v1.AppUpdate.getDefaultInstance()
+        for ((r, msg) in listOf<Pair<() -> app.ottermsg.core.data.news.UpdateResult, Int>>(
+            { app.ottermsg.core.data.news.UpdateResult.Corrupt } to R.string.news_update_corrupt,
+            { app.ottermsg.core.data.news.UpdateResult.NotOnServer } to R.string.news_update_not_found,
+            { app.ottermsg.core.data.news.UpdateResult.Offline } to R.string.news_update_offline,
+            { throw java.io.IOException("x") } to R.string.news_update_offline,
+            { throw app.ottermsg.core.network.RpcTimeoutException("apk.get") } to R.string.news_update_offline,
+        )) {
+            d.result = r
+            v.startUpdate(u); advanceUntilIdle()
+            assertEquals(UpdateUi.Error(msg), v.updateState.value)
+        }
+    }
 }

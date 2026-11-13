@@ -8,11 +8,13 @@ import app.ottermsg.core.database.OtterDatabase
 import app.ottermsg.core.database.entity.AttachmentEntity
 import app.ottermsg.core.database.entity.ContactEntity
 import app.ottermsg.core.database.entity.ConversationEntity
+import app.ottermsg.core.database.entity.ConversationType
 import app.ottermsg.core.database.entity.GroupEntity
 import app.ottermsg.core.database.entity.GroupMemberEntity
 import app.ottermsg.core.database.entity.MessageEntity
 import app.ottermsg.core.database.entity.MessageRecipientEntity
 import app.ottermsg.core.database.model.AttachmentState
+import app.ottermsg.core.database.model.MessageKind
 import app.ottermsg.core.database.model.MessageStatus
 import app.ottermsg.proto.v1.BackupAttachment
 import app.ottermsg.proto.v1.BackupContact
@@ -40,14 +42,15 @@ object SnapshotCodec {
                 .setAccountPub(bs(c.accountPub)).setIdentityPub(bs(c.identityPub)).setVerified(c.verified)
                 .setIdentityChanged(c.identityChanged).setRevoked(c.revoked).setEntryVersion(c.entryVersion))
         }
-        db.conversationDao().all().forEach { c ->
+        // The news chat is not backed up: a restored phone fetches news again with news.list (D67).
+        db.conversationDao().all().filter { it.type != ConversationType.NEWS }.forEach { c ->
             val cb = BackupConversation.newBuilder().setId(c.id).setTitle(c.title).setLastActivityMs(c.lastActivityMs)
                 .setUnread(c.unread).setDraft(c.draft).setType(c.type)
             c.peerUserId?.let { cb.setPeerUserId(bs(it)) }
             c.groupId?.let { cb.setGroupId(bs(it)) }
             b.addConversations(cb)
         }
-        db.messageDao().all().forEach { m ->
+        db.messageDao().all().filter { it.kind != MessageKind.NEWS }.forEach { m ->
             val mb = BackupMessage.newBuilder().setMessageId(bs(m.messageId)).setConversationId(m.conversationId)
                 .setSenderId(bs(m.senderId)).setOutgoing(m.outgoing).setSentMs(m.sentMs).setReceivedMs(m.receivedMs)
                 .setBody(m.body).setStatus(m.status).setKind(m.kind).setReadReceiptSent(m.readReceiptSent)
@@ -84,7 +87,7 @@ object SnapshotCodec {
                 c.identityPub.toByteArray(), c.verified, c.identityChanged, c.revoked, c.entryVersion))
         }
         val ids = HashMap<Long, Long>()
-        s.conversationsList.forEach { c ->
+        s.conversationsList.filter { it.type != ConversationType.NEWS }.forEach { c ->
             val peer = c.peerUserId.toByteArray().takeIf { it.isNotEmpty() }
             val group = c.groupId.toByteArray().takeIf { it.isNotEmpty() }
             val id = db.conversationDao().insert(ConversationEntity(peerUserId = peer, title = c.title, lastActivityMs = c.lastActivityMs,
@@ -93,6 +96,7 @@ object SnapshotCodec {
         }
         s.messagesList.forEach { m ->
             val cid = ids[m.conversationId]?.takeIf { it > 0 } ?: return@forEach
+            if (m.kind == MessageKind.NEWS) return@forEach
             // an unsent message can't be sent from the backup (no outbox): it shows as failed, «Повторить» re-sends it
             val status = if (m.outgoing && m.status == MessageStatus.PENDING) MessageStatus.FAILED else m.status
             val local = db.messageDao().insert(MessageEntity(messageId = m.messageId.toByteArray(), conversationId = cid,

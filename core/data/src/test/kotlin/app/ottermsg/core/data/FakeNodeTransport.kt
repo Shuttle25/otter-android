@@ -124,6 +124,8 @@ class FakeNodeTransport(private val node: FakeNode) : Transport {
             "backup.fetch" -> BackupFetchRequest.parseFrom(b).let { s.backupFetch(it.username, it.authSecret.toByteArray()) }
             "backup.publish" -> { s.backupPublish(rec(b)); null }
             "push.register" -> { s.registerPush(rec(b)); null }
+            "news.list" -> RecordBatch.newBuilder().addAllRecords(s.newsList()).build()
+            "apk.get" -> app.ottermsg.proto.v1.ApkGetRequest.parseFrom(b).let { s.apkGet(it.sha256.toByteArray(), it.index) }
             else -> throw RpcException(Status.STATUS_INVALID, "unknown method $method")
         }
     }

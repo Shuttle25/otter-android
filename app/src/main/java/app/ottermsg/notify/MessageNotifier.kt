@@ -18,6 +18,8 @@ import app.ottermsg.core.data.push.AppVisibility
 import app.ottermsg.core.data.push.MessageAlerts
 import app.ottermsg.core.data.settings.Settings
 import app.ottermsg.core.database.OtterDatabase
+import app.ottermsg.core.data.news.NewsRepository
+import app.ottermsg.core.database.entity.ConversationEntity
 import app.ottermsg.core.database.entity.ConversationType
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -39,6 +41,7 @@ class MessageNotifier @Inject constructor(
         if (!settings.notificationsEnabled() || !permitted()) return
         if (visibility.visible && active.id == conversationId) return
         val conv = db.conversationDao().get(conversationId) ?: return
+        if (conv.type == ConversationType.NEWS) return postNews(conv)
         val unread = db.messageDao().unreadReceiptsPending(conversationId)
         if (unread.isEmpty()) return
         val names = unread.map { it.senderId }.distinctBy { it.toHexKey() }
@@ -47,6 +50,20 @@ class MessageNotifier @Inject constructor(
         val content = NotificationContent.build(conv.title, group, unread, names, context.getString(R.string.notif_photo))
         if (content.lines.isEmpty()) return
         post(conversationId, content)
+    }
+
+    /**
+     * News (D64, D67): the unread news messages (no receipts; the newest `unread` ones) created within the last 3 days,
+     * from «Выдра» in «Новости Выдры», on the News channel.
+     */
+    private suspend fun postNews(conv: ConversationEntity) {
+        if (conv.unread <= 0) return
+        val since = System.currentTimeMillis() - NewsRepository.NOTIFY_WINDOW_MS
+        val unread = db.messageDao().allNews().filter { it.conversationId == conv.id }.takeLast(conv.unread).filter { it.sentMs > since }
+        val content = NotificationContent.build(context.getString(R.string.news_title), false, unread, emptyMap(),
+            context.getString(R.string.notif_photo), newsSender = context.getString(R.string.news_sender))
+        if (content.lines.isEmpty()) return
+        post(conv.id, content)
     }
 
     override fun onRead(conversationId: Long) {
@@ -60,9 +77,10 @@ class MessageNotifier @Inject constructor(
 
     private fun post(cid: Long, c: NotificationContent) {
         val me = Person.Builder().setName(context.getString(R.string.notif_me)).build()
-        val style = NotificationCompat.MessagingStyle(me).setConversationTitle(if (c.group) c.title else null).setGroupConversation(c.group)
+        val style = NotificationCompat.MessagingStyle(me).setConversationTitle(if (c.group || c.news) c.title else null)
+            .setGroupConversation(c.group)
         c.lines.forEach { style.addMessage(it.text, it.timeMs, Person.Builder().setName(it.sender).build()) }
-        val channel = if (c.group) Channels.GROUPS else Channels.MESSAGES
+        val channel = when { c.news -> Channels.NEWS; c.group -> Channels.GROUPS; else -> Channels.MESSAGES }
         val open = PendingIntent.getActivity(context, cid.toInt(),
             Intent(context, MainActivity::class.java).setAction(ACTION_OPEN).putExtra(EXTRA_CONVERSATION, cid)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
@@ -78,10 +96,11 @@ class MessageNotifier @Inject constructor(
             .setContentTitle(context.getString(R.string.notif_public_title)).setContentText(context.getString(R.string.notif_public_text)).build()
         val n = NotificationCompat.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_stat_otter).setStyle(style).setContentIntent(open).setAutoCancel(true)
-            .setCategory(NotificationCompat.CATEGORY_MESSAGE).setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setPriority(if (c.news) NotificationCompat.PRIORITY_DEFAULT else NotificationCompat.PRIORITY_HIGH)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setPublicVersion(public)
             .setGroup(groupKey).setOnlyAlertOnce(false)
-            .addAction(reply).addAction(read).build()
+            .apply { if (!c.news) addAction(reply) }.addAction(read).build()
         val summary = NotificationCompat.Builder(context, channel).setSmallIcon(R.drawable.ic_stat_otter)
             .setContentTitle(context.getString(R.string.notif_summary)).setGroup(groupKey).setGroupSummary(true)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setPublicVersion(public).setAutoCancel(true).build()

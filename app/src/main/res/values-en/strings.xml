@@ -15,4 +15,8 @@
     <string name="notif_me">Me</string>
     <string name="notif_sync_text">Checking for messages…</string>
     <string name="notif_summary">New messages</string>
+    <string name="notif_channel_news">News</string>
+    <string name="news_title">Otter News</string>
+    <string name="news_sender">Otter</string>
+    <string name="news_install_permission">Allow Otter to install updates, then tap Update again</string>
 </resources>

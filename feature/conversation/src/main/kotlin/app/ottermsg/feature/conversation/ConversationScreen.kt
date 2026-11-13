@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
@@ -74,6 +75,12 @@ import app.ottermsg.core.ui.components.OtterTopBar
 import app.ottermsg.core.ui.theme.Dimens
 import kotlinx.coroutines.launch
 
+/** The «Обновить» state of news bubbles (D68): shown only for a versionCode above [installedCode]. */
+class NewsUpdate(
+    val installedCode: Int = Int.MAX_VALUE, val state: UpdateUi = UpdateUi.Idle,
+    val onUpdate: (app.ottermsg.proto.v1.AppUpdate) -> Unit = {},
+)
+
 /** Photo callbacks of the conversation screen. */
 class PhotoActions(
     val onPick: () -> Unit = {}, val onCamera: () -> Unit = {}, val onOpen: (Long) -> Unit = {},
@@ -91,6 +98,7 @@ fun ConversationRoute(
     val sending by vm.sending.collectAsStateWithLifecycle()
     val pending by vm.pendingPhoto.collectAsStateWithLifecycle()
     val photoSending by vm.photoSending.collectAsStateWithLifecycle()
+    val updateState by vm.updateState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val snackbar = remember { SnackbarHostState() }
@@ -143,7 +151,8 @@ fun ConversationRoute(
     CompositionLocalProvider(LocalPhotoSource provides vm.photoSource) {
         ConversationScreen(ui, text, sending, onBack, vm::onText, vm::send, { vm.retry(it) }, { vm.delete(it) }, vm.sent,
             onOpenGroupInfo = { if (ui.isGroup) onOpenGroupInfo(ui.groupIdHex) }, onMessageInfo = onMessageInfo,
-            photoActions = actions, snackbar = snackbar)
+            photoActions = actions, snackbar = snackbar,
+            update = NewsUpdate(vm.installedCode, updateState, vm::startUpdate))
     }
     pending?.let { path -> PhotoPreview(path, text, photoSending, onCancel = vm::cancelPhoto, onSend = vm::sendPhoto) }
     if (cameraDenied) {
@@ -169,6 +178,7 @@ fun ConversationScreen(
     sentEvents: kotlinx.coroutines.flow.Flow<Long> = kotlinx.coroutines.flow.emptyFlow(),
     onOpenGroupInfo: () -> Unit = {}, onMessageInfo: (Long) -> Unit = {},
     photoActions: PhotoActions = PhotoActions(), snackbar: SnackbarHostState = remember { SnackbarHostState() },
+    update: NewsUpdate = NewsUpdate(),
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -194,20 +204,22 @@ fun ConversationScreen(
     val retryLabel = stringResource(R.string.conv_retry)
     val infoLabel = stringResource(R.string.conv_info)
     val saveLabel = stringResource(R.string.conv_photo_save)
+    val language = LocalConfiguration.current.locales[0].language
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            OtterTopBar(ui.title, onBack = onBack, leading = {
-                OtterAvatar(ui.title, ui.seed, Dimens.avatarTopBar, family = ui.family); Spacer(Modifier.width(Dimens.s12))
+            val title = if (ui.isNews) stringResource(R.string.news_title) else ui.title
+            OtterTopBar(title, onBack = onBack, leading = {
+                OtterAvatar(title, ui.seed, Dimens.avatarTopBar, family = ui.family, news = ui.isNews); Spacer(Modifier.width(Dimens.s12))
             }, onTitleClick = if (ui.isGroup) onOpenGroupInfo else null,
                 subtitle = if (ui.isGroup) pluralStringResource(R.plurals.conv_members, ui.memberCount, ui.memberCount) else null)
         },
         bottomBar = {
             if (ui.canWrite) MessageComposer(text, sending, onText, onSend, Modifier.navigationBarsPadding().imePadding(),
                 onPickPhoto = photoActions.onPick, onTakePhoto = photoActions.onCamera)
-            else NotMemberNotice(Modifier.navigationBarsPadding())
+            else if (!ui.isNews) NotMemberNotice(Modifier.navigationBarsPadding())
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
@@ -226,6 +238,20 @@ fun ConversationScreen(
                             SystemEventChip(stringResource(R.string.conv_system_reset, item.message.resetName))
                         } else if (item.message.event != null) {
                             SystemEventChip(groupEventText(item.message.event, ui.me, ui::nameOf))
+                        } else if (item.message.news != null) {
+                            // News (D64): read-only; the only action is copying the text.
+                            val m = item.message
+                            val newsText = newsText(m, language)
+                            val u = m.news.update.takeIf { m.news.hasUpdate() && it.versionCode > update.installedCode }
+                            NewsBubble(m, newsText, item.firstInGroup,
+                                slot = { if (u != null) UpdateRow(u.versionName, update.state) { update.onUpdate(u) } },
+                                onLongPress = { menuFor = m },
+                                actions = listOf(CustomAccessibilityAction(copyLabel) { clipboard.setText(AnnotatedString(newsText)); true }),
+                                menu = {
+                                    AnchoredMenu(expanded = menuFor?.localId == m.localId, alignEnd = false,
+                                        actions = listOf(MenuAction(copyLabel) { clipboard.setText(AnnotatedString(newsText)) }),
+                                        onDismiss = { menuFor = null })
+                                })
                         } else {
                             val m = item.message
                             val failed = m.outgoing && m.status == DeliveryStatus.FAILED

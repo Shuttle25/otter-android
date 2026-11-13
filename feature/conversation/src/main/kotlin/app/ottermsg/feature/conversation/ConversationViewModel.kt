@@ -13,6 +13,16 @@ import app.ottermsg.core.data.push.ActiveConversation
 import app.ottermsg.core.database.entity.AttachmentEntity
 import app.ottermsg.core.database.entity.ContactEntity
 import app.ottermsg.core.database.entity.ConversationEntity
+import app.ottermsg.core.database.entity.ConversationType
+import app.ottermsg.core.data.news.InstalledVersion
+import app.ottermsg.core.data.news.UpdateDownloader
+import app.ottermsg.core.data.news.UpdateInstaller
+import app.ottermsg.core.data.news.UpdateResult
+import app.ottermsg.core.network.RpcException
+import app.ottermsg.proto.v1.AppUpdate
+import androidx.annotation.StringRes
+import java.io.IOException
+import app.ottermsg.proto.v1.Announcement
 import app.ottermsg.core.database.entity.MessageEntity
 import app.ottermsg.core.ui.components.parseGroupEvent
 import app.ottermsg.core.database.model.MessageKind
@@ -48,11 +58,20 @@ data class ConversationUi(
     val me: ByteArray = ByteArray(0),
     /** Display names by user id hex, for group events. */
     val names: Map<String, String> = emptyMap(),
+    /** The «Новости Выдры» chat (D64): localized title, otter avatar, no composer. */
+    val isNews: Boolean = false,
 ) {
     fun nameOf(id: ByteArray): String = names[id.hex()] ?: "?"
 }
 
 enum class PhotoEvent { Unreadable, Saved, SaveFailed }
+
+/** The «Обновить» row of a news message with an app update (D68). */
+sealed interface UpdateUi {
+    data object Idle : UpdateUi
+    data class Downloading(val percent: Int) : UpdateUi
+    data class Error(@param:StringRes val message: Int) : UpdateUi
+}
 
 internal fun ByteArray.hex() = joinToString("") { "%02x".format(it) }
 
@@ -64,6 +83,7 @@ fun conversationUi(
     val title = conv?.title.orEmpty()
     val names = contacts.associate { it.userId.hex() to it.displayName }
     val isGroup = conv?.groupId != null
+    val isNews = conv?.type == ConversationType.NEWS
     val list = msgs.map {
         val author = when {
             it.outgoing -> ""
@@ -75,14 +95,15 @@ fun conversationUi(
             event = if (it.kind == MessageKind.SYSTEM_GROUP) parseGroupEvent(it.systemData) else null,
             inGroup = isGroup && !it.outgoing,
             photo = if (it.kind == MessageKind.PHOTO) attachments[it.localId]?.let(::photoUi) else null,
-            resetName = if (it.kind == MessageKind.SYSTEM_RESET) (names[it.senderId.hex()] ?: title) else null)
+            resetName = if (it.kind == MessageKind.SYSTEM_RESET) (names[it.senderId.hex()] ?: title) else null,
+            news = if (it.kind == MessageKind.NEWS) it.systemData?.let { d -> runCatching { Announcement.parseFrom(d) }.getOrNull() } else null)
     }
     return ConversationUi(true, title, conv?.peerUserId ?: conv?.groupId ?: ByteArray(0), groupMessages(list, zone),
         msgs.lastOrNull { !it.outgoing && it.kind != MessageKind.SYSTEM_GROUP && it.kind != MessageKind.SYSTEM_RESET }?.localId,
         isGroup = isGroup, family = group?.group?.family == true, groupIdHex = conv?.groupId?.hex().orEmpty(),
         memberCount = group?.members?.size ?: 0,
-        canWrite = !isGroup || group?.group?.iAmMember == true,
-        me = me, names = names)
+        canWrite = !isNews && (!isGroup || group?.group?.iAmMember == true),
+        me = me, names = names, isNews = isNews)
 }
 
 @OptIn(FlowPreview::class)
@@ -90,6 +111,11 @@ fun conversationUi(
 class ConversationViewModel @Inject constructor(
     private val store: ConversationStore, private val photos: PhotoStore, private val savedState: SavedStateHandle,
     private val active: ActiveConversation = ActiveConversation(),
+    private val downloader: UpdateDownloader = object : UpdateDownloader {
+        override suspend fun download(u: AppUpdate, progress: (Float) -> Unit) = UpdateResult.Offline
+    },
+    installedVersion: InstalledVersion = InstalledVersion { Int.MAX_VALUE },
+    private val installer: UpdateInstaller = UpdateInstaller {},
 ) : ViewModel() {
     val conversationId: Long = checkNotNull(savedState.get<Long>(ARG_ID)) { "conversation id missing" }
     var zone: ZoneId = ZoneId.systemDefault()
@@ -203,6 +229,29 @@ class ConversationViewModel @Inject constructor(
     fun galleryNeedsPermission() = photos.galleryNeedsPermission()
     fun saveToGallery(localId: Long) = viewModelScope.launch {
         _events.tryEmit(if (photos.saveToGallery(localId)) PhotoEvent.Saved else PhotoEvent.SaveFailed)
+    }
+
+    /** «Обновить» shows only for an update newer than this (D68). */
+    val installedCode: Int = installedVersion.code()
+    private val _updateState = MutableStateFlow<UpdateUi>(UpdateUi.Idle)
+    val updateState: StateFlow<UpdateUi> = _updateState
+
+    /** Downloads and verifies the APK, then opens the installer (on Main); taps while downloading are ignored. */
+    fun startUpdate(u: AppUpdate) {
+        if (_updateState.value is UpdateUi.Downloading) return
+        _updateState.value = UpdateUi.Downloading(0)
+        viewModelScope.launch {
+            val r = try {
+                downloader.download(u) { p -> _updateState.value = UpdateUi.Downloading((p * 100).toInt().coerceIn(0, 100)) }
+            } catch (e: IOException) { UpdateResult.Offline } // includes RpcTimeoutException
+            catch (e: RpcException) { UpdateResult.Offline }
+            _updateState.value = when (r) {
+                is UpdateResult.Ready -> { installer.install(r.file); UpdateUi.Idle }
+                UpdateResult.Corrupt -> UpdateUi.Error(R.string.news_update_corrupt)
+                UpdateResult.NotOnServer -> UpdateUi.Error(R.string.news_update_not_found)
+                UpdateResult.Offline -> UpdateUi.Error(R.string.news_update_offline)
+            }
+        }
     }
 
     fun retry(localId: Long) = viewModelScope.launch { store.retry(localId) }

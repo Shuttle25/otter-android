@@ -34,6 +34,7 @@ ILLUSTRATIONS = {  # master -> (runtime name, px)
     "otter_empty_chat.png": ("otter_empty_chat", 880),
     "otter_m3_no_chats.png": ("otter_no_chats", 880),
     "otter_family_avatar.png": ("otter_family_avatar", 256),
+    "otter_app_icon_master.png": ("otter_news_avatar", 192),  # M6.5: avatar of «Новости Выдры»
 }
 LAUNCHER_FG = "otter_m3_launcher_foreground.png"
 LAUNCHER_DENSITIES = {"mdpi": 108, "hdpi": 162, "xhdpi": 216, "xxhdpi": 324, "xxxhdpi": 432}

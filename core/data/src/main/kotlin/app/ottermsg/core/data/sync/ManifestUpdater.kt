@@ -16,11 +16,16 @@ import java.util.logging.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** Ed25519 public keys allowed to sign announcements right now (D65). */
+interface NewsKeys {
+    suspend fun newsKeys(): List<ByteArray>
+}
+
 /** Follows the admin's manifest updates (docs/05): verify, store, and derive connection candidates. */
 @Singleton
 class ManifestUpdater @Inject constructor(
     private val manifests: ManifestDao, private val settings: Settings, private val clock: Clock,
-) {
+) : NewsKeys {
     enum class Result { IGNORED, STORED, STORED_NODE_REMOVED }
 
     private val mutex = Mutex()
@@ -62,6 +67,12 @@ class ManifestUpdater @Inject constructor(
         val fallback = Endpoints.candidates(parse(previous.raw, networkPub) ?: return current, allowPlaintext, priorityOffset = FALLBACK_PRIORITY)
             .filter { it.key !in known }
         return current + fallback
+    }
+
+    /** News keys of the latest stored manifest (D65); empty if there is none. */
+    override suspend fun newsKeys(): List<ByteArray> {
+        val latest = manifests.latest() ?: return emptyList()
+        return parse(latest.raw, settings.networkPub())?.newsKeysList?.map { it.toByteArray() } ?: emptyList()
     }
 
     private fun parse(raw: ByteArray, networkPub: ByteArray): Manifest? =

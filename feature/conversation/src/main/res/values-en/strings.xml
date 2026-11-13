@@ -49,4 +49,16 @@
     <string name="viewer_back">Back</string>
     <string name="conv_system_reset">%1$s restored their account</string>
     <string name="conv_photo_not_in_backup">Not in the backup</string>
+    <!-- M6.5: Otter News (D64, D69) -->
+    <string name="news_title">Otter News</string>
+    <string name="news_sender">Otter</string>
+    <string name="news_link_title">Open link?</string>
+    <string name="news_link_open">Open</string>
+    <string name="news_link_cancel">Cancel</string>
+    <string name="news_link_label">Link: %1$s</string>
+    <string name="news_update">Update to %1$s</string>
+    <string name="news_update_progress">Downloading… %1$d %%</string>
+    <string name="news_update_corrupt">The file is damaged</string>
+    <string name="news_update_not_found">The file is not on the server yet, try later</string>
+    <string name="news_update_offline">No connection to the server</string>
 </resources>

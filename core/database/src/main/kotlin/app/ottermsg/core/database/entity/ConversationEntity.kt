@@ -19,4 +19,5 @@ data class ConversationEntity(
     @ColumnInfo(defaultValue = "0") val type: Int = ConversationType.DIRECT,
 )
 
-object ConversationType { const val DIRECT = 0; const val GROUP = 1 }
+/** NEWS: the one «Новости Выдры» / "Otter News" chat (D64); title stays empty, the UI localizes it. */
+object ConversationType { const val DIRECT = 0; const val GROUP = 1; const val NEWS = 2 }

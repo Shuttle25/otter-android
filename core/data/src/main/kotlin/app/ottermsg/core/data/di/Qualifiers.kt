@@ -7,3 +7,6 @@ import javax.inject.Qualifier
 
 /** true only in debug builds: allows plain ws:// endpoints (provided by :app from BuildConfig). */
 @Qualifier @Retention(AnnotationRetention.BINARY) annotation class AllowPlaintext
+
+/** The app's cacheDir (downloaded update APKs live in `apk/`, D68). */
+@Qualifier @Retention(AnnotationRetention.BINARY) annotation class CacheDir

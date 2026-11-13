@@ -12,6 +12,7 @@ import app.ottermsg.core.data.directory.DirectorySync
 import app.ottermsg.core.data.invite.OnlineApi
 import app.ottermsg.core.data.messaging.MailboxReceiver
 import app.ottermsg.core.data.messaging.Outbox
+import app.ottermsg.core.data.news.NewsRepository
 import app.ottermsg.core.data.push.PushMonitor
 import app.ottermsg.core.data.push.PushRegistrar
 import app.ottermsg.core.data.settings.Settings
@@ -41,7 +42,7 @@ import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Keeps the account connected while started: login → directory sync → pending prekey refill → outbox,
- * while handling node events (envelopes, directory, prekeys_low) for the lifetime of each connection.
+ * while handling node events (envelopes, directory, prekeys_low, manifest, news) for the lifetime of each connection.
  */
 @Singleton
 class SyncEngine @Inject constructor(
@@ -52,6 +53,7 @@ class SyncEngine @Inject constructor(
     private val prekeys: PrekeyRefill, private val profile: ProfileRepository, private val media: MediaTransfers,
     @ApplicationScope private val appScope: CoroutineScope, @param:AllowPlaintext private val allowPlaintext: Boolean,
     private val clock: Clock, private val guard: InstallGuard, private val backups: BackupManager,
+    private val news: NewsRepository,
     private val pushRegistrar: PushRegistrar = PushRegistrar(accounts, settings, clock),
     private val pushMonitor: PushMonitor = PushMonitor(settings, clock),
 ) : OnlineApi {
@@ -111,11 +113,20 @@ class SyncEngine @Inject constructor(
             catch (e: CancellationException) { throw e }
             catch (e: Exception) { log.log(Level.WARNING, "push token registration failed", e) } // retried next login
         }
-        if (manifests.checkAfterLogin(api) == ManifestUpdater.Result.STORED_NODE_REMOVED) {
-            reconnect() // this node is no longer part of the network
-            return
+        when (manifests.checkAfterLogin(api)) {
+            ManifestUpdater.Result.STORED_NODE_REMOVED -> {
+                reconnect() // this node is no longer part of the network
+                return
+            }
+            ManifestUpdater.Result.STORED -> news.purgeRevoked() // a news key may have been revoked (D65)
+            ManifestUpdater.Result.IGNORED -> {}
         }
         directory.sync(api)
+        session.launch {
+            try { news.sync(api) }
+            catch (e: CancellationException) { throw e }
+            catch (e: Exception) { log.log(Level.WARNING, "news sync failed", e) } // again on the next login or `news` event
+        }
         prekeys.refillIfPending(api)
         session.launch { profile.run(api) }
         session.launch { media.run(api) }
@@ -154,10 +165,15 @@ class SyncEngine @Inject constructor(
                     lastActivityMs = clock.now()
                 }
                 "directory" -> directory.sync(api)
+                "news" -> news.sync(api)
                 "prekeys_low" -> prekeys.refill(api, PrekeysLow.parseFrom(e.body).ownerNode.toByteArray())
                 "manifest" -> {
                     val raw = ManifestResponse.parseFrom(e.body).manifest.toByteArray()
-                    if (manifests.offer(raw, api.hello().nodeId.toByteArray()) == ManifestUpdater.Result.STORED_NODE_REMOVED) reconnect()
+                    when (manifests.offer(raw, api.hello().nodeId.toByteArray())) {
+                        ManifestUpdater.Result.STORED_NODE_REMOVED -> { news.purgeRevoked(); reconnect() }
+                        ManifestUpdater.Result.STORED -> news.purgeRevoked()
+                        ManifestUpdater.Result.IGNORED -> {}
+                    }
                 }
             }
         } catch (x: CancellationException) {

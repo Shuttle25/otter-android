@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -8,11 +10,21 @@ plugins {
 // Firebase is optional (D61): without the owner's google-services.json (never committed) the app builds without push.
 val firebaseConfigured = file("google-services.json").exists()
 if (firebaseConfigured) apply(plugin = "com.google.gms.google-services")
+// Packages that google-services.json has a client for (e.g. no `app.ottermsg.staging`). A variant whose applicationId
+// is missing builds without Firebase: its google-services task is disabled and BuildConfig.FIREBASE is false.
+@Suppress("UNCHECKED_CAST")
+val firebasePackages: Set<String> = if (!firebaseConfigured) emptySet() else
+    ((groovy.json.JsonSlurper().parse(file("google-services.json")) as Map<String, Any?>)["client"] as List<Map<String, Any?>>)
+        .mapNotNull { ((it["client_info"] as? Map<*, *>)?.get("android_client_info") as? Map<*, *>)?.get("package_name") as? String }
+        .toSet()
 // Short git hash for the Settings version line (D63); "dev" outside a git checkout. Configuration-cache safe.
 val gitHash: Provider<String> = providers.exec {
     commandLine("git", "rev-parse", "--short=7", "HEAD")
     isIgnoreExitValue = true
 }.standardOutput.asText.map { it.trim().ifEmpty { "dev" } }.orElse("dev")
+// Release signing (D68): the owner's keystore, when keystore.properties (gitignored, with storeFile, storePassword,
+// keyAlias, keyPassword) exists next to settings.gradle.kts; otherwise release builds stay debug-signed as before.
+val keystoreProps = rootProject.file("keystore.properties")
 android {
     namespace = "app.ottermsg"
     compileSdk = 36
@@ -20,16 +32,23 @@ android {
     defaultConfig {
         applicationId = "app.ottermsg"
         minSdk = 26; targetSdk = 36
-        versionCode = 5; versionName = "0.5.0"
+        versionCode = 6; versionName = "0.6.0"
         buildConfigField("String", "GIT_HASH", "\"${gitHash.get()}\"")
-        buildConfigField("boolean", "FIREBASE", firebaseConfigured.toString())
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+    signingConfigs {
+        if (keystoreProps.exists()) create("release") {
+            val p = Properties().apply { keystoreProps.inputStream().use { load(it) } }
+            storeFile = rootProject.file(p.getProperty("storeFile"))
+            storePassword = p.getProperty("storePassword"); keyAlias = p.getProperty("keyAlias"); keyPassword = p.getProperty("keyPassword")
+        }
     }
     buildTypes {
         debug { buildConfigField("boolean", "ALLOW_PLAINTEXT", "true") }
         release {
             buildConfigField("boolean", "ALLOW_PLAINTEXT", "false")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
@@ -54,6 +73,17 @@ android {
     }
 }
 kotlin { jvmToolchain(21) }
+androidComponents {
+    onVariants { variant ->
+        val appId = variant.applicationId.get()
+        val firebase = appId in firebasePackages
+        variant.buildConfigFields?.put("FIREBASE", com.android.build.api.variant.BuildConfigField("boolean", firebase.toString(), null))
+        if (firebaseConfigured && !firebase) {
+            val name = variant.name.replaceFirstChar { it.uppercase() }
+            tasks.matching { it.name == "process${name}GoogleServices" }.configureEach { enabled = false }
+        }
+    }
+}
 // WakeFlowTest reuses core:data's FakeNode / TestGraph. They use core:data internals, so they cannot be compiled here;
 // their compiled classes go on the unit-test classpath as a jar (AGP ignores plain class directories there). Internal
 // names are mangled per variant, so debug tests get core:data's debug test classes and release/staging the release ones.

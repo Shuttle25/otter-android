@@ -18,6 +18,11 @@ import kotlinx.coroutines.flow.Flow
     @Transaction suspend fun getOrCreateGroupConversation(groupId: ByteArray, title: String, nowMs: Long): Long =
         byGroup(groupId)?.id ?: insert(ConversationEntity(groupId = groupId, type = ConversationType.GROUP, title = title, lastActivityMs = nowMs))
             .takeIf { it > 0 } ?: byGroup(groupId)!!.id
+    /** The news conversation (D64), if any news has arrived. */
+    @Query("SELECT * FROM conversations WHERE type = ${ConversationType.NEWS} ORDER BY id LIMIT 1") suspend fun news(): ConversationEntity?
+    @Transaction suspend fun getOrCreateNews(nowMs: Long): Long =
+        news()?.id ?: insert(ConversationEntity(title = "", lastActivityMs = nowMs, type = ConversationType.NEWS))
+    @Query("UPDATE conversations SET unread = :unread WHERE id = :id") suspend fun setUnread(id: Long, unread: Int)
     @Query("UPDATE conversations SET title = :title WHERE group_id = :groupId") suspend fun setGroupTitle(groupId: ByteArray, title: String)
     @Query("SELECT * FROM conversations WHERE id = :id") fun observe(id: Long): Flow<ConversationEntity?>
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insert(c: ConversationEntity): Long
@@ -28,13 +33,16 @@ import kotlinx.coroutines.flow.Flow
     @Query("UPDATE conversations SET unread = 0 WHERE id = :id") suspend fun clearUnread(id: Long)
     @Query("UPDATE conversations SET draft = :draft WHERE id = :id") suspend fun setDraft(id: Long, draft: String)
     @Query("UPDATE conversations SET title = :title WHERE peer_user_id = :peer") suspend fun setTitle(peer: ByteArray, title: String)
+    /** The chat list. The news chat only while it has a message: deleted or revoked news leave nothing to show (D65). */
     @Query("""
         SELECT c.id, c.title, c.peer_user_id, c.unread, c.last_activity_ms,
                m.body AS last_body, m.status AS last_status, m.outgoing AS last_outgoing, m.kind AS last_kind,
-               c.group_id, COALESCE(g.family, 0) AS family, m.sender_id AS last_sender_id, m.system_data AS last_system_data
+               c.group_id, COALESCE(g.family, 0) AS family, m.sender_id AS last_sender_id, m.system_data AS last_system_data,
+               c.type AS type
         FROM conversations c
         LEFT JOIN groups g ON g.group_id = c.group_id
         LEFT JOIN messages m ON m.local_id = (SELECT local_id FROM messages WHERE conversation_id = c.id ORDER BY sent_ms DESC, local_id DESC LIMIT 1)
+        WHERE c.type != ${ConversationType.NEWS} OR m.local_id IS NOT NULL
         ORDER BY c.last_activity_ms DESC""")
     fun observeSummaries(): Flow<List<ConversationSummary>>
 }
