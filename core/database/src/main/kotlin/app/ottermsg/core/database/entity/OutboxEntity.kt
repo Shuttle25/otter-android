@@ -24,4 +24,6 @@ data class OutboxEntity(
     @ColumnInfo(name = "group_id") val groupId: ByteArray? = null,
     /** Photo message: not sent until its blob is uploaded (D48); MediaTransfers releases it. */
     @ColumnInfo(name = "held", defaultValue = "0") val held: Boolean = false,
+    /** Record expiry (call signaling: created + 2 min, D78); dropped unsent once past it. 0 = never. */
+    @ColumnInfo(name = "expires_ms", defaultValue = "0") val expiresMs: Long = 0,
 )

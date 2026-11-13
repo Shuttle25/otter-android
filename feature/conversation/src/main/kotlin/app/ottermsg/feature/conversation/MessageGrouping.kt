@@ -21,9 +21,14 @@ data class MessageUi(
     val resetName: String? = null,
     /** kind = NEWS: the signed announcement (text picked in the phone's language at display time, D69). */
     val news: app.ottermsg.proto.v1.Announcement? = null,
+    /** kind = CALL: a local call line (D80), rendered as a tappable chip. */
+    val call: CallLineUi? = null,
 ) {
-    val isEvent: Boolean get() = event != null || resetName != null
+    val isEvent: Boolean get() = event != null || resetName != null || call != null
 }
+
+/** [outcome] is CallOutcome.code. */
+data class CallLineUi(val outcome: Int, val durationS: Long)
 
 /** What a photo bubble shows (guide §8–§9). */
 enum class PhotoState { Uploading, Ready, Remote, Downloading, Failed, Gone, NotInBackup }
@@ -45,7 +50,7 @@ const val GROUP_GAP_MS = 5 * 60 * 1000L
  * change or a pause of more than five minutes (guide §7).
  */
 fun groupMessages(list: List<MessageUi>, zone: ZoneId): List<ConversationItem> {
-    fun date(m: MessageUi) = LocalDate.ofInstant(Instant.ofEpochMilli(m.sentMs), zone)
+    fun date(m: MessageUi): LocalDate = Instant.ofEpochMilli(m.sentMs).atZone(zone).toLocalDate() // API 26: no LocalDate.ofInstant
     fun breaks(a: MessageUi, b: MessageUi) =
         a.outgoing != b.outgoing || a.authorKey != b.authorKey || a.system || b.system || a.isEvent || b.isEvent ||
             date(a) != date(b) || b.sentMs - a.sentMs > GROUP_GAP_MS

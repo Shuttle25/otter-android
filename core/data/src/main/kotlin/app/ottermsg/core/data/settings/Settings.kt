@@ -101,6 +101,10 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
     suspend fun notificationsEnabled(): Boolean = (int(NOTIF_ENABLED) ?: 1) != 0
     suspend fun setNotificationsEnabled(v: Boolean) = putInt(NOTIF_ENABLED, if (v) 1 else 0)
     fun observeNotificationsEnabled(): Flow<Boolean> = observeInt(NOTIF_ENABLED, 1).map { it != 0 }
+    /** «Звонки только через сервер» (D77): ICE transport policy RELAY; default on. */
+    suspend fun callsRelayOnly(): Boolean = (int(CALLS_RELAY_ONLY) ?: 1) != 0
+    suspend fun setCallsRelayOnly(v: Boolean) = putInt(CALLS_RELAY_ONLY, if (v) 1 else 0)
+    fun observeCallsRelayOnly(): Flow<Boolean> = observeInt(CALLS_RELAY_ONLY, 1).map { it != 0 }
     suspend fun notificationPermissionAsked(): Boolean = (int(NOTIF_ASKED) ?: 0) != 0
     suspend fun setNotificationPermissionAsked() = putInt(NOTIF_ASKED, 1)
 
@@ -113,6 +117,7 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
         const val LAST_OFFLINE_MS = "last_offline_ms"
         const val NOTIF_ENABLED = "notifications_enabled"
         const val NOTIF_ASKED = "notifications_permission_asked"
+        const val CALLS_RELAY_ONLY = "calls_relay_only"
         const val INSTALLED_MS = "installed_ms"
         const val RESTORE_PENDING = "restore_pending"
         const val SUPERSEDED = "superseded"

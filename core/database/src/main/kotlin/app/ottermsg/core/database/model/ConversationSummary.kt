@@ -13,6 +13,9 @@ data class ConversationSummary(
     @ColumnInfo(name = "last_system_data") val lastSystemData: ByteArray? = null,
     /** ConversationType. */
     val type: Int = app.ottermsg.core.database.entity.ConversationType.DIRECT,
+    /** Last message is a call line (kind CALL): its outcome and duration. */
+    @ColumnInfo(name = "last_call_outcome") val lastCallOutcome: Int? = null,
+    @ColumnInfo(name = "last_call_duration_s") val lastCallDurationS: Long? = null,
 ) {
     /** Stable avatar seed: peer user id or group id. */
     val seed: ByteArray get() = peerUserId ?: groupId ?: ByteArray(0)

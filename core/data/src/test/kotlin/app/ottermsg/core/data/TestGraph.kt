@@ -61,6 +61,8 @@ class TestGraph(
     private val graphId: String = java.util.UUID.randomUUID().toString(),
     /** Notification hooks (D62); tests record them. */
     val alerts: app.ottermsg.core.data.push.MessageAlerts = app.ottermsg.core.data.push.MessageAlerts.NONE,
+    /** Call content from the receiver (D78); tests record it. */
+    val calls: app.ottermsg.core.data.calls.CallInbox = app.ottermsg.core.data.calls.CallInbox.NONE,
 ) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val settings = Settings(db.settingsDao())
@@ -81,7 +83,7 @@ class TestGraph(
     val applier = GroupApplier(db, accounts, directory, clock)
     val resets = app.ottermsg.core.data.messaging.SessionResets(db, signal, outbox, clock)
     val groupReceiver = GroupReceiver(db, accounts, signal, applier, outbox, clock, incomingPhotos, resets, alerts)
-    val receiver = MailboxReceiver(db, accounts, signal, directory, outbox, clock, groupReceiver, incomingPhotos, resets, alerts)
+    val receiver = MailboxReceiver(db, accounts, signal, directory, outbox, clock, groupReceiver, incomingPhotos, resets, alerts, calls)
     val guard = app.ottermsg.core.data.backup.InstallGuard(db, accounts, settings, signal, resets, clock, directory)
     val backups = app.ottermsg.core.data.backup.BackupManager(ApplicationProvider.getApplicationContext(), db, accounts, settings,
         SeedVault(XorWrapper), { app.ottermsg.core.data.invite.OnlineApi { session } }, clock)
@@ -138,7 +140,7 @@ class TestGraph(
     /** Simulates an app restart: this graph stops (database kept), a new graph opens on the same database. */
     suspend fun restart(): TestGraph {
         offline(); engine.stop(); scope.cancel(); closeDb = false
-        return TestGraph(node, clock, db, graphId, alerts).also { it.accounts.load() }
+        return TestGraph(node, clock, db, graphId, alerts, calls).also { it.accounts.load() }
     }
 
     fun close() { offline(); engine.stop(); scope.cancel(); if (closeDb) db.close() }

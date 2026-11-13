@@ -24,7 +24,8 @@ class EditNameScreenTest {
     @Test fun validatesAndSaves() {
         val store = FakeProfileStore("Мама")
         var back = false
-        compose.setContent { OtterTheme { EditNameRoute(onBack = { back = true }, vm = EditNameViewModel(store)) } }
+        val vm = EditNameViewModel(store) // created once, outside composition
+        compose.setContent { OtterTheme { EditNameRoute(onBack = { back = true }, vm = vm) } }
         compose.onNodeWithText("Сохранить").assertIsNotEnabled()   // unchanged
         compose.onNode(hasSetTextAction()).performTextReplacement("")
         compose.onNodeWithText("Введите имя").assertExists()

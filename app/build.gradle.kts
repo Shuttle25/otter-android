@@ -32,9 +32,9 @@ android {
     defaultConfig {
         applicationId = "app.ottermsg"
         minSdk = 26; targetSdk = 36
-        versionCode = 7; versionName = "0.7.0"
+        versionCode = 8; versionName = "0.8.0"
         buildConfigField("String", "GIT_HASH", "\"${gitHash.get()}\"")
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") } // phones (D80); x86_64 only for emulator builds
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     signingConfigs {
@@ -45,7 +45,7 @@ android {
         }
     }
     buildTypes {
-        debug { buildConfigField("boolean", "ALLOW_PLAINTEXT", "true") }
+        debug { buildConfigField("boolean", "ALLOW_PLAINTEXT", "true"); ndk { abiFilters += "x86_64" } }
         release {
             buildConfigField("boolean", "ALLOW_PLAINTEXT", "false")
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
@@ -56,6 +56,7 @@ android {
         create("staging") {
             initWith(getByName("release"))
             buildConfigField("boolean", "ALLOW_PLAINTEXT", "true")
+            ndk { abiFilters += "x86_64" } // emulator
             signingConfig = signingConfigs.getByName("debug")
             applicationIdSuffix = ".staging"
             matchingFallbacks += listOf("release")
@@ -98,12 +99,13 @@ val coreDataReleaseTestJar = coreDataTestJar("Release")
 dependencies {
     implementation(project(":core:ui")); implementation(project(":core:database")); implementation(project(":core:crypto"))
     implementation(project(":core:data"))
-    implementation(project(":feature:onboarding")); implementation(project(":feature:chats")); implementation(project(":feature:conversation")); implementation(project(":feature:groups")); implementation(project(":feature:settings"))
+    implementation(project(":feature:onboarding")); implementation(project(":feature:chats")); implementation(project(":feature:conversation")); implementation(project(":feature:groups")); implementation(project(":feature:settings")); implementation(project(":feature:calls"))
     implementation(libs.libsignal.android)
     coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(libs.androidx.core.ktx); implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.navigation.compose); implementation(libs.hilt.navigation.compose)
+    implementation(libs.androidx.core.telecom)
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.room.runtime) // MessageNotifier reads OtterDatabase (a RoomDatabase)
     implementation(libs.hilt.android); ksp(libs.hilt.compiler)

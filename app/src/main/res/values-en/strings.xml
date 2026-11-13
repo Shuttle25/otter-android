@@ -19,4 +19,11 @@
     <string name="news_title">Otter News</string>
     <string name="news_sender">Otter</string>
     <string name="news_install_permission">Allow Otter to install updates, then tap Update again</string>
+    <!-- M8: calls (D80) -->
+    <string name="notif_channel_calls">Calls</string>
+    <string name="notif_channel_calls_ongoing">Ongoing call</string>
+    <string name="notif_channel_missed_calls">Missed calls</string>
+    <string name="call_missed_title">Missed call</string>
+    <string name="call_back">Call back</string>
+    <string name="call_starting">Calling…</string>
 </resources>

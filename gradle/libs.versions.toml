@@ -34,8 +34,12 @@ googleServices = "4.4.3"
 work = "2.11.2" # ≥ 2.11.1: on Android 15+ the network constraint no longer passes while the app's background network is blocked
 hiltWork = "1.3.0"
 playServicesBase = "18.1.0"
+webrtc = "150.7871.04" # WebRTC M150 (D78)
+coreTelecom = "1.0.1"
 
 [libraries]
+webrtc-android = { module = "io.github.webrtc-sdk:android", version.ref = "webrtc" }
+androidx-core-telecom = { module = "androidx.core:core-telecom", version.ref = "coreTelecom" }
 androidx-exifinterface = { module = "androidx.exifinterface:exifinterface", version.ref = "androidx-exifinterface" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }

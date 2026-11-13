@@ -63,4 +63,10 @@
     <string name="news_update_corrupt">Файл повреждён</string>
     <string name="news_update_not_found">Файл ещё не на сервере, попробуйте позже</string>
     <string name="news_update_offline">Нет связи с сервером</string>
+    <!-- M8: calls (D80) -->
+    <string name="conv_call">Позвонить</string>
+    <string name="conv_call_no_push">Собеседник может не услышать звонок — у него нет push-уведомлений</string>
+    <string name="conv_call_anyway">Позвонить</string>
+    <string name="conv_call_unavailable">Звонки недоступны: сервер не обновлён</string>
+    <string name="conv_call_mic">Нужен доступ к микрофону</string>
 </resources>

@@ -45,10 +45,13 @@ class Outbox @Inject constructor(
 
     fun kick() { kicks.trySend(Unit) }
 
-    /** Queues [content] for [recipient] and wakes the worker. */
-    suspend fun enqueue(recipient: ByteArray, content: Content, messageLocalId: Long?, urgent: Boolean): Long =
+    /**
+     * Queues [content] for [recipient] and wakes the worker. [expiresMs] > 0 (call signaling, D78): the record carries
+     * that expiry and the item is dropped unsent once it has passed.
+     */
+    suspend fun enqueue(recipient: ByteArray, content: Content, messageLocalId: Long?, urgent: Boolean, expiresMs: Long = 0): Long =
         outbox.insert(OutboxEntity(recipientUserId = recipient, contentBytes = content.toByteArray(), messageLocalId = messageLocalId,
-            urgent = urgent, createdMs = clock.now())).also { kick() }
+            urgent = urgent, createdMs = clock.now(), expiresMs = expiresMs)).also { kick() }
 
     /** Worker for one online session; returns only by cancellation (the session ended). */
     suspend fun run(api: NodeApi): Nothing {
@@ -119,6 +122,7 @@ class Outbox @Inject constructor(
     }
 
     private suspend fun process(api: NodeApi, item: OutboxEntity, me: LocalAccount) {
+        if (item.expiresMs in 1..clock.now()) { outbox.delete(item.id); return } // call signaling past its 2 min (D78)
         val record = item.recordBytes?.let { Record.parseFrom(it) } ?: run {
             val contact = contacts.get(item.recipientUserId) ?: throw PermanentFailure("unknown contact")
             val (kind, ct) = signal.withSessions { _, s ->
@@ -134,7 +138,8 @@ class Outbox @Inject constructor(
             val env = Envelope.newBuilder().setSenderUser(bs(me.userId)).setSenderDevice(1).setKind(kind).setUrgent(item.urgent)
                 .addRecipients(Recipient.newBuilder().setUser(bs(item.recipientUserId)).setDevice(1).setContent(bs(ct))).build()
             // Persist before the first send so retries resend the identical record (the session already advanced).
-            RecordCodec.sign(RecordCodec.body(RecordType.ENVELOPE, me.userId, env.toByteArray(), createdMs = clock.now()), me.accountKey)
+            RecordCodec.sign(RecordCodec.body(RecordType.ENVELOPE, me.userId, env.toByteArray(), expiresMs = item.expiresMs,
+                createdMs = clock.now()), me.accountKey)
                 .also { outbox.setRecord(item.id, it.toByteArray()) }
         }
         api.send(record) // the same record every time: nodes deduplicate by author‖id

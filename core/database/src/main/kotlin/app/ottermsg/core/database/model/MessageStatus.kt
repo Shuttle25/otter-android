@@ -4,7 +4,9 @@ object MessageStatus { const val PENDING = 0; const val SENT = 1; const val DELI
 
 object MessageKind { const val TEXT = 0; const val SYSTEM_UNDECRYPTABLE = 1; const val SYSTEM_GROUP = 2; const val PHOTO = 3; const val SYSTEM_RESET = 4
     /** A verified announcement (D66): body = text in the phone's language, system_data = Announcement bytes. */
-    const val NEWS = 5 }
+    const val NEWS = 5
+    /** A local call line in a 1:1 chat (D80): messages.call_outcome / call_duration_s; never sent, never receipted. */
+    const val CALL = 6 }
 
 /** attachments.state (D48). */
 object AttachmentState {

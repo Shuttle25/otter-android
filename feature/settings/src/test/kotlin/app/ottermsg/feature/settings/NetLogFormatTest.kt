@@ -36,6 +36,15 @@ class NetLogFormatTest {
         assertEquals("14.11 22:13  eeee  wss://eeee.example:27443  Wi-Fi  ok  ×1", formatLine(e, utc, "моб."))
     }
 
+    @Test fun callLinesAlwaysShowOutcomeDurationAndRtt() {
+        val ok = NetLogEntity(3, "eeee", "call:relay-udp", "wifi", "", "ok", "OUTGOING 1:05", 40, 2,
+            1_700_000_000_000, 1_700_000_600_000)
+        assertEquals("14.11 22:13–22:23  eeee  call:relay-udp  Wi-Fi  ok  ×2 (OUTGOING 1:05, 40 ms)", formatLine(ok, utc, "моб."))
+        val failed = NetLogEntity(4, "eeee", "call:none", "wifi", "", "timeout", "FAILED 0:00", 0, 1,
+            1_700_000_000_000, 1_700_000_000_000)
+        assertEquals("14.11 22:13  eeee  call:none  Wi-Fi  timeout  ×1 (FAILED 0:00)", formatLine(failed, utc, "моб."))
+    }
+
     @Test fun shareTextStartsWithVersionAndDate() {
         val text = shareText("Otter 0.7.0 (abc1234)", java.time.LocalDate.of(2026, 11, 13), listOf("a", "b"))
         assertEquals("Otter 0.7.0 (abc1234) · 2026-11-13\na\nb", text)

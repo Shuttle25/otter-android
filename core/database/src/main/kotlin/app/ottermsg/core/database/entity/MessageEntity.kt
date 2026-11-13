@@ -22,4 +22,7 @@ data class MessageEntity(
     @ColumnInfo(name = "read_receipt_sent") val readReceiptSent: Boolean = false,
     /** kind = SYSTEM_GROUP: encoded GroupEvent (rendered by the UI, never stored as text). */
     @ColumnInfo(name = "system_data") val systemData: ByteArray? = null,
+    /** kind = CALL: CallOutcome.code (D80); 0 otherwise. Local only, never sent. */
+    @ColumnInfo(name = "call_outcome", defaultValue = "0") val callOutcome: Int = 0,
+    @ColumnInfo(name = "call_duration_s", defaultValue = "0") val callDurationS: Long = 0,
 )

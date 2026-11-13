@@ -20,10 +20,14 @@ import app.ottermsg.proto.v1.LoginResponse
 import app.ottermsg.proto.v1.ManifestResponse
 import app.ottermsg.proto.v1.PreKeyBundle
 import app.ottermsg.proto.v1.PreKeyFetchRequest
+import app.ottermsg.proto.v1.PushStatus
+import app.ottermsg.proto.v1.PushStatusRequest
 import app.ottermsg.proto.v1.Record
 import app.ottermsg.proto.v1.RecordBatch
 import app.ottermsg.proto.v1.RecordRequest
 import app.ottermsg.proto.v1.RegisterRequest
+import app.ottermsg.proto.v1.Status
+import app.ottermsg.proto.v1.TurnCredentials
 import com.google.protobuf.ByteString
 import kotlinx.coroutines.flow.Flow
 
@@ -63,6 +67,10 @@ interface NodeApi {
     suspend fun newsList(): List<Record> = emptyList()
     /** One 1 MiB chunk of an APK stored on the node (D68). */
     suspend fun apkGet(sha256: ByteArray, index: Int): ApkChunk = throw UnsupportedOperationException()
+    /** TURN credentials for this node's relay (D77). Old nodes: STATUS_INVALID; TURN off: STATUS_UNAVAILABLE. */
+    suspend fun turnCredentials(): TurnCredentials = throw RpcException(Status.STATUS_UNAVAILABLE, "turn.credentials")
+    /** Can the user's phone be woken by push? (D61/D79) Defaults to true so callers never block on it. */
+    suspend fun pushStatus(userId: ByteArray): Boolean = true
 }
 
 class RemoteNodeApi(private val rpc: RpcClient, private val clock: () -> Long = System::currentTimeMillis) : NodeApi {
@@ -111,4 +119,8 @@ class RemoteNodeApi(private val rpc: RpcClient, private val clock: () -> Long = 
         RecordBatch.parseFrom(rpc.call("news.list", Empty.getDefaultInstance())).recordsList
     override suspend fun apkGet(sha256: ByteArray, index: Int): ApkChunk =
         ApkChunk.parseFrom(rpc.call("apk.get", ApkGetRequest.newBuilder().setSha256(ByteString.copyFrom(sha256)).setIndex(index).build()))
+    override suspend fun turnCredentials(): TurnCredentials =
+        TurnCredentials.parseFrom(rpc.call("turn.credentials", Empty.getDefaultInstance()))
+    override suspend fun pushStatus(userId: ByteArray): Boolean =
+        PushStatus.parseFrom(rpc.call("push.status", PushStatusRequest.newBuilder().setUserId(ByteString.copyFrom(userId)).build())).hasPush
 }

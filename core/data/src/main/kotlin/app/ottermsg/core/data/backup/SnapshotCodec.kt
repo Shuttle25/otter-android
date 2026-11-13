@@ -50,7 +50,8 @@ object SnapshotCodec {
             c.groupId?.let { cb.setGroupId(bs(it)) }
             b.addConversations(cb)
         }
-        db.messageDao().all().filter { it.kind != MessageKind.NEWS }.forEach { m ->
+        // News and call lines (D80) are not backed up.
+        db.messageDao().all().filter { it.kind != MessageKind.NEWS && it.kind != MessageKind.CALL }.forEach { m ->
             val mb = BackupMessage.newBuilder().setMessageId(bs(m.messageId)).setConversationId(m.conversationId)
                 .setSenderId(bs(m.senderId)).setOutgoing(m.outgoing).setSentMs(m.sentMs).setReceivedMs(m.receivedMs)
                 .setBody(m.body).setStatus(m.status).setKind(m.kind).setReadReceiptSent(m.readReceiptSent)
@@ -96,7 +97,7 @@ object SnapshotCodec {
         }
         s.messagesList.forEach { m ->
             val cid = ids[m.conversationId]?.takeIf { it > 0 } ?: return@forEach
-            if (m.kind == MessageKind.NEWS) return@forEach
+            if (m.kind == MessageKind.NEWS || m.kind == MessageKind.CALL) return@forEach
             // an unsent message can't be sent from the backup (no outbox): it shows as failed, «Повторить» re-sends it
             val status = if (m.outgoing && m.status == MessageStatus.PENDING) MessageStatus.FAILED else m.status
             val local = db.messageDao().insert(MessageEntity(messageId = m.messageId.toByteArray(), conversationId = cid,

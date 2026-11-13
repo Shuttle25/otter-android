@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="calls_title">Звонок</string>
+    <string name="call_status_dialing">Соединение…</string>
+    <string name="call_status_ringing">Звонит…</string>
+    <string name="call_status_incoming">Входящий звонок</string>
+    <string name="call_status_connecting">Соединяем…</string>
+    <string name="call_status_reconnecting">Переподключение…</string>
+    <string name="call_not_available">Звонки недоступны: сервер не обновлён</string>
+    <string name="call_offline">Нет связи с сервером</string>
+    <string name="call_accept">Принять</string>
+    <string name="call_decline">Отклонить</string>
+    <string name="call_hang_up">Завершить звонок</string>
+    <string name="call_mute">Выключить микрофон</string>
+    <string name="call_speaker">Громкая связь</string>
+    <string name="call_mic_needed">Нужен доступ к микрофону</string>
+    <string name="call_no_push">Собеседник может не услышать звонок — у него нет push-уведомлений</string>
+    <string name="call_anyway">Позвонить</string>
+    <string name="call_cancel">Отмена</string>
+</resources>

@@ -5,6 +5,7 @@ import app.ottermsg.core.crypto.RecordCodec
 import app.ottermsg.core.data.Clock
 import app.ottermsg.core.data.account.AccountRepository
 import app.ottermsg.core.data.bs
+import app.ottermsg.core.data.calls.CallInbox
 import app.ottermsg.core.data.directory.DirectorySync
 import app.ottermsg.core.data.media.IncomingAttachments
 import app.ottermsg.core.data.media.IncomingPhotos
@@ -38,6 +39,7 @@ class MailboxReceiver @Inject constructor(
     private val directory: DirectorySync, private val outbox: Outbox, private val clock: Clock,
     private val groups: GroupReceiver, private val photos: IncomingPhotos, private val resets: SessionResets,
     private val alerts: MessageAlerts = MessageAlerts.NONE,
+    private val calls: CallInbox = CallInbox.NONE,
 ) {
     private val seen = db.seenEnvelopeDao()
     private val contacts = db.contactDao()
@@ -79,8 +81,16 @@ class MailboxReceiver @Inject constructor(
                 null
             }
             val content = plain?.let { runCatching { Content.parseFrom(it) }.getOrNull() }
-            // Group control content touches libsignal state and may sync the directory: outside any DB transaction.
+            // Group control content touches libsignal state and may sync the directory; call content drives the call
+            // layer (D78): outside any DB transaction. Call content never creates a chat.
             when (content?.bodyCase) {
+                Content.BodyCase.CALL -> {
+                    calls.onCallMessage(sender.userId, sender.displayName, content.call, body.createdMs)
+                    acks += key; continue
+                }
+                Content.BodyCase.RECEIPT -> if (calls.isCallReceipt(content.receipt)) {
+                    calls.onCallReceipt(sender.userId, content.receipt); acks += key; continue
+                }
                 Content.BodyCase.GROUP_UPDATE -> { groups.onGroupUpdate(sender.userId, content.groupUpdate.state, api); acks += key; continue }
                 Content.BodyCase.SENDER_KEY -> { groups.onSenderKey(sender.userId, content.senderKey); acks += key; continue }
                 Content.BodyCase.SESSION_RESET -> { resets.onReceived(sender.userId); acks += key; continue }

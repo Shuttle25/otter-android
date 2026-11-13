@@ -35,6 +35,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.platform.LocalContext
+import app.ottermsg.core.ui.callLineText
 import app.ottermsg.core.ui.components.DeliveryStatusIcon
 import app.ottermsg.core.ui.components.OtterAvatar
 import app.ottermsg.core.ui.components.OtterEmptyState
@@ -90,7 +92,9 @@ internal fun ChatRowItem(row: ChatRow, me: ByteArray, names: Names, onClick: () 
         row.preview.isNullOrBlank() -> stringResource(R.string.chats_preview_photo)
         else -> stringResource(R.string.chats_preview_photo_caption, row.preview)
     }
+    val res = LocalContext.current.resources
     val preview = when {
+        row.callOutcome != null -> callLineText(res, row.callOutcome, row.callDurationS)
         row.resetBy != null -> stringResource(R.string.chats_system_reset, row.resetBy)
         row.event != null -> groupEventText(row.event, me, names::of)
         row.previewIsSystem -> stringResource(R.string.chats_undecryptable)

@@ -61,4 +61,10 @@
     <string name="news_update_corrupt">The file is damaged</string>
     <string name="news_update_not_found">The file is not on the server yet, try later</string>
     <string name="news_update_offline">No connection to the server</string>
+    <!-- M8: calls (D80) -->
+    <string name="conv_call">Call</string>
+    <string name="conv_call_no_push">The contact may not hear the call — their phone has no push notifications</string>
+    <string name="conv_call_anyway">Call anyway</string>
+    <string name="conv_call_unavailable">Calls unavailable: the server is not updated</string>
+    <string name="conv_call_mic">Microphone access needed</string>
 </resources>

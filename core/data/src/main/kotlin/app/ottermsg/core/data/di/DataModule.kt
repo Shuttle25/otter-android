@@ -57,5 +57,9 @@ object DataModule {
     @Provides @CacheDir fun cacheDir(@dagger.hilt.android.qualifiers.ApplicationContext context: android.content.Context): java.io.File =
         context.cacheDir
     @Provides fun updateDownloader(u: app.ottermsg.core.data.news.ApkUpdater): app.ottermsg.core.data.news.UpdateDownloader = u
+    @Provides fun callInbox(m: app.ottermsg.core.data.calls.CallManager): app.ottermsg.core.data.calls.CallInbox = m
+    @Provides fun callStarter(m: app.ottermsg.core.data.calls.CallManager): app.ottermsg.core.data.calls.CallStarter = m
+    @Provides fun callTransport(s: app.ottermsg.core.data.calls.CallSignaling): app.ottermsg.core.data.calls.CallTransport = s
+    @Provides fun callLink(l: app.ottermsg.core.data.calls.SyncCallLink): app.ottermsg.core.data.calls.CallLink = l
     @Provides fun newsKeys(m: app.ottermsg.core.data.sync.ManifestUpdater): app.ottermsg.core.data.sync.NewsKeys = m
 }

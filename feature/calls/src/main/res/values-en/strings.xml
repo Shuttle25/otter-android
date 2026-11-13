@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="calls_title">Call</string>
+    <string name="call_status_dialing">Connecting…</string>
+    <string name="call_status_ringing">Ringing…</string>
+    <string name="call_status_incoming">Incoming call</string>
+    <string name="call_status_connecting">Connecting…</string>
+    <string name="call_status_reconnecting">Reconnecting…</string>
+    <string name="call_not_available">Calls unavailable: the server is not updated</string>
+    <string name="call_offline">No connection to the server</string>
+    <string name="call_accept">Accept</string>
+    <string name="call_decline">Decline</string>
+    <string name="call_hang_up">End call</string>
+    <string name="call_mute">Mute</string>
+    <string name="call_speaker">Speaker</string>
+    <string name="call_mic_needed">Microphone access needed</string>
+    <string name="call_no_push">The contact may not hear the call — their phone has no push notifications</string>
+    <string name="call_anyway">Call anyway</string>
+    <string name="call_cancel">Cancel</string>
+</resources>

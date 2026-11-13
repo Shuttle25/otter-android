@@ -19,4 +19,11 @@
     <string name="news_title">Новости Выдры</string>
     <string name="news_sender">Выдра</string>
     <string name="news_install_permission">Разрешите Otter устанавливать обновления, затем нажмите «Обновить» ещё раз</string>
+    <!-- M8: calls (D80) -->
+    <string name="notif_channel_calls">Звонки</string>
+    <string name="notif_channel_calls_ongoing">Текущий звонок</string>
+    <string name="notif_channel_missed_calls">Пропущенные звонки</string>
+    <string name="call_missed_title">Пропущенный звонок</string>
+    <string name="call_back">Перезвонить</string>
+    <string name="call_starting">Звонок…</string>
 </resources>
