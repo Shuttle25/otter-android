@@ -6,6 +6,10 @@ import androidx.lifecycle.viewModelScope
 import android.net.Uri
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import app.ottermsg.core.data.calls.CallNotice
+import app.ottermsg.core.data.calls.CallStarter
+import app.ottermsg.core.data.calls.CallState
+import app.ottermsg.core.data.calls.Peer
 import app.ottermsg.core.data.media.PhotoStore
 import app.ottermsg.core.data.messaging.ConversationStore
 import app.ottermsg.core.data.messaging.GroupView
@@ -60,6 +64,9 @@ data class ConversationUi(
     val names: Map<String, String> = emptyMap(),
     /** The «Новости Выдры» chat (D64): localized title, otter avatar, no composer. */
     val isNews: Boolean = false,
+    /** 1:1 chat with a contact: the top bar shows the call button (D80). */
+    val canCall: Boolean = false,
+    val peerId: ByteArray = ByteArray(0),
 ) {
     fun nameOf(id: ByteArray): String = names[id.hex()] ?: "?"
 }
@@ -104,7 +111,8 @@ fun conversationUi(
         isGroup = isGroup, family = group?.group?.family == true, groupIdHex = conv?.groupId?.hex().orEmpty(),
         memberCount = group?.members?.size ?: 0,
         canWrite = !isNews && (!isGroup || group?.group?.iAmMember == true),
-        me = me, names = names, isNews = isNews)
+        me = me, names = names, isNews = isNews,
+        canCall = !isGroup && !isNews && conv?.peerUserId != null, peerId = conv?.peerUserId ?: ByteArray(0))
 }
 
 @OptIn(FlowPreview::class)
@@ -117,6 +125,7 @@ class ConversationViewModel @Inject constructor(
     },
     installedVersion: InstalledVersion = InstalledVersion { Int.MAX_VALUE },
     private val installer: UpdateInstaller = UpdateInstaller {},
+    private val calls: CallStarter = CallStarter.NONE,
 ) : ViewModel() {
     val conversationId: Long = checkNotNull(savedState.get<Long>(ARG_ID)) { "conversation id missing" }
     var zone: ZoneId = ZoneId.systemDefault()
@@ -253,6 +262,40 @@ class ConversationViewModel @Inject constructor(
                 UpdateResult.Offline -> UpdateUi.Error(R.string.news_update_offline)
             }
         }
+    }
+
+    private val _callWarning = MutableStateFlow(false)
+    /** The contact may not hear the call (no push): «Позвонить» / «Отмена» before dialing. */
+    val callWarning: StateFlow<Boolean> = _callWarning
+    private val _callStarted = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    /** A call was dialed: the app opens the call screen. */
+    val callStarted: SharedFlow<Unit> = _callStarted
+    /** «Звонки недоступны» etc. from the call manager. */
+    val callNotices: SharedFlow<CallNotice> = calls.notices
+    private var preparing = false
+
+    /** After the microphone permission: ask `push.status`, warn when the contact has no push, else dial. */
+    fun prepareCall() {
+        val u = ui.value
+        if (!u.canCall || preparing) return
+        preparing = true
+        viewModelScope.launch {
+            try {
+                if (calls.state.value != CallState.Idle) { _callStarted.tryEmit(Unit); return@launch } // show the call in progress
+                if (calls.peerHasPush(u.peerId)) dial() else _callWarning.value = true
+            } finally {
+                preparing = false
+            }
+        }
+    }
+
+    fun confirmCall() { if (_callWarning.value) { _callWarning.value = false; dial() } }
+    fun dismissCallWarning() { _callWarning.value = false }
+
+    private fun dial() {
+        val u = ui.value
+        calls.dial(Peer.of(u.peerId, u.title))
+        _callStarted.tryEmit(Unit)
     }
 
     fun retry(localId: Long) = viewModelScope.launch { store.retry(localId) }

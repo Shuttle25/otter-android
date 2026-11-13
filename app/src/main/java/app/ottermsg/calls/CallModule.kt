@@ -14,6 +14,6 @@ import dagger.hilt.components.SingletonComponent
 @InstallIn(SingletonComponent::class)
 object CallModule {
     @Provides fun mediaEngines(@ApplicationContext c: Context): MediaEngine.Factory = MediaEngine.Factory { WebRtcEngine(c) }
-    /** Replaced by CallNotifier (ringing, missed-call notifications) in Task 12. */
-    @Provides fun callAlerts(): CallAlerts = CallAlerts.NONE
+    /** Ringing, missed-call notifications, call service (D80). */
+    @Provides fun callAlerts(n: CallNotifier): CallAlerts = n
 }

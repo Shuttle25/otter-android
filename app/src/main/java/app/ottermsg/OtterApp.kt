@@ -4,6 +4,9 @@ import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.Configuration
+import android.media.AudioManager
+import app.ottermsg.core.data.calls.CallManager
+import app.ottermsg.core.data.calls.CallState
 import app.ottermsg.core.data.account.AccountRepository
 import app.ottermsg.core.data.di.ApplicationScope
 import app.ottermsg.core.data.push.PushMonitor
@@ -31,6 +34,7 @@ class OtterApp : Application(), Configuration.Provider {
     @Inject lateinit var settings: Settings
     @Inject lateinit var monitor: PushMonitor
     @Inject lateinit var wake: WakeScheduler
+    @Inject lateinit var calls: dagger.Lazy<CallManager>
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
@@ -49,6 +53,13 @@ class OtterApp : Application(), Configuration.Provider {
             if (available) FirebaseMessaging.getInstance().token.addOnSuccessListener { t -> appScope.launch { settings.setPushToken(t) } }
             // Background jobs only make sense with an account; then FAST/SAVER decides whether the 15-min check runs (D61).
             if (accounts.load() == null) accounts.account.filterNotNull().first()
+            // Another call (GSM or another VoIP app) in progress: an incoming Otter call is answered BUSY (D80).
+            val am = getSystemService(AudioManager::class.java)
+            val manager = calls.get()
+            manager.systemBusy = {
+                am.mode == AudioManager.MODE_IN_CALL ||
+                    (am.mode == AudioManager.MODE_IN_COMMUNICATION && manager.state.value == CallState.Idle)
+            }
             monitor.observeMode().distinctUntilChanged().collect { wake.apply(it) }
         }
     }

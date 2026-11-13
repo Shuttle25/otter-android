@@ -31,7 +31,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.SnackbarResult
+import app.ottermsg.core.data.calls.CallNotice
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -92,6 +96,8 @@ class PhotoActions(
 fun ConversationRoute(
     onBack: () -> Unit, onOpenGroupInfo: (String) -> Unit = {}, onMessageInfo: (Long) -> Unit = {},
     onOpenPhoto: (Long) -> Unit = {},
+    /** A call was dialed (or one is in progress): open the call screen. */
+    onCallStarted: () -> Unit = {},
     vm: ConversationViewModel = hiltViewModel(),
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
@@ -135,6 +141,28 @@ fun ConversationRoute(
         saveAfterPermission = null
         if (granted && id != null) vm.saveToGallery(id)
     }
+    // Calls (D80): microphone permission (first time) → push.status → warning → dial.
+    val callWarning by vm.callWarning.collectAsStateWithLifecycle()
+    var micDenied by remember { mutableStateOf(false) }
+    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) vm.prepareCall() else micDenied = true
+    }
+    val startCall = {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) vm.prepareCall()
+        else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+    }
+    LaunchedEffect(Unit) { vm.callStarted.collect { onCallStarted() } }
+    val unavailable = stringResource(R.string.conv_call_unavailable)
+    LaunchedEffect(Unit) { vm.callNotices.collect { if (it == CallNotice.NotAvailable) snackbar.showSnackbar(unavailable) } }
+    val micText = stringResource(R.string.conv_call_mic)
+    val settingsText = stringResource(R.string.conv_camera_settings)
+    LaunchedEffect(micDenied) {
+        if (!micDenied) return@LaunchedEffect
+        micDenied = false
+        if (snackbar.showSnackbar(micText, actionLabel = settingsText) == SnackbarResult.ActionPerformed) {
+            context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)))
+        }
+    }
     val pickImage = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
     val actions = PhotoActions(
         onPick = pickImage,
@@ -153,7 +181,16 @@ fun ConversationRoute(
         ConversationScreen(ui, text, sending, onBack, vm::onText, vm::send, { vm.retry(it) }, { vm.delete(it) }, vm.sent,
             onOpenGroupInfo = { if (ui.isGroup) onOpenGroupInfo(ui.groupIdHex) }, onMessageInfo = onMessageInfo,
             photoActions = actions, snackbar = snackbar,
-            update = NewsUpdate(vm.installedCode, updateState, vm::startUpdate))
+            update = NewsUpdate(vm.installedCode, updateState, vm::startUpdate),
+            onCall = startCall, onCallBack = { if (ui.canCall) startCall() })
+    }
+    if (callWarning) {
+        AlertDialog(
+            onDismissRequest = vm::dismissCallWarning,
+            text = { Text(stringResource(R.string.conv_call_no_push)) },
+            confirmButton = { TextButton(onClick = vm::confirmCall) { Text(stringResource(R.string.conv_call_anyway)) } },
+            dismissButton = { TextButton(onClick = vm::dismissCallWarning) { Text(stringResource(R.string.conv_cancel)) } },
+        )
     }
     pending?.let { path -> PhotoPreview(path, text, photoSending, onCancel = vm::cancelPhoto, onSend = vm::sendPhoto) }
     if (cameraDenied) {
@@ -180,8 +217,10 @@ fun ConversationScreen(
     onOpenGroupInfo: () -> Unit = {}, onMessageInfo: (Long) -> Unit = {},
     photoActions: PhotoActions = PhotoActions(), snackbar: SnackbarHostState = remember { SnackbarHostState() },
     update: NewsUpdate = NewsUpdate(),
-    /** Tap on a call line: call this contact back (wired in Task 12). */
+    /** Tap on a call line: call this contact back. */
     onCallBack: () -> Unit = {},
+    /** Top-bar call button (1:1 chats only, [ConversationUi.canCall]). */
+    onCall: () -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -218,7 +257,10 @@ fun ConversationScreen(
             OtterTopBar(title, onBack = onBack, leading = {
                 OtterAvatar(title, ui.seed, Dimens.avatarTopBar, family = ui.family, news = ui.isNews); Spacer(Modifier.width(Dimens.s12))
             }, onTitleClick = if (ui.isGroup) onOpenGroupInfo else null,
-                subtitle = if (ui.isGroup) pluralStringResource(R.plurals.conv_members, ui.memberCount, ui.memberCount) else null)
+                subtitle = if (ui.isGroup) pluralStringResource(R.plurals.conv_members, ui.memberCount, ui.memberCount) else null,
+                actions = {
+                    if (ui.canCall) IconButton(onClick = onCall) { Icon(Icons.Outlined.Call, stringResource(R.string.conv_call)) }
+                })
         },
         bottomBar = {
             if (ui.canWrite) MessageComposer(text, sending, onText, onSend, Modifier.navigationBarsPadding().imePadding(),

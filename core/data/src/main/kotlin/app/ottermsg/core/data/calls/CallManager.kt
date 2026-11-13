@@ -52,7 +52,7 @@ class CallManager @Inject constructor(
     private val alerts: CallAlerts,
     private val clock: Clock,
     @ApplicationScope private val scope: CoroutineScope,
-) : CallInbox {
+) : CallInbox, CallStarter {
     private sealed interface Op {
         data class Ev(val ev: CallEvent) : Op
         data class RemoteCandidates(val id: CallId, val c: List<Candidate>) : Op
@@ -64,12 +64,12 @@ class CallManager @Inject constructor(
     private val machine = CallStateMachine()
     private val ops = Channel<Op>(Channel.UNLIMITED)
     private val _state = MutableStateFlow<CallState>(CallState.Idle)
-    val state: StateFlow<CallState> = _state.asStateFlow()
+    override val state: StateFlow<CallState> = _state.asStateFlow()
     private val _ended = MutableSharedFlow<CallOutcome>(extraBufferCapacity = 4)
     /** Outcome of every call that had a call screen (not emitted for missed / declined incoming calls). */
     val ended: SharedFlow<CallOutcome> = _ended.asSharedFlow()
     private val _notices = MutableSharedFlow<CallNotice>(extraBufferCapacity = 4)
-    val notices: SharedFlow<CallNotice> = _notices.asSharedFlow()
+    override val notices: SharedFlow<CallNotice> = _notices.asSharedFlow()
     private val _muted = MutableStateFlow(false)
     val muted: StateFlow<Boolean> = _muted.asStateFlow()
 
@@ -106,7 +106,7 @@ class CallManager @Inject constructor(
         }
     }
 
-    fun dial(peer: Peer) = post(CallEvent.Dial(CallId.random(), peer, clock.now()))
+    override fun dial(peer: Peer) = post(CallEvent.Dial(CallId.random(), peer, clock.now()))
     fun accept() = post(CallEvent.Accept(clock.now()))
     fun decline() = post(CallEvent.Decline(clock.now()))
     fun hangUp() = post(CallEvent.HangUp(clock.now()))
@@ -114,7 +114,7 @@ class CallManager @Inject constructor(
     /** Media path of the current call (relay-udp / relay-tcp / relay-tls / direct); null before ICE connects. */
     suspend fun path(): PathInfo? = engine?.path()
     /** May [peer]'s phone be woken by push? True when unknown (offline, old node). */
-    suspend fun peerHasPush(peer: ByteArray): Boolean =
+    override suspend fun peerHasPush(peer: ByteArray): Boolean =
         runCatching { link.api(0)?.pushStatus(peer) ?: true }.getOrDefault(true)
 
     private fun post(ev: CallEvent) { ops.trySend(Op.Ev(ev)) }

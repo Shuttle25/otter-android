@@ -9,6 +9,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.compose.ui.platform.LocalContext
+import app.ottermsg.calls.CallActivity
 import app.ottermsg.core.data.account.LocalAccount
 import app.ottermsg.feature.chats.ChatListRoute
 import app.ottermsg.feature.chats.InviteRoute
@@ -104,8 +106,10 @@ fun AppNavHost(hasAccount: Boolean, account: StateFlow<LocalAccount?>,
             AddMembersRoute(onBack = { nav.popBackStack() })
         }
         composable(Routes.CONVERSATION, arguments = listOf(navArgument(ConversationViewModel.ARG_ID) { type = NavType.LongType })) {
+            val context = LocalContext.current
             ConversationRoute(onBack = { nav.popBackStack() }, onOpenGroupInfo = { nav.navigate(Routes.groupInfo(it)) },
-                onMessageInfo = { nav.navigate(Routes.messageInfo(it)) }, onOpenPhoto = { nav.navigate(Routes.photo(it)) })
+                onMessageInfo = { nav.navigate(Routes.messageInfo(it)) }, onOpenPhoto = { nav.navigate(Routes.photo(it)) },
+                onCallStarted = { context.startActivity(CallActivity.outgoing(context)) })
         }
         composable(Routes.MESSAGE_INFO, arguments = listOf(navArgument(MessageInfoViewModel.ARG_LOCAL_ID) { type = NavType.LongType })) {
             MessageInfoRoute(onBack = { nav.popBackStack() })

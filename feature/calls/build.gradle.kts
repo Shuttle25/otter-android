@@ -19,7 +19,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose); implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.hilt.android); ksp(libs.hilt.compiler); implementation(libs.hilt.navigation.compose)
     implementation(libs.compose.material.icons); implementation(libs.androidx.activity.compose)
-    implementation(libs.webrtc.android)
+    implementation(libs.webrtc.android); implementation(libs.androidx.core.telecom)
     testImplementation(libs.junit); testImplementation(libs.robolectric); testImplementation(libs.coroutines.test)
     testImplementation(libs.compose.ui.test.junit4); testImplementation(libs.compose.ui.test.manifest)
 }
