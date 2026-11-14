@@ -26,4 +26,9 @@
     <string name="call_missed_title">Пропущенный звонок</string>
     <string name="call_back">Перезвонить</string>
     <string name="call_starting">Звонок…</string>
+    <!-- full-screen calls on the lock screen (Android 14+) -->
+    <string name="fsi_ask_title">Звонки на заблокированном экране</string>
+    <string name="fsi_ask_text">Чтобы входящий звонок будил телефон и показывался на весь экран, разрешите Otter полноэкранные уведомления.</string>
+    <string name="fsi_ask_allow">Разрешить</string>
+    <string name="fsi_ask_later">Не сейчас</string>
 </resources>

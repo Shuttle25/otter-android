@@ -107,6 +107,9 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
     fun observeCallsRelayOnly(): Flow<Boolean> = observeInt(CALLS_RELAY_ONLY, 1).map { it != 0 }
     suspend fun notificationPermissionAsked(): Boolean = (int(NOTIF_ASKED) ?: 0) != 0
     suspend fun setNotificationPermissionAsked() = putInt(NOTIF_ASKED, 1)
+    /** The one-time «Звонки на заблокированном экране» prompt (USE_FULL_SCREEN_INTENT, Android 14+) was shown. */
+    suspend fun fullScreenIntentAsked(): Boolean = (int(FSI_ASKED) ?: 0) != 0
+    suspend fun setFullScreenIntentAsked() = putInt(FSI_ASKED, 1)
 
     companion object {
         const val PUSH_TOKEN = "push_token"
@@ -117,6 +120,7 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
         const val LAST_OFFLINE_MS = "last_offline_ms"
         const val NOTIF_ENABLED = "notifications_enabled"
         const val NOTIF_ASKED = "notifications_permission_asked"
+        const val FSI_ASKED = "full_screen_intent_asked"
         const val CALLS_RELAY_ONLY = "calls_relay_only"
         const val INSTALLED_MS = "installed_ms"
         const val RESTORE_PENDING = "restore_pending"
