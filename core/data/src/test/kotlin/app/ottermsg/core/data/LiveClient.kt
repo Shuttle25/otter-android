@@ -70,7 +70,7 @@ class LiveClient {
     val groups = GroupRepository(db, accounts, applier, outbox, clock)
     val groupRevocations = app.ottermsg.core.data.group.GroupRevocations(db, accounts, groups, settings)
     val messages = MessageRepository(db, accounts, outbox, clock, files, PhotoPrep(), media)
-    val prekeys = PrekeyRefill(accounts, settings, signal, clock)
+    val prekeys = PrekeyRefill(accounts, settings, signal, clock, db.manifestDao())
     val stats = InMemoryEndpointStats()
     val selector = NodeSelector(transport, stats, clock::now)
     val manifests = ManifestUpdater(db.manifestDao(), settings, clock)

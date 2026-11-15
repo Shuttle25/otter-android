@@ -41,6 +41,15 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
         dao.get(PENDING_REFILLS)?.decodeToString()?.split('\n')?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
     suspend fun setPendingRefills(owners: Set<String>) = dao.put(SettingEntity(PENDING_REFILLS, owners.joinToString("\n").encodeToByteArray()))
 
+    /** Recent prekey refill times per owner node (hex), for the refill bounds (D108). */
+    suspend fun refillTimes(): Map<String, List<Long>> =
+        dao.get(REFILL_TIMES)?.decodeToString()?.split('\n')?.mapNotNull { line ->
+            val k = line.substringBefore(':', "").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            k to line.substringAfter(':').split(',').mapNotNull { it.toLongOrNull() }
+        }?.toMap() ?: emptyMap()
+    suspend fun setRefillTimes(m: Map<String, List<Long>>) =
+        dao.put(SettingEntity(REFILL_TIMES, m.entries.joinToString("\n") { (k, v) -> k + ":" + v.joinToString(",") }.encodeToByteArray()))
+
     /** D104: `<user hex>:<group hex>` pairs whose revocation GroupRevocations already handled (rotate once, remove once). */
     suspend fun revocationsHandled(): Set<String> =
         dao.get(REVOCATIONS_HANDLED)?.decodeToString()?.split('\n')?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
@@ -181,6 +190,7 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
         const val OWN_INVITE_PROOF = "own_invite_proof"
         const val PREKEYS_LOW = "prekeys_low"
         const val PENDING_REFILLS = "prekeys_pending_owners"
+        const val REFILL_TIMES = "prekeys_refill_times"
         const val REVOCATIONS_HANDLED = "revocations_handled"
     }
 }

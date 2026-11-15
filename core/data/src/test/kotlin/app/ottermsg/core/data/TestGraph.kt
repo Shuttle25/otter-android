@@ -91,7 +91,7 @@ class TestGraph(
     val groups = GroupRepository(db, accounts, applier, outbox, clock)
     val groupRevocations = app.ottermsg.core.data.group.GroupRevocations(db, accounts, groups, settings)
     val messages = MessageRepository(db, accounts, outbox, clock, files, PhotoPrep(), media, alerts)
-    val prekeys = PrekeyRefill(accounts, settings, signal, clock)
+    val prekeys = PrekeyRefill(accounts, settings, signal, clock, db.manifestDao())
     @Volatile var session: FakeNode.Session? = null
     private var sessionScope: CoroutineScope? = null
     val invites = InviteRepository(accounts, settings, db.manifestDao(), { session }, clock)
