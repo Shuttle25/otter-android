@@ -36,6 +36,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import app.ottermsg.core.crypto.Bip39
+import app.ottermsg.core.ui.components.SecureWindow
 import app.ottermsg.core.ui.theme.Dimens
 import app.ottermsg.feature.onboarding.OnboardingUiState
 import app.ottermsg.feature.onboarding.R
@@ -62,6 +63,7 @@ private fun MethodCard(title: String, hint: String, onClick: () -> Unit) {
 @Composable
 fun RestorePasswordScreen(state: OnboardingUiState, onUsername: (String) -> Unit, onPassword: (String) -> Unit,
                           onSubmit: () -> Unit, onBack: () -> Unit) {
+    SecureWindow()
     OnboardingScaffold(title = stringResource(R.string.onb_restore_by_password), onBack = onBack, bottom = {
         PrimaryButton(stringResource(R.string.onb_restore_do), onSubmit,
             enabled = state.restoreUsername.isNotBlank() && state.restorePassword.isNotEmpty())
@@ -131,6 +133,7 @@ fun RestoringScreen() {
 
 @Composable
 fun RestoreHistoryScreen(state: OnboardingUiState, onPassword: (String) -> Unit, onRestore: () -> Unit, onSkip: () -> Unit) {
+    SecureWindow()
     OnboardingScaffold(title = stringResource(R.string.onb_restore_history_title), onBack = null, bottom = {
         PrimaryButton(stringResource(R.string.onb_restore_history_do), onRestore, enabled = !state.restoring && state.restorePassword.isNotEmpty())
         SecondaryButton(stringResource(R.string.onb_restore_history_skip), onSkip, enabled = !state.restoring)

@@ -64,6 +64,46 @@ internal fun formatLine(e: NetLogEntity, zone: ZoneId, mobileLabel: String): Str
     return "$span  ${e.nodeLabel}  ${e.endpoint}  $net  ${e.result}  ×${e.count}$tail"
 }
 
+private val IPV4 = Regex("""(?<![\w.])\d{1,3}(?:\.\d{1,3}){3}(?!\d)(?!\.\d)""")
+
+/** A colon-hex token (optionally ending in a dotted IPv4 part); [isIpv6] decides whether it is an address. */
+private val IPV6 = Regex("""(?<![\w:.])[0-9A-Fa-f:]*:[0-9A-Fa-f:]*(?:\d{1,3}(?:\.\d{1,3}){3})?(?![\w:])(?!\.\d)""")
+
+/** `::` once, or eight groups (seven with an embedded IPv4) of 1–4 hex digits: so `12:00:05` or `ru-1:27443` stay. */
+private fun isIpv6(t: String): Boolean {
+    val v4 = t.substringAfterLast(':').contains('.')
+    val hex = if (v4) t.substringBeforeLast(':') + ":" else t
+    if (hex.contains(":::")) return false
+    val compressed = hex.indexOf("::").let { it >= 0 && hex.indexOf("::", it + 1) < 0 }
+    val groups = hex.split(':').filter { it.isNotEmpty() }
+    if (groups.any { it.length > 4 }) return false
+    val needed = if (v4) 6 else 8
+    return if (compressed) groups.size < needed else groups.size == needed && hex.count { it == ':' } == (if (v4) 6 else 7)
+}
+
+/** Host and port of a log endpoint `scheme://host[:port]` (IPv6 in brackets); port is empty when absent. */
+private fun hostAndPort(hostPort: String): Pair<String, String> = when {
+    hostPort.startsWith("[") -> hostPort.substringAfter('[').substringBefore(']') to
+        hostPort.substringAfter("]", "").removePrefix(":")
+    ':' in hostPort -> hostPort.substringBeforeLast(':') to hostPort.substringAfterLast(':')
+    else -> hostPort to ""
+}
+
+/**
+ * The shared form of a line (C24, D96): node label instead of host (`wss:27443`), no mobile operator, the endpoint's
+ * host replaced by the label and any other IP address by `<ip>` in the error text. Times stay at minute resolution.
+ */
+internal fun shareLine(e: NetLogEntity, zone: ZoneId, mobileLabel: String): String {
+    if (e.endpoint.startsWith("call:")) return formatLine(e.copy(operator = ""), zone, mobileLabel)
+    val scheme = e.endpoint.substringBefore("://")
+    val (host, port) = hostAndPort(e.endpoint.substringAfter("://", ""))
+    val endpoint = if (port.isEmpty()) scheme else "$scheme:$port"
+    var detail = if (host.isNotEmpty()) e.detail.replace(host, e.nodeLabel, ignoreCase = true) else e.detail
+    detail = IPV6.replace(detail) { m -> if (isIpv6(m.value)) "<ip>" else m.value }
+    detail = IPV4.replace(detail, "<ip>")
+    return formatLine(e.copy(endpoint = endpoint, operator = "", detail = detail), zone, mobileLabel)
+}
+
 /** The shared text: «Otter <version> · <date>», then the lines (newest first). */
 internal fun shareText(versionText: String, date: LocalDate, lines: List<String>): String =
     (listOf("$versionText · $date") + lines).joinToString("\n")
@@ -78,8 +118,10 @@ fun NetLogRoute(onBack: () -> Unit, versionText: String, vm: NetLogViewModel = h
     val zone = ZoneId.systemDefault()
     val lines = rows.map { formatLine(it, zone, mobile) }
     NetLogScreen(lines, onBack, onShare = {
+        // the shared copy is redacted (C24, D96); the screen keeps the full lines
+        val shared = rows.map { shareLine(it, zone, mobile) }
         val send = Intent(Intent.ACTION_SEND).setType("text/plain")
-            .putExtra(Intent.EXTRA_TEXT, shareText(versionText, LocalDate.now(), lines))
+            .putExtra(Intent.EXTRA_TEXT, shareText(versionText, LocalDate.now(), shared))
         runCatching { ctx.startActivity(Intent.createChooser(send, shareTitle)) }
     })
 }

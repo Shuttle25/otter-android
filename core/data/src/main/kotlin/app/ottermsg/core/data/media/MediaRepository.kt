@@ -22,6 +22,8 @@ interface PhotoStore {
     suspend fun download(localId: Long)
     suspend fun load(localId: Long, maxPx: Int): Bitmap?
     suspend fun thumb(localId: Long): Bitmap?
+    /** The photo is on the phone but cannot be decoded safely (C21): «Фото повреждено». */
+    suspend fun corrupt(localId: Long): Boolean = false
     fun galleryNeedsPermission(): Boolean
     suspend fun saveToGallery(localId: Long): Boolean
     /** Copies a picked image into cacheDir/pick at once (the URI grant may not survive process death). */
@@ -53,6 +55,7 @@ class MediaRepository @Inject constructor(
 
     override suspend fun load(localId: Long, maxPx: Int): Bitmap? = loader.load(localId, maxPx)
     override suspend fun thumb(localId: Long): Bitmap? = loader.thumb(dao.forMessage(localId)?.thumb)
+    override suspend fun corrupt(localId: Long): Boolean = loader.isCorrupt(localId)
     override fun galleryNeedsPermission(): Boolean = gallery.needsPermission()
     override suspend fun saveToGallery(localId: Long): Boolean = gallery.save(localId)
 

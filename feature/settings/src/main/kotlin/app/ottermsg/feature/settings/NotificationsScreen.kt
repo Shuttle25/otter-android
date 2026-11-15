@@ -2,6 +2,7 @@ package app.ottermsg.feature.settings
 
 import android.content.Intent
 import android.provider.Settings
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,6 +38,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewModelScope
 import app.ottermsg.core.data.push.PushMode
 import app.ottermsg.core.data.push.PushMonitor
+import app.ottermsg.core.data.push.PushSwitches
 import app.ottermsg.core.data.settings.Settings as AppSettings
 import app.ottermsg.core.ui.components.OtterSettingsRow
 import app.ottermsg.core.ui.components.OtterTopBar
@@ -50,20 +52,26 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class NotificationsUi(val mode: PushMode, val enabled: Boolean)
+data class NotificationsUi(val mode: PushMode, val enabled: Boolean, val googleWake: Boolean = true)
 
-/** «Уведомления» (D61/D62): the push mode, the in-app switch, and a link to Android's notification settings. */
+/**
+ * «Уведомления» (D61/D62/D94): the push mode, «Показывать уведомления», «Пробуждение через Google» (always shown,
+ * even without Google services), and a link to Android's notification settings.
+ */
 @HiltViewModel
 class NotificationsViewModel internal constructor(
-    mode: Flow<PushMode>, enabled: Flow<Boolean>, private val save: suspend (Boolean) -> Unit,
+    mode: Flow<PushMode>, enabled: Flow<Boolean>, wake: Flow<Boolean>,
+    private val save: suspend (Boolean) -> Unit, private val saveWake: suspend (Boolean) -> Unit,
 ) : ViewModel() {
-    @Inject constructor(monitor: PushMonitor, settings: AppSettings) :
-        this(monitor.observeMode(), settings.observeNotificationsEnabled(), { settings.setNotificationsEnabled(it) })
+    @Inject constructor(monitor: PushMonitor, settings: AppSettings, switches: PushSwitches) :
+        this(monitor.observeMode(), settings.observeNotificationsEnabled(), settings.observeGoogleWake(),
+            { switches.setNotifications(it) }, { switches.setGoogleWake(it) })
 
-    val ui: StateFlow<NotificationsUi?> = combine(mode, enabled) { m, e -> NotificationsUi(m, e) }
+    val ui: StateFlow<NotificationsUi?> = combine(mode, enabled, wake) { m, e, w -> NotificationsUi(m, e, w) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     fun setEnabled(v: Boolean) { viewModelScope.launch { save(v) } }
+    fun setGoogleWake(v: Boolean) { viewModelScope.launch { saveWake(v) } }
 }
 
 @Composable
@@ -76,27 +84,45 @@ fun NotificationsRoute(onBack: () -> Unit, vm: NotificationsViewModel = hiltView
     NotificationsScreen(ui, systemOn, onBack, vm::setEnabled, onSystem = {
         context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
             .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    })
+    }, onGoogleWake = vm::setGoogleWake)
 }
 
 @Composable
-fun NotificationsScreen(ui: NotificationsUi?, systemOn: Boolean, onBack: () -> Unit, onEnabled: (Boolean) -> Unit, onSystem: () -> Unit) {
+fun NotificationsScreen(
+    ui: NotificationsUi?, systemOn: Boolean, onBack: () -> Unit, onEnabled: (Boolean) -> Unit, onSystem: () -> Unit,
+    onGoogleWake: (Boolean) -> Unit = {},
+) {
     Scaffold(containerColor = MaterialTheme.colorScheme.background,
         topBar = { OtterTopBar(stringResource(R.string.settings_notifications), onBack = onBack) }) { padding ->
         val u = ui ?: return@Scaffold
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())) {
             val fast = u.mode == PushMode.FAST
             OtterSettingsRow(stringResource(if (fast) R.string.notif_mode_fast else R.string.notif_mode_saver),
-                subtitle = stringResource(if (fast) R.string.notif_mode_fast_hint else R.string.notif_mode_saver_hint),
+                subtitle = stringResource(when {
+                    fast -> R.string.notif_mode_fast_hint
+                    !u.googleWake -> R.string.notif_mode_saver_off_hint
+                    else -> R.string.notif_mode_saver_hint
+                }),
                 icon = if (fast) Icons.Outlined.NotificationsActive else Icons.Outlined.BatterySaver)
             if (!systemOn) OtterSettingsRow(stringResource(R.string.notif_blocked), icon = Icons.Outlined.NotificationsOff)
-            Row(Modifier.fillMaxWidth().heightIn(min = Dimens.settingsRowMin)
-                .toggleable(value = u.enabled, onValueChange = onEnabled, role = Role.Switch)
-                .padding(horizontal = Dimens.screenGutter, vertical = Dimens.s8), verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.notif_show), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                Switch(checked = u.enabled, onCheckedChange = null)
-            }
+            SwitchRow(stringResource(R.string.notif_show), null, u.enabled, onEnabled)
+            SwitchRow(stringResource(R.string.notif_google_wake), stringResource(R.string.notif_google_wake_hint), u.googleWake, onGoogleWake)
+            if (!u.googleWake) OtterSettingsRow(stringResource(R.string.notif_google_wake_off_warning), icon = Icons.Outlined.NotificationsOff)
             OtterSettingsRow(stringResource(R.string.notif_system), icon = Icons.Outlined.SettingsIcon, onClick = onSystem)
         }
+    }
+}
+
+@Composable
+private fun SwitchRow(title: String, subtitle: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth()
+        .heightIn(min = if (subtitle == null) Dimens.settingsRowMin else Dimens.settingsRowWithCaptionMin)
+        .toggleable(value = checked, onValueChange = onChange, role = Role.Switch)
+        .padding(horizontal = Dimens.screenGutter, vertical = Dimens.s8), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = null)
     }
 }

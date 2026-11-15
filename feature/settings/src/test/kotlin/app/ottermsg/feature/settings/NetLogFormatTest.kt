@@ -45,6 +45,49 @@ class NetLogFormatTest {
         assertEquals("14.11 22:13  eeee  call:none  Wi-Fi  timeout  ×1 (FAILED 0:00)", formatLine(failed, utc, "моб."))
     }
 
+    @Test fun sharedLineHidesHostOperatorAndIps() {
+        val e = NetLogEntity(1, "ru-1", "wss://203.0.113.7:27443", "mobile", "MTS", "timeout",
+            "Failed to connect to /203.0.113.7:27443", 0, 3, 1_700_000_000_000, 1_700_000_600_000)
+        assertEquals("14.11 22:13–22:23  ru-1  wss:27443  моб.  timeout  ×3 (Failed to connect to /ru-1:27443)",
+            shareLine(e, utc, "моб."))
+    }
+
+    @Test fun sharedLineHidesHostnamesIpv6AndOtherIps() {
+        val named = NetLogEntity(2, "eeee", "wss://eeee.example:443", "wifi", "", "tls",
+            "eeee.example via 198.51.100.4: pin mismatch", 0, 1, 1_700_000_000_000, 1_700_000_000_000)
+        assertEquals("14.11 22:13  eeee  wss:443  Wi-Fi  tls  ×1 (eeee via <ip>: pin mismatch)", shareLine(named, utc, "моб."))
+        val v6 = NetLogEntity(3, "ru-1", "wss://[2001:db8::7]:443", "wifi", "", "refused",
+            "connect to [2001:db8::7]:443 failed", 0, 1, 1_700_000_000_000, 1_700_000_000_000)
+        assertEquals("14.11 22:13  ru-1  wss:443  Wi-Fi  refused  ×1 (connect to [ru-1]:443 failed)", shareLine(v6, utc, "моб."))
+    }
+
+    @Test fun sharedLineHidesOtherIpv6AndPortlessHosts() {
+        val other = NetLogEntity(5, "ru-1", "wss://203.0.113.7:27443", "wifi", "", "refused",
+            "via 2001:db8:0:0:0:0:0:9 and fe80::1%wlan0 and ::ffff:192.0.2.5 at 12:00:05, Foo::bar", 0, 1,
+            1_700_000_000_000, 1_700_000_000_000)
+        assertEquals("14.11 22:13  ru-1  wss:27443  Wi-Fi  refused  ×1 (via <ip> and <ip>%wlan0 and <ip> at 12:00:05, Foo::bar)",
+            shareLine(other, utc, "моб."))
+        val noPort = NetLogEntity(6, "eeee", "wss://eeee.example", "wifi", "", "tls", "eeee.example: bad", 0, 1,
+            1_700_000_000_000, 1_700_000_000_000)
+        assertEquals("14.11 22:13  eeee  wss  Wi-Fi  tls  ×1 (eeee: bad)", shareLine(noPort, utc, "моб."))
+        val noPort6 = NetLogEntity(7, "eeee", "wss://[2001:db8::7]", "wifi", "", "tls", "2001:db8::7 bad", 0, 1,
+            1_700_000_000_000, 1_700_000_000_000)
+        assertEquals("14.11 22:13  eeee  wss  Wi-Fi  tls  ×1 (eeee bad)", shareLine(noPort6, utc, "моб."))
+    }
+
+    @Test fun sharedLimitLineKeepsTheReason() {
+        val e = NetLogEntity(8, "ru-1", "wss://203.0.113.7:27443", "mobile", "", "reset",
+            "limit: frame: 5000000 bytes > 4194304", 0, 1, 1_700_000_000_000, 1_700_000_000_000)
+        assertEquals("14.11 22:13  ru-1  wss:27443  моб.  reset  ×1 (limit: frame: 5000000 bytes > 4194304)",
+            shareLine(e, utc, "моб."))
+    }
+
+    @Test fun sharedCallLineKeepsOutcome() {
+        val ok = NetLogEntity(4, "eeee", "call:relay-udp", "mobile", "MTS", "ok", "OUTGOING 1:05", 40, 2,
+            1_700_000_000_000, 1_700_000_600_000)
+        assertEquals("14.11 22:13–22:23  eeee  call:relay-udp  моб.  ok  ×2 (OUTGOING 1:05, 40 ms)", shareLine(ok, utc, "моб."))
+    }
+
     @Test fun shareTextStartsWithVersionAndDate() {
         val text = shareText("Otter 0.7.0 (abc1234)", java.time.LocalDate.of(2026, 11, 13), listOf("a", "b"))
         assertEquals("Otter 0.7.0 (abc1234) · 2026-11-13\na\nb", text)

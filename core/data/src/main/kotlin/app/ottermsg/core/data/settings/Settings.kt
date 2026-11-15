@@ -1,5 +1,6 @@
 package app.ottermsg.core.data.settings
 
+import app.ottermsg.core.crypto.BackupKeys
 import app.ottermsg.core.database.dao.SettingsDao
 import app.ottermsg.core.database.entity.SettingEntity
 import kotlinx.coroutines.flow.Flow
@@ -60,6 +61,9 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
     suspend fun superseded(): Boolean = (int(SUPERSEDED) ?: 0) != 0
     suspend fun setSuperseded(v: Boolean) = putInt(SUPERSEDED, if (v) 1 else 0)
     fun observeSuperseded(): Flow<Boolean> = observeInt(SUPERSEDED, 0).map { it != 0 }
+    /** This install's INSTALL record reached a node (C14); cleared by «Этот телефон снова главный». */
+    suspend fun installPublished(): Boolean = (int(INSTALL_PUBLISHED) ?: 0) != 0
+    suspend fun setInstallPublished(v: Boolean) = putInt(INSTALL_PUBLISHED, if (v) 1 else 0)
 
     // ---- password backup (D55) ----
     /** backup_key ‖ auth_secret wrapped by SeedVault; null = backup off. */
@@ -77,6 +81,14 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
     suspend fun setBackupError(v: Int) = putInt(BACKUP_ERROR, v)
     fun observeBackupError(): Flow<Int> = observeInt(BACKUP_ERROR, 0)
     fun observeBackupEnabled(): Flow<Boolean> = dao.observe(BACKUP_SECRET).map { it != null }
+    /** Profile of the stored backup keys (C1); P1 for backups made before 0.9.0. */
+    suspend fun backupProfile(): BackupKeys.Profile =
+        dao.get(BACKUP_PROFILE)?.decodeToString()?.let { n -> BackupKeys.Profile.entries.firstOrNull { it.name == n } }
+            ?: BackupKeys.Profile.P1
+    suspend fun setBackupProfile(p: BackupKeys.Profile) = dao.put(SettingEntity(BACKUP_PROFILE, p.name.encodeToByteArray()))
+    /** C20: the decoy BACKUP_META of an account without a backup has been published. */
+    suspend fun backupDecoyDone(): Boolean = (int(BACKUP_DECOY) ?: 0) != 0
+    suspend fun setBackupDecoyDone(v: Boolean) = putInt(BACKUP_DECOY, if (v) 1 else 0)
 
     // ---- push (D60/D61) and notifications (D62) ----
     suspend fun pushToken(): String? = dao.get(PUSH_TOKEN)?.decodeToString()
@@ -84,6 +96,10 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
     fun observePushToken(): Flow<String?> = dao.observe(PUSH_TOKEN).map { it?.decodeToString() }
     suspend fun pushTokenSent(): String? = dao.get(PUSH_TOKEN_SENT)?.decodeToString()
     suspend fun setPushTokenSent(v: String) = dao.put(SettingEntity(PUSH_TOKEN_SENT, v.encodeToByteArray()))
+    /** «Пробуждение через Google» (D94): off = FCM token deleted and withdrawn, battery saver. Default on. */
+    suspend fun googleWake(): Boolean = (int(GOOGLE_WAKE) ?: 1) != 0
+    suspend fun setGoogleWake(v: Boolean) = putInt(GOOGLE_WAKE, if (v) 1 else 0)
+    fun observeGoogleWake(): Flow<Boolean> = observeInt(GOOGLE_WAKE, 1).map { it != 0 }
     /** Google Play services + Firebase configured in this build (set by the app at start). */
     suspend fun pushAvailable(): Boolean = (int(PUSH_AVAILABLE) ?: 0) != 0
     suspend fun setPushAvailable(v: Boolean) = putInt(PUSH_AVAILABLE, if (v) 1 else 0)
@@ -115,6 +131,7 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
         const val PUSH_TOKEN = "push_token"
         const val PUSH_TOKEN_SENT = "push_token_sent"
         const val PUSH_AVAILABLE = "push_available"
+        const val GOOGLE_WAKE = "google_wake"
         const val PUSH_LAST_WAKE_MS = "push_last_wake_ms"
         const val PUSH_MISSES = "push_misses"
         const val LAST_OFFLINE_MS = "last_offline_ms"
@@ -125,11 +142,14 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
         const val INSTALLED_MS = "installed_ms"
         const val RESTORE_PENDING = "restore_pending"
         const val SUPERSEDED = "superseded"
+        const val INSTALL_PUBLISHED = "install_published"
         const val BACKUP_SECRET = "backup_secret"
         const val BACKUP_SALT = "backup_salt"
         const val BACKUP_VERSION = "backup_version"
         const val BACKUP_LAST_MS = "backup_last_ms"
         const val BACKUP_ERROR = "backup_error"
+        const val BACKUP_PROFILE = "backup_profile"
+        const val BACKUP_DECOY = "backup_decoy_done"
         const val PHOTO_AUTO = "photo_auto_download"
         const val PHOTO_GALLERY = "photo_save_gallery"
         const val AUTO_WIFI = 0

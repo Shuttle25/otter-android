@@ -27,6 +27,8 @@ import app.ottermsg.proto.v1.RecordBody
 import app.ottermsg.proto.v1.RecordType
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.signal.libsignal.protocol.DuplicateMessageException
+import java.util.logging.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
@@ -56,47 +58,60 @@ class MailboxReceiver @Inject constructor(
             val body = runCatching { RecordBody.parseFrom(rec.body) }.getOrNull() ?: continue
             if (body.type != RecordType.ENVELOPE) continue
             val key = body.author.toByteArray() + body.id.toByteArray()
-            if (seen.insert(SeenEnvelopeEntity(key, clock.now() + SEEN_TTL_MS)) == -1L) { acks += key; continue }
-            var sender = contacts.get(body.author.toByteArray())
+            // Only verified, processed envelopes are ever in `seen` (C15): a hit is a redelivery we already handled.
+            if (seen.exists(key)) { acks += key; continue }
+            // a link-only contact (C23) is not trusted to sign envelopes
+            var sender = contacts.get(body.author.toByteArray())?.takeIf { it.entryVersion > 0 }
             if (sender == null && !directorySynced) {
                 directorySynced = true
                 runCatching { directory.sync(api) }.onFailure { if (it is CancellationException) throw it }
-                sender = contacts.get(body.author.toByteArray())
+                sender = contacts.get(body.author.toByteArray())?.takeIf { it.entryVersion > 0 }
             }
-            if (sender == null) { seen.delete(key); continue } // keep it on the node; retry on a later delivery
-            if (!RecordCodec.verify(rec, sender.accountPub)) { acks += key; continue }
-            val env = runCatching { Envelope.parseFrom(body.payload) }.getOrNull()
-            val mine = env?.recipientsList?.firstOrNull { it.user.toByteArray().contentEquals(me.userId) && it.device == 1 }
-            if (env == null || mine == null) { acks += key; continue }
-            if (env.kind == Envelope.Kind.SENDER_KEY) {
-                groups.onEnvelope(sender.userId, key, rec, body, env) // shown, parked or dropped: the node copy is not needed
-                acks += key
+            if (sender == null) continue // keep it on the node; retry on a later delivery
+            if (!RecordCodec.verify(rec, sender.accountPub)) {
+                // A forged copy: not seen, not acked. An ACK would tombstone the real envelope on every node.
+                log.warning("envelope ${key.toHex()} fails its signature: ignored")
                 continue
             }
+            val env = runCatching { Envelope.parseFrom(body.payload) }.getOrNull()
+            val mine = env?.recipientsList?.firstOrNull { it.user.toByteArray().contentEquals(me.userId) && it.device == 1 }
+            if (env == null || mine == null) { markSeen(key); acks += key; continue }
+            if (env.kind == Envelope.Kind.SENDER_KEY) {
+                groups.onEnvelope(sender.userId, key, rec, body, env) // shown, parked or dropped: the node copy is not needed
+                markSeen(key); acks += key
+                continue
+            }
+            var duplicate = false
             val plain = try {
                 signal.withSessions { _, s -> s.decrypt(s.address(sender.userId), env.kind, mine.content.toByteArray()) }
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: DuplicateMessageException) {
+                duplicate = true; null // decrypted before, the commit was cut (process death): nothing new to show
             } catch (e: Exception) {
                 null
             }
+            if (duplicate) { markSeen(key); acks += key; continue }
             val content = plain?.let { runCatching { Content.parseFrom(it) }.getOrNull() }
             // Group control content touches libsignal state and may sync the directory; call content drives the call
-            // layer (D78): outside any DB transaction. Call content never creates a chat.
+            // layer (D78): outside any DB transaction, marked seen right after. Call content never creates a chat.
             when (content?.bodyCase) {
                 Content.BodyCase.CALL -> {
                     calls.onCallMessage(sender.userId, sender.displayName, content.call, body.createdMs)
-                    acks += key; continue
+                    markSeen(key); acks += key; continue
                 }
                 Content.BodyCase.RECEIPT -> if (calls.isCallReceipt(content.receipt)) {
-                    calls.onCallReceipt(sender.userId, content.receipt); acks += key; continue
+                    calls.onCallReceipt(sender.userId, content.receipt); markSeen(key); acks += key; continue
                 }
-                Content.BodyCase.GROUP_UPDATE -> { groups.onGroupUpdate(sender.userId, content.groupUpdate.state, api); acks += key; continue }
-                Content.BodyCase.SENDER_KEY -> { groups.onSenderKey(sender.userId, content.senderKey); acks += key; continue }
-                Content.BodyCase.SESSION_RESET -> { resets.onReceived(sender.userId); acks += key; continue }
+                Content.BodyCase.GROUP_UPDATE -> {
+                    groups.onGroupUpdate(sender.userId, content.groupUpdate.state, api); markSeen(key); acks += key; continue
+                }
+                Content.BodyCase.SENDER_KEY -> { groups.onSenderKey(sender.userId, content.senderKey); markSeen(key); acks += key; continue }
+                Content.BodyCase.SESSION_RESET -> { resets.onReceived(sender.userId); markSeen(key); acks += key; continue }
                 else -> {}
             }
             val shown = db.withTransaction {
+                seen.insert(SeenEnvelopeEntity(key, clock.now() + SEEN_TTL_MS)) // C15: seen commits with the message
                 // A receipt never creates a chat (group members we never wrote to send receipts too).
                 val cid = if (content?.bodyCase == Content.BodyCase.RECEIPT) conversations.byPeer(sender.userId)?.id ?: -1L
                     else conversations.getOrCreateDirect(sender.userId, sender.displayName, clock.now())
@@ -121,6 +136,9 @@ class MailboxReceiver @Inject constructor(
         outbox.kick()
         photos.kick()
     }
+
+    private suspend fun markSeen(key: ByteArray) { seen.insert(SeenEnvelopeEntity(key, clock.now() + SEEN_TTL_MS)) }
+    private fun ByteArray.toHex() = joinToString("") { "%02x".format(it) }
 
     /** Stores [content]; true when it added a visible incoming message (text or photo). */
     private suspend fun handleContent(cid: Long, sender: ContactEntity, content: Content): Boolean {
@@ -157,5 +175,8 @@ class MailboxReceiver @Inject constructor(
         return false
     }
 
-    companion object { val SEEN_TTL_MS = 30.days.inWholeMilliseconds }
+    companion object {
+        val SEEN_TTL_MS = 30.days.inWholeMilliseconds
+        private val log: Logger = Logger.getLogger("MailboxReceiver")
+    }
 }

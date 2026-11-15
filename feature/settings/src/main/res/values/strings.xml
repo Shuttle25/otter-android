@@ -69,6 +69,10 @@
     <string name="notif_show">Показывать уведомления</string>
     <string name="notif_system">Настройки Android</string>
     <string name="notif_blocked">Уведомления запрещены в настройках Android</string>
+    <string name="notif_google_wake">Пробуждение через Google</string>
+    <string name="notif_google_wake_hint">Google видит только, когда телефон будят, но не сообщения</string>
+    <string name="notif_google_wake_off_warning">Без пробуждения через Google звонки не будут приходить</string>
+    <string name="notif_mode_saver_off_hint">Проверяем каждые 15 минут: пробуждение через Google выключено</string>
     <string name="settings_calls_relay_only">Звонки только через сервер</string>
     <string name="settings_calls_relay_only_sub">Собеседник не увидит ваш IP-адрес</string>
     <string name="settings_calls_fsi">Разрешить звонки на заблокированном экране</string>

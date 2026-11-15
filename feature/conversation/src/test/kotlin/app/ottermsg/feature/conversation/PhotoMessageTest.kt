@@ -1,5 +1,7 @@
 package app.ottermsg.feature.conversation
 
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
@@ -7,7 +9,9 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.dp
 import app.ottermsg.core.database.entity.AttachmentEntity
 import app.ottermsg.core.database.model.AttachmentState
 import app.ottermsg.core.ui.components.DeliveryStatus
@@ -90,5 +94,17 @@ class PhotoMessageTest {
         val f = java.io.File.createTempFile("photo", ".jpg")
         compose.setContent { OtterTheme { PhotoPreview(f.path, "", sending = true, onCancel = {}, onSend = {}) } }
         compose.onNodeWithText("Отправить").assertIsNotEnabled()
+    }
+
+    @Test fun corruptPhotoSaysSo() {
+        val src = object : PhotoSource {
+            override suspend fun load(localId: Long, maxPx: Int): ImageBitmap? = null
+            override suspend fun thumb(localId: Long): ImageBitmap? = null
+            override suspend fun corrupt(localId: Long) = true
+        }
+        compose.setContent { OtterTheme { CompositionLocalProvider(LocalPhotoSource provides src) {
+            PhotoContent(1L, PhotoUi(800, 600, PhotoState.Ready), 240.dp, onDownload = {})
+        } } }
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Фото повреждено", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
     }
 }

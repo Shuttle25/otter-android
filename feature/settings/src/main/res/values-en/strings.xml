@@ -69,6 +69,10 @@
     <string name="notif_show">Show notifications</string>
     <string name="notif_system">Android settings</string>
     <string name="notif_blocked">Notifications are blocked in Android settings</string>
+    <string name="notif_google_wake">Wake-up via Google</string>
+    <string name="notif_google_wake_hint">Google only sees when the phone is woken, never the messages</string>
+    <string name="notif_google_wake_off_warning">Without wake-up via Google, calls will not come through</string>
+    <string name="notif_mode_saver_off_hint">Checking every 15 minutes: wake-up via Google is off</string>
     <string name="settings_calls_relay_only">Calls only through the server</string>
     <string name="settings_calls_relay_only_sub">The other person won\'t see your IP address</string>
     <string name="settings_calls_fsi">Allow calls on the lock screen</string>

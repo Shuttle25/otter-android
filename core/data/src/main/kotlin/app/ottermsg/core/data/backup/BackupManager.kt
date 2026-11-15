@@ -48,7 +48,7 @@ class BackupManager @Inject constructor(
     private val vault: SeedVault, private val online: Provider<OnlineApi>, private val clock: Clock,
 ) {
     /** Key derivation; tests swap in cheap parameters. */
-    internal var derive: (String, ByteArray) -> BackupKeys.Keys = { pw, salt -> BackupKeys.derive(pw, salt) }
+    internal var derive: (String, ByteArray, BackupKeys.Profile) -> BackupKeys.Keys = { pw, salt, p -> BackupKeys.derive(pw, salt, p) }
     private val mutex = Mutex()
     private val running = MutableStateFlow(false)
 
@@ -61,9 +61,11 @@ class BackupManager @Inject constructor(
     suspend fun setPassword(password: String): Int {
         if (PasswordPolicy.check(password) != PasswordPolicy.Result.OK) return ERR_WEAK
         val salt = BackupKeys.newSalt()
-        val keys = withContext(Dispatchers.Default) { derive(password, salt) }
+        val profile = BackupKeys.Profile.CURRENT
+        val keys = withContext(Dispatchers.Default) { derive(password, salt, profile) }
         mutex.withLock {
             settings.setBackupSalt(salt)
+            settings.setBackupProfile(profile)
             settings.setBackupSecret(vault.wrap(keys.backupKey + keys.authSecret))
             settings.setBackupError(0)
         }
@@ -76,10 +78,35 @@ class BackupManager @Inject constructor(
         return run(api)
     }
 
-    /** From each sync session: back up if the last success is older than 24 h. */
+    /** From each sync session: back up if the last success is older than 24 h; without a backup, make sure of the decoy. */
     suspend fun runIfDue(api: NodeApi) {
-        if (settings.backupSecret() == null || clock.now() - settings.backupLastMs() < DAY_MS) return
+        if (settings.backupSecret() == null) { publishDecoyIfNeeded(api); return }
+        if (clock.now() - settings.backupLastMs() < DAY_MS) return
         run(api)
+    }
+
+    /**
+     * C20: an account without a backup publishes one decoy BACKUP_META (version 0, random salt and verifier, no blob),
+     * so every node answers backup.auth for it exactly as for an account with a backup. A real backup replaces it.
+     * A node older than 0.9.0 refuses it (INVALID): tried again next session.
+     */
+    internal suspend fun publishDecoyIfNeeded(api: NodeApi) {
+        if (settings.backupDecoyDone() || settings.backupVersion() != 0L) return
+        val me = accounts.require()
+        val profile = BackupKeys.Profile.CURRENT
+        val meta = BackupMeta.newBuilder().setVersion(0).setSalt(bs(BackupKeys.newSalt()))
+            .setKdfMKib(profile.mKib).setKdfT(profile.t).setKdfP(profile.p)
+            .setAuthVerifier(bs(ByteArray(32).also(SecureRandom()::nextBytes)))
+            .setBlobKey(bs(me.userId + ByteArray(16))).setSize(0).build()
+        try {
+            api.backupPublish(RecordCodec.sign(RecordCodec.body(RecordType.BACKUP_META, me.userId, meta.toByteArray(),
+                createdMs = clock.now()), me.accountKey))
+            settings.setBackupDecoyDone(true)
+        } catch (e: RpcException) {
+            // refused (an older node): next session
+        } catch (e: IOException) {
+            // connection dropped: next session
+        }
     }
 
     private suspend fun run(api: NodeApi): Int = mutex.withLock {
@@ -111,8 +138,9 @@ class BackupManager @Inject constructor(
                 }
             }
             val version = settings.backupVersion() + 1
+            val profile = settings.backupProfile()
             val bm = BackupMeta.newBuilder().setVersion(version).setSalt(bs(checkNotNull(settings.backupSalt())))
-                .setKdfMKib(BackupKeys.M_KIB).setKdfT(BackupKeys.T).setKdfP(BackupKeys.P)
+                .setKdfMKib(profile.mKib).setKdfT(profile.t).setKdfP(profile.p)
                 .setAuthVerifier(bs(BackupKeys.Keys(backupKey, authSecret).verifier)).setBlobKey(bs(blobKey)).setSize(file.length()).build()
             api.backupPublish(RecordCodec.sign(RecordCodec.body(RecordType.BACKUP_META, me.userId, bm.toByteArray(), createdMs = clock.now()), me.accountKey))
             settings.setBackupVersion(version)

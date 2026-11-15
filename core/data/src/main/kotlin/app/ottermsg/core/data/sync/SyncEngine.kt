@@ -87,6 +87,8 @@ class SyncEngine @Inject constructor(
     @Volatile private var superseded = false
 
     fun start() { if (!superseded) manager.start() }
+    /** After InstallGuard.reclaim: this install may connect again. */
+    @Synchronized fun resume() { superseded = false; if (leases.isNotEmpty()) start() }
     fun stop() = manager.stop()
     fun retryNow() = manager.retryNow()
     /** Hook for tests; drops the connection and races all candidates again. */

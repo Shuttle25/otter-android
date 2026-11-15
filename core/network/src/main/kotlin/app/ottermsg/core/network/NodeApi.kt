@@ -63,6 +63,8 @@ interface NodeApi {
     suspend fun backupPublish(meta: Record)
     /** PUSH_TOKEN record (D60). Default: no push support (fakes). */
     suspend fun registerPush(record: Record) {}
+    /** install.publish (C14): this phone's account-signed INSTALL. Old nodes answer INVALID ("unknown method"). */
+    suspend fun publishInstall(record: Record) { throw RpcException(Status.STATUS_INVALID, "install.publish") }
     /** Every announcement and deletion the node holds, oldest first (D67). Default: none (fakes). */
     suspend fun newsList(): List<Record> = emptyList()
     /** One 1 MiB chunk of an APK stored on the node (D68). */
@@ -103,9 +105,11 @@ class RemoteNodeApi(private val rpc: RpcClient, private val clock: () -> Long = 
         rpc.call("blob.put", BlobPutRequest.newBuilder().setBlobKey(ByteString.copyFrom(key)).setIndex(index)
             .setData(ByteString.copyFrom(data)).build())
     }
-    override suspend fun blobGet(key: ByteArray, index: Int): ByteArray =
-        BlobChunk.parseFrom(rpc.call("blob.get", BlobGetRequest.newBuilder().setBlobKey(ByteString.copyFrom(key)).setIndex(index).build()))
-            .data.toByteArray()
+    override suspend fun blobGet(key: ByteArray, index: Int): ByteArray {
+        val data = BlobChunk.parseFrom(rpc.call("blob.get", BlobGetRequest.newBuilder().setBlobKey(ByteString.copyFrom(key)).setIndex(index).build())).data
+        if (data.size() > ReceiveLimits.BLOB_CHUNK) throw rpc.abort(OversizeFrame("blob chunk", data.size().toLong(), ReceiveLimits.BLOB_CHUNK.toLong()))
+        return data.toByteArray()
+    }
     override suspend fun blobAck(record: Record) { rpc.call("blob.ack", req(record)) }
     override suspend fun ping() { rpc.call("ping", Empty.getDefaultInstance()) }
     override suspend fun backupAuth(username: String): BackupAuthResponse =
@@ -115,10 +119,14 @@ class RemoteNodeApi(private val rpc: RpcClient, private val clock: () -> Long = 
             .setAuthSecret(ByteString.copyFrom(authSecret)).build()))
     override suspend fun backupPublish(meta: Record) { rpc.call("backup.publish", req(meta)) }
     override suspend fun registerPush(record: Record) { rpc.call("push.register", req(record)) }
+    override suspend fun publishInstall(record: Record) { rpc.call("install.publish", req(record)) }
     override suspend fun newsList(): List<Record> =
         RecordBatch.parseFrom(rpc.call("news.list", Empty.getDefaultInstance())).recordsList
-    override suspend fun apkGet(sha256: ByteArray, index: Int): ApkChunk =
-        ApkChunk.parseFrom(rpc.call("apk.get", ApkGetRequest.newBuilder().setSha256(ByteString.copyFrom(sha256)).setIndex(index).build()))
+    override suspend fun apkGet(sha256: ByteArray, index: Int): ApkChunk {
+        val c = ApkChunk.parseFrom(rpc.call("apk.get", ApkGetRequest.newBuilder().setSha256(ByteString.copyFrom(sha256)).setIndex(index).build()))
+        if (c.data.size() > ReceiveLimits.APK_CHUNK) throw rpc.abort(OversizeFrame("apk chunk", c.data.size().toLong(), ReceiveLimits.APK_CHUNK.toLong()))
+        return c
+    }
     override suspend fun turnCredentials(): TurnCredentials =
         TurnCredentials.parseFrom(rpc.call("turn.credentials", Empty.getDefaultInstance()))
     override suspend fun pushStatus(userId: ByteArray): Boolean =

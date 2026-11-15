@@ -40,7 +40,7 @@ class DirectorySync @Inject constructor(
     suspend fun apply(records: List<Record>) = mutex.withLock {
         val me = accounts.require()
         for (rec in records) {
-            val e = verify(rec) ?: continue
+            val e = verifyEntry(rec) ?: continue
             val userId = e.userId.toByteArray()
             if (userId.contentEquals(me.userId)) { applyOwn(e); continue }
             val old = contacts.get(userId)
@@ -71,17 +71,19 @@ class DirectorySync @Inject constructor(
         }
     }
 
-    /** Returns the entry if the record is a self-certifying, correctly bound DIRECTORY_ENTRY. */
-    private fun verify(rec: Record): DirectoryEntry? = runCatching {
-        val body = RecordBody.parseFrom(rec.body)
-        if (body.type != RecordType.DIRECTORY_ENTRY) return null
-        val e = DirectoryEntry.parseFrom(body.payload)
-        val accountPub = e.accountPub.toByteArray()
-        val ok = accountPub.size == 32 &&
-            body.author == e.userId &&
-            e.userId.toByteArray().contentEquals(Ids.id16(accountPub)) &&
-            RecordCodec.verify(rec, accountPub) &&
-            IdentityKeys.verifyBinding(e.identityPub.toByteArray(), accountPub, e.identitySig.toByteArray())
-        if (ok) e else null
-    }.getOrNull()
+    companion object {
+        /** The entry if [rec] is a self-certifying, correctly bound DIRECTORY_ENTRY (sync and words restore, C18). */
+        fun verifyEntry(rec: Record): DirectoryEntry? = runCatching {
+            val body = RecordBody.parseFrom(rec.body)
+            if (body.type != RecordType.DIRECTORY_ENTRY) return null
+            val e = DirectoryEntry.parseFrom(body.payload)
+            val accountPub = e.accountPub.toByteArray()
+            val ok = accountPub.size == 32 &&
+                body.author == e.userId &&
+                e.userId.toByteArray().contentEquals(Ids.id16(accountPub)) &&
+                RecordCodec.verify(rec, accountPub) &&
+                IdentityKeys.verifyBinding(e.identityPub.toByteArray(), accountPub, e.identitySig.toByteArray())
+            if (ok) e else null
+        }.getOrNull()
+    }
 }

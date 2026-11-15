@@ -20,6 +20,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -57,10 +58,19 @@ class PhotoViewerViewModel @Inject constructor(private val photos: PhotoStore, s
     val localId: Long = checkNotNull(savedState.get<Long>(ARG_LOCAL_ID)) { "localId missing" }
     private val _image = MutableStateFlow<ImageBitmap?>(null)
     val image: StateFlow<ImageBitmap?> = _image
+    private val _corrupt = MutableStateFlow(false)
+    /** The photo is here but cannot be decoded safely (C21): «Фото повреждено» instead of a spinner. */
+    val corrupt: StateFlow<Boolean> = _corrupt
     private val _events = MutableSharedFlow<PhotoEvent>(extraBufferCapacity = 2)
     val events: SharedFlow<PhotoEvent> = _events
 
-    init { viewModelScope.launch { _image.value = photos.load(localId, MAX_PX)?.asImageBitmap() } }
+    init {
+        viewModelScope.launch {
+            val b = photos.load(localId, MAX_PX)
+            _image.value = b?.asImageBitmap()
+            if (b == null) _corrupt.value = photos.corrupt(localId)
+        }
+    }
 
     fun needsPermission() = photos.galleryNeedsPermission()
     fun save() = viewModelScope.launch { _events.tryEmit(if (photos.saveToGallery(localId)) PhotoEvent.Saved else PhotoEvent.SaveFailed) }
@@ -75,13 +85,15 @@ class PhotoViewerViewModel @Inject constructor(private val photos: PhotoStore, s
 @Composable
 fun PhotoViewerRoute(onBack: () -> Unit, vm: PhotoViewerViewModel = hiltViewModel()) {
     val image by vm.image.collectAsStateWithLifecycle()
+    val corrupt by vm.corrupt.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val saved = stringResource(R.string.conv_photo_saved)
     val failed = stringResource(R.string.conv_photo_save_failed)
     LaunchedEffect(Unit) { vm.events.collect { snackbar.showSnackbar(if (it == PhotoEvent.Saved) saved else failed) } }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { if (it) vm.save() }
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        image?.let { ZoomableImage(it) } ?: CircularProgressIndicator(color = Color.White, modifier = Modifier.align(Alignment.Center))
+        image?.let { ZoomableImage(it) } ?: if (corrupt) Text(stringResource(R.string.conv_photo_corrupt), color = Color.White,
+            modifier = Modifier.align(Alignment.Center)) else CircularProgressIndicator(color = Color.White, modifier = Modifier.align(Alignment.Center))
         Row(Modifier.fillMaxWidth().statusBarsPadding().background(Color.Black.copy(alpha = .35f)), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.viewer_back), tint = Color.White)

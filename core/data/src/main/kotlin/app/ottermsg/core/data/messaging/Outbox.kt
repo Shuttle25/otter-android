@@ -125,6 +125,8 @@ class Outbox @Inject constructor(
         if (item.expiresMs in 1..clock.now()) { outbox.delete(item.id); return } // call signaling past its 2 min (D78)
         val record = item.recordBytes?.let { Record.parseFrom(it) } ?: run {
             val contact = contacts.get(item.recipientUserId) ?: throw PermanentFailure("unknown contact")
+            // C23: keys known only from an invite link are not used until the directory confirms them (retried later).
+            if (contact.entryVersion == 0L) throw java.io.IOException("contact not confirmed by the directory yet")
             val (kind, ct) = signal.withSessions { _, s ->
                 val addr = s.address(item.recipientUserId)
                 if (!s.hasSession(addr)) null else s.encrypt(addr, item.contentBytes)

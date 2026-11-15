@@ -3,6 +3,7 @@ package app.ottermsg.core.data.news
 import app.ottermsg.core.data.bs
 import app.ottermsg.core.data.invite.OnlineApi
 import app.ottermsg.core.network.NodeApi
+import app.ottermsg.core.network.ReceiveLimits
 import app.ottermsg.core.network.RpcException
 import app.ottermsg.proto.v1.ApkChunk
 import app.ottermsg.proto.v1.AppUpdate
@@ -29,7 +30,7 @@ class ApkUpdaterTest {
     private val update = AppUpdate.newBuilder().setVersionName("0.6.0").setVersionCode(6).setSha256(bs(sha)).setSize(apk.size.toLong()).build()
 
     /** Serves [data] in 1 MiB chunks; every other NodeApi call fails the test. */
-    private class FakeApi(val data: ByteArray?, val corruptAt: Int = -1) : NodeApi by unused() {
+    private class FakeApi(val data: ByteArray?, val corruptAt: Int = -1, val chunkSize: (Int) -> Int? = { null }) : NodeApi by unused() {
         val requested = mutableListOf<Int>()
         override suspend fun apkGet(sha256: ByteArray, index: Int): ApkChunk {
             requested += index
@@ -38,7 +39,8 @@ class ApkUpdaterTest {
             if (from >= d.size) throw RpcException(Status.STATUS_NOT_FOUND, "")
             val chunk = d.copyOfRange(from, minOf(d.size, from + ApkUpdater.CHUNK.toInt()))
             if (corruptAt in from until from + chunk.size) chunk[corruptAt - from] = (chunk[corruptAt - from] + 1).toByte()
-            return ApkChunk.newBuilder().setData(bs(chunk)).setTotalSize(d.size.toLong()).build()
+            val n = chunkSize(index) ?: chunk.size
+            return ApkChunk.newBuilder().setData(bs(chunk.copyOf(n))).setTotalSize(d.size.toLong()).build()
         }
         companion object {
             fun unused(): NodeApi = Proxy.newProxyInstance(NodeApi::class.java.classLoader, arrayOf(NodeApi::class.java)) { _, m, _ ->
@@ -98,5 +100,29 @@ class ApkUpdaterTest {
         File(dir(), "0000.apk").writeBytes(byteArrayOf(1))
         assertTrue(updater(api).download(update) {} is UpdateResult.Ready)
         assertEquals(listOf("$hex.apk"), dir().list()!!.toList())
+    }
+
+    @Test fun sizeOverTheLimitIsRefusedWithoutARequest() = runBlocking {
+        for (size in listOf(0L, -1L, ReceiveLimits.APK_MAX + 1)) {
+            val api = FakeApi(apk)
+            val r = updater(api).download(update.toBuilder().setSize(size).build()) {}
+            assertEquals(UpdateResult.Corrupt, r)
+            assertEquals(emptyList<Int>(), api.requested)
+        }
+    }
+
+    @Test fun aChunkOfTheWrongSizeIsCorrupt() = runBlocking {
+        val api = FakeApi(apk, chunkSize = { i -> if (i == 0) 10 else null })
+        assertEquals(UpdateResult.Corrupt, updater(api).download(update) {})
+        assertEquals("stops at the first bad chunk", listOf(0), api.requested)
+        assertTrue(dir().listFiles().orEmpty().isEmpty())
+    }
+
+    @Test fun aNodeCannotGrowTheFilePastTheSignedSize() = runBlocking {
+        // the first chunk padded to 3 MiB: without the check it is written and the loop goes on
+        val api = FakeApi(apk, chunkSize = { i -> if (i == 0) 3 shl 20 else null })
+        assertEquals(UpdateResult.Corrupt, updater(api).download(update) {})
+        assertEquals(listOf(0), api.requested)
+        assertTrue(dir().listFiles().orEmpty().isEmpty())
     }
 }

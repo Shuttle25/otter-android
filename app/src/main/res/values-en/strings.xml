@@ -1,7 +1,12 @@
 <resources>
     <string name="app_name">Otter</string>
     <string name="superseded_title">Account moved to another phone</string>
-    <string name="superseded_text">This account was restored on another phone. This phone no longer receives messages. To use Otter here, clear the app\'s data and restore the account again.</string>
+    <string name="superseded_text">This account was restored on another phone, and this phone no longer receives messages. If that was not you, someone knows your 12 words: take the account back here and tell your family admin.</string>
+    <string name="superseded_reclaim">This phone is the main one again</string>
+    <string name="superseded_reclaim_title">Make this phone the main one?</string>
+    <string name="superseded_reclaim_text">The other phone with this account will stop receiving messages. Your contacts will see that the session was renewed.</string>
+    <string name="superseded_reclaim_yes">Yes, this one</string>
+    <string name="superseded_reclaim_no">Cancel</string>
     <!-- notifications (D62) -->
     <string name="notif_channel_messages">Messages</string>
     <string name="notif_channel_groups">Groups</string>

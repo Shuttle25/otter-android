@@ -117,6 +117,8 @@ class FakeNode(private val clock: () -> Long) {
     var sends = 0; private set
     /** Current push token per user (hex), from push.register (D60). */
     val pushTokens = mutableMapOf<String, String>()
+    /** The last PUSH_TOKEN payload per user (hex), with the D94 flags (messages_off, withdrawn). */
+    val pushRecords = mutableMapOf<String, app.ottermsg.proto.v1.PushToken>()
     /** Served by turn.credentials (D77); null = TURN off on this node (STATUS_UNAVAILABLE). */
     @Volatile var turn: app.ottermsg.proto.v1.TurnCredentials? = null
     /** push.status (D79): whether a non-empty push token is registered for [user]. */
@@ -229,11 +231,25 @@ class FakeNode(private val clock: () -> Long) {
             user = userId
             deliver()
             val k = keys[userId.hex()]
-            return LoginResponse.newBuilder().setRegistrationId(k?.registrationId ?: 0).setInstalledMs(k?.installedMs ?: 0).build()
+            val b = LoginResponse.newBuilder().setRegistrationId(k?.registrationId ?: 0).setInstalledMs(lieInstalledMs ?: k?.installedMs ?: 0)
+            (fakeInstall ?: installs[userId.hex()]?.first)?.let { b.setInstall(it) }
+            return b.build()
+        } }
+
+        override suspend fun publishInstall(record: Record) { check(); if (refuseInstall) fail(Status.STATUS_INVALID, "unknown method"); synchronized(lock) {
+            val b = verifyUser(record)
+            if (b.type != RecordType.INSTALL || !b.author.toByteArray().contentEquals(me())) fail(Status.STATUS_INVALID, "install")
+            val i = app.ottermsg.proto.v1.Install.parseFrom(b.payload)
+            val cur = installs[b.author.hex()]?.second
+            if (cur != null && (i.installedMs < cur.installedMs || (i.installedMs == cur.installedMs && i.registrationId <= cur.registrationId))) return
+            installs[b.author.hex()] = record to i
+            val k = keys[b.author.hex()] ?: return
+            if (i.installedMs > k.installedMs) { k.oneTime.clear(); k.installedMs = i.installedMs }
+            if (i.installedMs >= k.installedMs) k.registrationId = i.registrationId
         } }
 
         override suspend fun manifest(): Record { check(); return manifest }
-        override suspend fun directory(): List<Record> { check(); me(); return directoryRecords() }
+        override suspend fun directory(): List<Record> { check(); me(); val d = directoryRecords(); return directoryAnswer?.invoke(d) ?: d }
 
         override suspend fun uploadPrekeys(record: Record) { check(); synchronized(lock) {
             val b = verifyUser(record)
@@ -380,7 +396,9 @@ class FakeNode(private val clock: () -> Long) {
         override suspend fun registerPush(record: Record) { check(); synchronized(lock) {
             val b = verifyUser(record)
             if (b.type != RecordType.PUSH_TOKEN || !b.author.toByteArray().contentEquals(me())) fail(Status.STATUS_INVALID, "push token")
-            pushTokens[b.author.hex()] = app.ottermsg.proto.v1.PushToken.parseFrom(b.payload).token
+            val p = app.ottermsg.proto.v1.PushToken.parseFrom(b.payload)
+            pushTokens[b.author.hex()] = p.token // "" when withdrawn: hasPush() is false, like a 0.9.0 node
+            pushRecords[b.author.hex()] = p
         } }
 
         override suspend fun turnCredentials(): app.ottermsg.proto.v1.TurnCredentials { check(); me()
@@ -394,40 +412,71 @@ class FakeNode(private val clock: () -> Long) {
 
         override suspend fun backupAuth(username: String): BackupAuthResponse { check(); synchronized(lock) {
             val m = backupByName(username)?.second
-            return if (m != null) BackupAuthResponse.newBuilder().setSalt(m.salt).setKdfMKib(m.kdfMKib).setKdfT(m.kdfT).setKdfP(m.kdfP).build()
+            val answer = if (m != null) BackupAuthResponse.newBuilder().setSalt(m.salt).setKdfMKib(m.kdfMKib).setKdfT(m.kdfT).setKdfP(m.kdfP).build()
             else BackupAuthResponse.newBuilder().setSalt(bs(fakeSalt(username))).setKdfMKib(65536).setKdfT(3).setKdfP(1).build()
+            return (authAnswer ?: { it })(answer)
         } }
 
         override suspend fun backupFetch(username: String, authSecret: ByteArray): BackupFetchResponse { check(); synchronized(lock) {
+            backupFetches++
             val now = clock()
             val recent = authFailures.getOrPut(username) { mutableListOf() }.apply { removeAll { it < now - 3_600_000 } }
             if (recent.size >= 5) fail(Status.STATUS_RETRY_LATER, "too many attempts")
             val cur = backupByName(username)
-            if (cur == null || !sha(authSecret).contentEquals(cur.second.authVerifier.toByteArray())) {
+            if (cur == null || cur.second.version == 0L || !sha(authSecret).contentEquals(cur.second.authVerifier.toByteArray())) {
                 recent += now
                 fail(Status.STATUS_UNAUTHORIZED, "wrong username or password")
             }
             val blobKey = cur.second.blobKey.toByteArray()
             val blob = blobs[blobKey.hex()] ?: fail(Status.STATUS_RETRY_LATER, "backup not replicated here yet")
             grantBlob = blobKey
-            return BackupFetchResponse.newBuilder().setBackupMeta(cur.first).setBlobMeta(blob.record).build()
+            return (fetchAnswer ?: { it })(BackupFetchResponse.newBuilder().setBackupMeta(cur.first).setBlobMeta(blob.record).build())
         } }
 
         override suspend fun backupPublish(meta: Record) { check(); synchronized(lock) {
             val b = verifyUser(meta)
             if (b.type != RecordType.BACKUP_META || !b.author.toByteArray().contentEquals(me())) fail(Status.STATUS_INVALID, "not the author's backup meta")
             val m = BackupMeta.parseFrom(b.payload)
-            val blob = blobs[m.blobKey.hex()] ?: fail(Status.STATUS_INVALID, "backup blob unknown here")
-            if (blob.author != b.author.hex() || !blob.meta.persistent) fail(Status.STATUS_INVALID, "not the author's persistent blob")
+            if (m.version == 0L) { // decoy (C20): no blob
+                if (refuseDecoy) fail(Status.STATUS_INVALID, "backup meta version") // a 0.8.x node
+                if (m.size != 0L || !m.blobKey.toByteArray().contentEquals(b.author.toByteArray() + ByteArray(16))) fail(Status.STATUS_INVALID, "decoy")
+            } else {
+                val blob = blobs[m.blobKey.hex()] ?: fail(Status.STATUS_INVALID, "backup blob unknown here")
+                if (blob.author != b.author.hex() || !blob.meta.persistent) fail(Status.STATUS_INVALID, "not the author's persistent blob")
+            }
             val cur = backups[b.author.hex()]
             if (cur != null && cur.second.version >= m.version) return // latest version wins (D50)
             backups[b.author.hex()] = meta to m
-            if (cur != null && cur.second.blobKey != m.blobKey) { blobs.remove(cur.second.blobKey.hex()); goneBlobs += cur.second.blobKey.hex() }
+            if (cur != null && cur.second.version > 0 && cur.second.blobKey != m.blobKey) {
+                blobs.remove(cur.second.blobKey.hex()); goneBlobs += cur.second.blobKey.hex()
+            }
         } }
     }
 
     // ---- backups (D50–D52) ----
     private val backups = HashMap<String, Pair<Record, BackupMeta>>()
+
+    // ---- installs (C14): same rule as the Go node ----
+    private val installs = HashMap<String, Pair<Record, app.ottermsg.proto.v1.Install>>()
+    /** Hostile node: an unsigned installed_ms in every login answer. */
+    @Volatile var lieInstalledMs: Long? = null
+    /** Hostile node: this record in every login answer instead of the stored INSTALL. */
+    @Volatile var fakeInstall: Record? = null
+    /** A 0.8.x node: install.publish is an unknown method. */
+    @Volatile var refuseInstall = false
+    /** A 0.8.x node: a decoy BACKUP_META (version 0) is INVALID. */
+    @Volatile var refuseDecoy = false
+    fun installOf(user: ByteArray): app.ottermsg.proto.v1.Install? = synchronized(lock) { installs[user.hex()]?.second }
+
+    // ---- hostile node (M9.1): answers rewritten before they leave the node ----
+    /** Rewrites every backup.auth answer. */
+    @Volatile var authAnswer: ((BackupAuthResponse) -> BackupAuthResponse)? = null
+    /** Rewrites every backup.fetch answer. */
+    @Volatile var fetchAnswer: ((BackupFetchResponse) -> BackupFetchResponse)? = null
+    /** Rewrites every directory answer. */
+    @Volatile var directoryAnswer: ((List<Record>) -> List<Record>)? = null
+    /** backup.fetch calls received (an auth_secret left the phone). */
+    @Volatile var backupFetches = 0; private set
     private val authFailures = HashMap<String, MutableList<Long>>()
     private val fakeKey = ByteArray(32).also(SecureRandom()::nextBytes)
     private fun fakeSalt(username: String): ByteArray =

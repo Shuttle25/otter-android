@@ -50,7 +50,9 @@ class OtterApp : Application(), Configuration.Provider {
         appScope.launch {
             val available = PushAvailability.check(this@OtterApp)
             settings.setPushAvailable(available)
-            if (available) FirebaseMessaging.getInstance().token.addOnSuccessListener { t -> appScope.launch { settings.setPushToken(t) } }
+            if (available && settings.googleWake())
+                FirebaseMessaging.getInstance().token.addOnSuccessListener { t -> appScope.launch { settings.setPushToken(t) } }
+            else if (available) FirebaseMessaging.getInstance().isAutoInitEnabled = false // wake-ups off (D94)
             // Background jobs only make sense with an account; then FAST/SAVER decides whether the 15-min check runs (D61).
             if (accounts.load() == null) accounts.account.filterNotNull().first()
             // Another call (GSM or another VoIP app) in progress: an incoming Otter call is answered BUSY (D80).

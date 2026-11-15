@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -36,8 +37,8 @@ class MessagingFlowTest {
 
     @Test fun sendDeliverRead() = runBlocking {
         family()
-        // B's inviter (A) is a verified contact straight from the invite.
-        assertTrue(b.db.contactDao().get(a.me.userId)!!.verified)
+        // B's inviter (A) is never "verified" from a link alone (C23)
+        assertFalse(b.db.contactDao().get(a.me.userId)!!.verified)
 
         val cid = b.messages.conversationWith(a.me.userId)
         val local = b.messages.sendText(cid, "  Привет  ")!!

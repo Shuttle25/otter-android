@@ -53,19 +53,27 @@ class ManifestUpdater @Inject constructor(
     }
 
     /**
-     * Latest manifest's endpoints, plus — for [FALLBACK_MS] after an update — the previous manifest's endpoints
-     * that are not in the latest one, at lower priority (in case the new nodes are not reachable yet).
+     * Latest manifest's endpoints, plus — for [FALLBACK_MS] after an update — the previous manifest's endpoints that are
+     * not in the latest one, at lower priority, but only for a node the latest manifest still lists and only with pins
+     * it still gives that node (C16, D92): a removed node or a withdrawn pin stops working at once.
      */
     suspend fun candidates(allowPlaintext: Boolean): List<Candidate> {
         val two = manifests.latestTwo()
         val latest = two.firstOrNull() ?: return emptyList()
         val networkPub = settings.networkPub()
-        val current = Endpoints.candidates(parse(latest.raw, networkPub) ?: return emptyList(), allowPlaintext)
+        val newest = parse(latest.raw, networkPub) ?: return emptyList()
+        val current = Endpoints.candidates(newest, allowPlaintext)
         val previous = two.getOrNull(1) ?: return current
         if (clock.now() - latest.receivedMs >= FALLBACK_MS) return current
+        val old = parse(previous.raw, networkPub) ?: return current
+        val pinsByNode: Map<String, Set<String>> = newest.nodesList.associate { n ->
+            n.nodeId.toByteArray().hex() to n.endpointsList.flatMap { e -> e.tlsSpkiPinsList.map { it.toByteArray().hex() } }.toSet()
+        }
         val known = current.map { it.key }.toSet()
-        val fallback = Endpoints.candidates(parse(previous.raw, networkPub) ?: return current, allowPlaintext, priorityOffset = FALLBACK_PRIORITY)
-            .filter { it.key !in known }
+        val fallback = Endpoints.candidates(old, allowPlaintext, priorityOffset = FALLBACK_PRIORITY).filter { c ->
+            val allowed = pinsByNode[c.nodeId.hex()] ?: return@filter false
+            c.key !in known && c.pins.all { it.hex() in allowed }
+        }
         return current + fallback
     }
 
@@ -77,6 +85,8 @@ class ManifestUpdater @Inject constructor(
 
     private fun parse(raw: ByteArray, networkPub: ByteArray): Manifest? =
         try { ManifestVerifier.verify(raw, networkPub, 0) } catch (e: ManifestException) { null }
+
+    private fun ByteArray.hex() = joinToString("") { "%02x".format(it) }
 
     companion object {
         const val FALLBACK_MS = 7 * 86_400_000L

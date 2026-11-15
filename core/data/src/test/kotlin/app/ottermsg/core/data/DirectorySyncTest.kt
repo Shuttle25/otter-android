@@ -56,7 +56,7 @@ class DirectorySyncTest {
         assertEquals("anna", contacts.get(uid(2))!!.username)
     }
 
-    @Test fun inviterStaysVerifiedOnlyIfKeysMatch() = runBlocking {
+    @Test fun inviterIsConfirmedByTheDirectoryNeverVerifiedByTheLink() = runBlocking {
         val inviter = TestGraph(node, clock)
         try {
             inviter.register(node.bootstrapLink(), "Мама", "mama").getOrThrow()
@@ -64,9 +64,29 @@ class DirectorySyncTest {
             g.register(inviter.invites.create().link, "Я", "me_user").getOrThrow()
             g.directory.apply(node.directoryRecords())
             val c = g.db.contactDao().get(inviter.me.userId)!!
-            assertTrue(c.verified)
+            assertFalse(c.verified) // C23: a link never makes a contact verified
+            assertTrue(c.entryVersion > 0)
             assertEquals("mama", c.username) // filled in by the directory
             assertFalse(c.identityChanged)
+        } finally { inviter.close() }
+    }
+
+    @Test fun linkIdentityThatDiffersFromTheDirectoryIsFlagged() = runBlocking {
+        val inviter = TestGraph(node, clock)
+        try {
+            inviter.register(node.bootstrapLink(), "Мама", "mama").getOrThrow()
+            inviter.online()
+            // A tampered link: the inviter's real account key, someone else's identity key (unsigned link field).
+            val real = app.ottermsg.core.crypto.InviteLink.decode(inviter.invites.create().link)
+            val evil = IdentityKeys.fromSeed(ByteArray(32) { 77 }).publicKey.serialize()
+            g.register(app.ottermsg.core.crypto.InviteLink.encode(real.toBuilder().setInviterIdentityPub(bs(evil)).build()),
+                "Я", "me_user").getOrThrow()
+            assertEquals(0L, g.db.contactDao().get(inviter.me.userId)!!.entryVersion)
+            g.directory.apply(node.directoryRecords())
+            val c = g.db.contactDao().get(inviter.me.userId)!!
+            assertTrue(c.identityChanged)
+            assertFalse(c.verified)
+            assertFalse(c.identityPub.contentEquals(evil)) // the directory's key replaced the link's
         } finally { inviter.close() }
     }
 }

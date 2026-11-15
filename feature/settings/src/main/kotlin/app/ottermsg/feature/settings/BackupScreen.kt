@@ -58,6 +58,7 @@ import app.ottermsg.core.data.backup.PasswordPolicy
 import app.ottermsg.core.data.sync.SyncEngine
 import app.ottermsg.core.network.ConnectionState
 import app.ottermsg.core.ui.components.OtterTopBar
+import app.ottermsg.core.ui.components.SecureWindow
 import app.ottermsg.core.ui.theme.Dimens
 import dagger.Binds
 import dagger.Module
@@ -202,6 +203,7 @@ private fun On(state: BackupState.On, online: Boolean, onRunNow: () -> Unit, onC
 
 @Composable
 private fun PasswordForm(form: BackupViewModel.Form, running: Boolean, onPw: (String) -> Unit, onRepeat: (String) -> Unit, onSubmit: () -> Unit) {
+    SecureWindow()
     var visible by rememberSaveable { mutableStateOf(false) }
     val transform = if (visible) VisualTransformation.None else PasswordVisualTransformation()
     val toggle = @Composable {

@@ -28,6 +28,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.IOException
 import java.io.RandomAccessFile
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.logging.Level
@@ -144,6 +145,9 @@ class MediaTransfers @Inject constructor(
             dao.progress(a.id, start)
             for (idx in start until chunks) {
                 val data = api.blobGet(a.blobKey, idx)
+                val expected = minOf(BlobCipher.CHUNK.toLong(), a.size - idx.toLong() * BlobCipher.CHUNK).toInt()
+                // C17: a chunk is an exact slice of the ciphertext; anything else is refused before it touches the disk.
+                if (data.size != expected) throw IOException("blob chunk $idx: ${data.size} bytes, expected $expected")
                 withContext(Dispatchers.IO) { part.appendBytes(data) }
                 dao.progress(a.id, idx + 1)
             }

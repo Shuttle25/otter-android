@@ -40,6 +40,7 @@
     <string name="conv_photo_download">Загрузить фото</string>
     <string name="conv_photo_failed">Не удалось загрузить</string>
     <string name="conv_photo_gone">Фото недоступно</string>
+    <string name="conv_photo_corrupt">Фото повреждено</string>
     <string name="conv_photo_save">Сохранить в галерею</string>
     <string name="conv_photo_saved">Сохранено в галерею</string>
     <string name="conv_photo_save_failed">Не удалось сохранить</string>

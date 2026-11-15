@@ -1,7 +1,12 @@
 <resources>
     <string name="app_name">Otter</string>
     <string name="superseded_title">Аккаунт на другом телефоне</string>
-    <string name="superseded_text">Аккаунт восстановлен на другом телефоне. Этот телефон больше не получает сообщения. Чтобы пользоваться Otter здесь, удалите данные приложения и восстановите аккаунт снова.</string>
+    <string name="superseded_text">Аккаунт восстановлен на другом телефоне, и этот телефон больше не получает сообщения. Если это сделали не вы, кто-то знает ваши 12 слов: верните аккаунт сюда и сообщите администратору семьи.</string>
+    <string name="superseded_reclaim">Этот телефон снова главный</string>
+    <string name="superseded_reclaim_title">Сделать этот телефон главным?</string>
+    <string name="superseded_reclaim_text">Другой телефон с этим аккаунтом перестанет получать сообщения. Контакты увидят, что сеанс обновился.</string>
+    <string name="superseded_reclaim_yes">Да, этот</string>
+    <string name="superseded_reclaim_no">Отмена</string>
     <!-- notifications (D62) -->
     <string name="notif_channel_messages">Сообщения</string>
     <string name="notif_channel_groups">Группы</string>

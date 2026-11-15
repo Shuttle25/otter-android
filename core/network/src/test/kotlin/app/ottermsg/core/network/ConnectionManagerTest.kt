@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -149,6 +150,23 @@ class ConnectionManagerTest {
         cm.state.first { it is ConnectionState.Online && t.connections.size == 3 }
         assertEquals(0, stats.get("x")!!.throttleCount)
         assertTrue(log.entries.none { it.result == FailureClass.RESET_AFTER_KB })
+        cm.stop()
+    }
+
+
+    @Test fun oversizeFrameDropsTheNodeAndTriesTheNextAtOnce() = runTest {
+        val t = FakeTransport(delays = mapOf("good" to 500)) { ok() }
+        val stats = InMemoryEndpointStats()
+        val log = RecordingNetLog()
+        val cm = manager(t, listOf(cand("hostile"), cand("good")), backgroundScope, { currentTime }, stats, log)
+        cm.start()
+        assertEquals("hostile", (cm.state.first { it is ConnectionState.Online } as ConnectionState.Online).url)
+        val t0 = currentTime
+        t.byUrl["hostile"]!!.last().incoming.trySend(ByteArray(ReceiveLimits.MAX_FRAME + 1))
+        withTimeout(10_000) { cm.state.first { it is ConnectionState.Online && it.url == "good" } }
+        assertTrue("no backoff wait", currentTime - t0 < 1_000)
+        assertEquals(1, stats.get("hostile")!!.failures)
+        assertTrue(log.entries.any { it.nodeLabel == "hostile" && it.detail.startsWith("limit:") })
         cm.stop()
     }
 }

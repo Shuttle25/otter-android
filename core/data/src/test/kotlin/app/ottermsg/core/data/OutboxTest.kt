@@ -30,6 +30,7 @@ class OutboxTest {
         a.offline()
         val s = node.connect()
         s.login(b.me.userId, b.me.accountKey)
+        b.directory.sync(s) // the inviter from the link is used only once the directory confirms it (C23)
         return b.messages.conversationWith(a.me.userId) to s
     }
 
