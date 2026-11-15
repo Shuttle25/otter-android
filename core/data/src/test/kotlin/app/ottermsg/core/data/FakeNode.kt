@@ -419,7 +419,7 @@ class FakeNode(private val clock: () -> Long) {
             val recent = authFailures.getOrPut(username) { mutableListOf() }.apply { removeAll { it < now - 3_600_000 } }
             if (recent.size >= 5) fail(Status.STATUS_RETRY_LATER, "too many attempts")
             val cur = backupByName(username)
-            if (cur == null || !sha(authSecret).contentEquals(cur.second.authVerifier.toByteArray())) {
+            if (cur == null || cur.second.version == 0L || !sha(authSecret).contentEquals(cur.second.authVerifier.toByteArray())) {
                 recent += now
                 fail(Status.STATUS_UNAUTHORIZED, "wrong username or password")
             }
@@ -433,12 +433,19 @@ class FakeNode(private val clock: () -> Long) {
             val b = verifyUser(meta)
             if (b.type != RecordType.BACKUP_META || !b.author.toByteArray().contentEquals(me())) fail(Status.STATUS_INVALID, "not the author's backup meta")
             val m = BackupMeta.parseFrom(b.payload)
-            val blob = blobs[m.blobKey.hex()] ?: fail(Status.STATUS_INVALID, "backup blob unknown here")
-            if (blob.author != b.author.hex() || !blob.meta.persistent) fail(Status.STATUS_INVALID, "not the author's persistent blob")
+            if (m.version == 0L) { // decoy (C20): no blob
+                if (refuseDecoy) fail(Status.STATUS_INVALID, "backup meta version") // a 0.8.x node
+                if (m.size != 0L || !m.blobKey.toByteArray().contentEquals(b.author.toByteArray() + ByteArray(16))) fail(Status.STATUS_INVALID, "decoy")
+            } else {
+                val blob = blobs[m.blobKey.hex()] ?: fail(Status.STATUS_INVALID, "backup blob unknown here")
+                if (blob.author != b.author.hex() || !blob.meta.persistent) fail(Status.STATUS_INVALID, "not the author's persistent blob")
+            }
             val cur = backups[b.author.hex()]
             if (cur != null && cur.second.version >= m.version) return // latest version wins (D50)
             backups[b.author.hex()] = meta to m
-            if (cur != null && cur.second.blobKey != m.blobKey) { blobs.remove(cur.second.blobKey.hex()); goneBlobs += cur.second.blobKey.hex() }
+            if (cur != null && cur.second.version > 0 && cur.second.blobKey != m.blobKey) {
+                blobs.remove(cur.second.blobKey.hex()); goneBlobs += cur.second.blobKey.hex()
+            }
         } }
     }
 
@@ -453,6 +460,8 @@ class FakeNode(private val clock: () -> Long) {
     @Volatile var fakeInstall: Record? = null
     /** A 0.8.x node: install.publish is an unknown method. */
     @Volatile var refuseInstall = false
+    /** A 0.8.x node: a decoy BACKUP_META (version 0) is INVALID. */
+    @Volatile var refuseDecoy = false
     fun installOf(user: ByteArray): app.ottermsg.proto.v1.Install? = synchronized(lock) { installs[user.hex()]?.second }
 
     // ---- hostile node (M9.1): answers rewritten before they leave the node ----

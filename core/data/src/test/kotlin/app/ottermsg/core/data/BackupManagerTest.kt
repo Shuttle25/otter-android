@@ -4,6 +4,7 @@ import app.ottermsg.core.crypto.BackupKeys
 import app.ottermsg.core.crypto.BlobCipher
 import app.ottermsg.core.data.backup.BackupManager
 import app.ottermsg.core.data.backup.BackupState
+import app.ottermsg.core.data.backup.RestoreError
 import app.ottermsg.core.data.backup.SnapshotCodec
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -90,5 +91,39 @@ class BackupManagerTest {
         clock.advance(25 * 3_600_000L)
         a.online() // a new session backs up when the last one is older than a day
         eventually(what = "daily backup") { node.backupOf(a.me.userId)?.version == 2L }
+    }
+
+    @Test fun accountWithoutBackupLooksLikeOneWithBackup() = runBlocking<Unit> {
+        family()
+        eventually(what = "decoys published") { node.backupOf(a.me.userId) != null && node.backupOf(b.me.userId) != null }
+        val decoy = node.backupOf(a.me.userId)!!
+        assertEquals(0L, decoy.version)
+        assertEquals(16, decoy.salt.size())
+        assertEquals(0L, decoy.size)
+        assertArrayEquals(a.me.userId + ByteArray(16), decoy.blobKey.toByteArray())
+        val auth = node.connect().backupAuth("mama")
+        assertEquals(decoy.salt, auth.salt)
+        assertEquals(listOf(65536, 3, 1), listOf(auth.kdfMKib, auth.kdfT, auth.kdfP))
+        val phone = TestGraph(node, clock)
+        try {
+            assertEquals(RestoreError.WrongPassword, phone.restore.withPassword(node.bootstrapLink(), "mama", "любой пароль здесь").exceptionOrNull())
+        } finally { phone.close() }
+
+        a.offline(); a.online() // once per install
+        assertEquals(decoy, node.backupOf(a.me.userId))
+        assertEquals(BackupManager.OK, a.backups.setPassword("корова лодка зима семь"))
+        assertEquals(1L, node.backupOf(a.me.userId)!!.version)
+    }
+
+    @Test fun nodeRefusingDecoyIsRetriedNextSession() = runBlocking<Unit> {
+        node.refuseDecoy = true // a 0.8.x node
+        family() // the session goes on: b joins and a learns of b
+        assertNull(node.backupOf(a.me.userId))
+        assertFalse(a.settings.backupDecoyDone())
+
+        node.refuseDecoy = false // the node is upgraded
+        a.offline(); a.online()
+        eventually(what = "decoy on the next session") { node.backupOf(a.me.userId)?.version == 0L }
+        assertTrue(a.settings.backupDecoyDone())
     }
 }

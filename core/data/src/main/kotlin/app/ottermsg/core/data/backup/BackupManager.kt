@@ -78,10 +78,35 @@ class BackupManager @Inject constructor(
         return run(api)
     }
 
-    /** From each sync session: back up if the last success is older than 24 h. */
+    /** From each sync session: back up if the last success is older than 24 h; without a backup, make sure of the decoy. */
     suspend fun runIfDue(api: NodeApi) {
-        if (settings.backupSecret() == null || clock.now() - settings.backupLastMs() < DAY_MS) return
+        if (settings.backupSecret() == null) { publishDecoyIfNeeded(api); return }
+        if (clock.now() - settings.backupLastMs() < DAY_MS) return
         run(api)
+    }
+
+    /**
+     * C20: an account without a backup publishes one decoy BACKUP_META (version 0, random salt and verifier, no blob),
+     * so every node answers backup.auth for it exactly as for an account with a backup. A real backup replaces it.
+     * A node older than 0.9.0 refuses it (INVALID): tried again next session.
+     */
+    internal suspend fun publishDecoyIfNeeded(api: NodeApi) {
+        if (settings.backupDecoyDone() || settings.backupVersion() != 0L) return
+        val me = accounts.require()
+        val profile = BackupKeys.Profile.CURRENT
+        val meta = BackupMeta.newBuilder().setVersion(0).setSalt(bs(BackupKeys.newSalt()))
+            .setKdfMKib(profile.mKib).setKdfT(profile.t).setKdfP(profile.p)
+            .setAuthVerifier(bs(ByteArray(32).also(SecureRandom()::nextBytes)))
+            .setBlobKey(bs(me.userId + ByteArray(16))).setSize(0).build()
+        try {
+            api.backupPublish(RecordCodec.sign(RecordCodec.body(RecordType.BACKUP_META, me.userId, meta.toByteArray(),
+                createdMs = clock.now()), me.accountKey))
+            settings.setBackupDecoyDone(true)
+        } catch (e: RpcException) {
+            // refused (an older node): next session
+        } catch (e: IOException) {
+            // connection dropped: next session
+        }
     }
 
     private suspend fun run(api: NodeApi): Int = mutex.withLock {

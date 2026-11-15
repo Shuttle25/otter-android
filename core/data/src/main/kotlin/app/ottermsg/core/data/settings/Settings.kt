@@ -86,6 +86,9 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
         dao.get(BACKUP_PROFILE)?.decodeToString()?.let { n -> BackupKeys.Profile.entries.firstOrNull { it.name == n } }
             ?: BackupKeys.Profile.P1
     suspend fun setBackupProfile(p: BackupKeys.Profile) = dao.put(SettingEntity(BACKUP_PROFILE, p.name.encodeToByteArray()))
+    /** C20: the decoy BACKUP_META of an account without a backup has been published. */
+    suspend fun backupDecoyDone(): Boolean = (int(BACKUP_DECOY) ?: 0) != 0
+    suspend fun setBackupDecoyDone(v: Boolean) = putInt(BACKUP_DECOY, if (v) 1 else 0)
 
     // ---- push (D60/D61) and notifications (D62) ----
     suspend fun pushToken(): String? = dao.get(PUSH_TOKEN)?.decodeToString()
@@ -141,6 +144,7 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
         const val BACKUP_LAST_MS = "backup_last_ms"
         const val BACKUP_ERROR = "backup_error"
         const val BACKUP_PROFILE = "backup_profile"
+        const val BACKUP_DECOY = "backup_decoy_done"
         const val PHOTO_AUTO = "photo_auto_download"
         const val PHOTO_GALLERY = "photo_save_gallery"
         const val AUTO_WIFI = 0
