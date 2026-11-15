@@ -7,6 +7,7 @@ import app.ottermsg.proto.v1.Status
 import app.ottermsg.proto.v1.TurnCredentials
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -70,5 +71,49 @@ class TurnCacheTest {
     @Test fun otherErrorsPropagate() = runBlocking {
         val e = runCatching { cache.get(Api(fail = Status.STATUS_RETRY_LATER, clock = { now })) }.exceptionOrNull()
         assertTrue(e is RpcException && e.status == Status.STATUS_RETRY_LATER)
+    }
+
+    @Test fun oddAnswersFromAHostileNodeAreRefused() = runBlocking {
+        val exp = now / 1000 + 43_200
+        fun creds(vararg urls: String, user: String = "$exp:abcd", pass: String = "p") =
+            TurnCredentials.newBuilder().setUsername(user).setPassword(pass).setTtlS(43_200).addAllUrls(urls.toList()).build()
+        val good = creds("turn:203.0.113.7:3478?transport=udp", "turn:203.0.113.7:3478?transport=tcp",
+            "turns:203.0.113.7:5349?transport=tcp")
+        assertTrue(TurnCache.sane(good, now))
+        val bad = listOf(
+            creds(),
+            creds(*Array(5) { "turn:203.0.113.7:3478?transport=udp" }),
+            creds("stun:203.0.113.7:3478"),
+            creds("http://203.0.113.7:3478"),
+            creds("turn:relay.example.org:3478?transport=udp"),
+            creds("turn:203.0.113.7:3478?transport=udp", "turn:198.51.100.1:3478?transport=udp"),
+            creds("turn:203.0.113.7:0?transport=udp"),
+            creds("turn:203.0.113.7:70000?transport=udp"),
+            creds("turn:203.0.113.7:3478?transport=sctp"),
+            creds("turn:203.0.113.7:3478?transport=udp", user = "${now / 1000 - 1}:abcd"),
+            creds("turn:203.0.113.7:3478?transport=udp", user = "${now / 1000 + 25 * 3600}:abcd"),
+            creds("turn:203.0.113.7:3478?transport=udp", user = "$exp:" + "a".repeat(300)),
+            creds("turn:203.0.113.7:3478?transport=udp", pass = "p".repeat(300)),
+            creds("turn:203.0.113.300:3478?transport=udp"),
+            creds("turn:203.0.113.7:3478?transport=udp", user = "abcd"),
+        )
+        bad.forEachIndexed { i, c -> assertFalse("case $i", TurnCache.sane(c, now)) }
+        val api = object : NodeApi by FakeNode({ 0L }).connect() {
+            override suspend fun nodeId() = ByteArray(16) { 1 }
+            override suspend fun turnCredentials() = bad[5]
+        }
+        assertNull(cache.get(api))
+    }
+
+    @Test fun aRefusedAnswerDropsTheCachedOneOfThatNode() = runBlocking {
+        val api = Api(clock = { now })
+        cache.get(api)!!
+        val hostile = object : NodeApi by api {
+            override suspend fun turnCredentials(): TurnCredentials =
+                api.turnCredentials().toBuilder().addUrls("turn:198.51.100.1:3478?transport=udp").build()
+        }
+        assertNull(cache.get(hostile))
+        api.fail = Status.STATUS_RETRY_LATER
+        assertTrue(runCatching { cache.get(api) }.isFailure) // no fallback to an answer from before the refusal
     }
 }

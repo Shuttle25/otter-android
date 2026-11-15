@@ -104,4 +104,17 @@ class CallSignalingTest {
         assertEquals(0, node.sends)
         assertTrue(b.db.outboxDao().due(Long.MAX_VALUE).isEmpty())
     }
+
+    @Test fun callContentFromARevokedContactNeverRings() = runBlocking {
+        val (sa, sb) = setup()
+        val c = checkNotNull(a.db.contactDao().get(b.me.userId))
+        a.db.contactDao().upsert(c.copy(revoked = true))
+        CallSignaling(b.outbox, clock).send(a.me.userId, CallMessage.newBuilder().setCallId(ByteString.copyFrom(callId.bytes()))
+            .setOffer(CallOffer.newBuilder().setSdp("v=0")).build())
+        b.outbox.drainOnce(sb)
+        assertEquals(1, node.mailbox(a.me.userId).size)
+        a.receiver.handle(sa, node.mailbox(a.me.userId))
+        assertTrue(aInbox.messages.isEmpty())
+        assertTrue("acked", node.mailbox(a.me.userId).isEmpty())
+    }
 }

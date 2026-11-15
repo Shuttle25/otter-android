@@ -336,8 +336,7 @@ class CallManagerTest {
         test.runCurrent()
         assertEquals(listOf<CallNotice>(CallNotice.NotAvailable), late)
         job.cancel()
-        api.turn = TurnCredentials.newBuilder().setUsername("9999999999:abcd").setPassword("p").setTtlS(43_200)
-            .addUrls("turn:203.0.113.7:3478?transport=udp").build()
+        api.turn = turn // a sane answer (D108: expiry within 24 h)
         manager.dial(peer)
         settle("outgoing") { manager.state.value is CallState.Outgoing }
         val next = mutableListOf<CallNotice>()

@@ -29,6 +29,8 @@ object CallTimers { // D81
     const val ICE_CONNECT_MS = 15_000L
     const val ICE_RESTART_MS = 20_000L
     const val GATHER_MS = 2_000L
+    /** Login allows ±5 min (D52); an offer dated further ahead is not trusted to be fresh (D108). */
+    const val MAX_SKEW_MS = 5 * 60_000L
 }
 
 sealed interface CallState {

@@ -144,4 +144,19 @@ class CallStateMachineTest {
         assertTrue(Missed(boris, 45_000) in fx)
         assertEquals(CallState.Idle, m.state)
     }
+
+    @Test fun anOfferFromTheFutureIsMissedNotRung() {
+        val m = m()
+        val fx = m.on(RemoteOffer(high, anna, "sdp", restart = false, createdMs = 1_000_000 + 10 * 60_000,
+            systemBusy = false, nowMs = 1_000_000))
+        assertEquals(CallState.Idle, m.state)
+        assertTrue(fx.any { it is Missed })
+    }
+
+    @Test fun anOfferWithinTheClockSkewStillRings() {
+        val m = m()
+        m.on(RemoteOffer(high, anna, "sdp", restart = false, createdMs = 1_000_000 + 4 * 60_000,
+            systemBusy = false, nowMs = 1_000_000))
+        assertTrue(m.state is CallState.Incoming)
+    }
 }
