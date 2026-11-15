@@ -1,8 +1,14 @@
 package app.ottermsg.core.data
 
+import app.ottermsg.core.crypto.Ids
+import app.ottermsg.core.crypto.RecordCodec
 import app.ottermsg.core.data.sync.ManifestUpdater
 import app.ottermsg.core.data.sync.ManifestUpdater.Result
 import app.ottermsg.core.data.sync.ReprobePolicy
+import app.ottermsg.proto.v1.Endpoint
+import app.ottermsg.proto.v1.Manifest
+import app.ottermsg.proto.v1.NodeInfo
+import app.ottermsg.proto.v1.RecordType
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -34,16 +40,44 @@ class ManifestUpdaterTest {
         assertTrue(g.db.manifestDao().latest()!!.receivedMs > 0)
     }
 
-    @Test fun previousEndpointsAreAFallbackForSevenDays() = runBlocking {
+    private fun nodeInfo(id: Int, label: String, host: String, pin: ByteArray): NodeInfo =
+        NodeInfo.newBuilder().setNodeId(bs(ByteArray(16) { id.toByte() })).setLabel(label)
+            .addEndpoints(Endpoint.newBuilder().setKind(Endpoint.Kind.WSS).setHost(host).setPort(443).setPath("/p")
+                .addTlsSpkiPins(bs(pin))).build()
+
+    private fun manifest(version: Long, vararg nodes: NodeInfo): ByteArray {
+        val m = Manifest.newBuilder().setVersion(version).setIssuedMs(version).setNetworkPub(bs(node.network.publicKey))
+            .addAllNodes(nodes.toList()).build()
+        return RecordCodec.sign(RecordCodec.body(RecordType.MANIFEST, Ids.id16(node.network.publicKey), m.toByteArray(),
+            createdMs = version), node.network).toByteArray()
+    }
+
+    private suspend fun hosts() = m.candidates(allowPlaintext = false).map { it.host }
+
+    @Test fun fallbackOnlyForNodesAndPinsTheNewestManifestKeeps() = runBlocking {
+        g.register(node.bootstrapLink(), "Мама", "mama").getOrThrow()
+        val p = ByteArray(32) { 1 }; val q = ByteArray(32) { 2 }; val r = ByteArray(32) { 3 }
+        m.offer(manifest(2, nodeInfo(1, "a", "a1", p), nodeInfo(2, "b", "b1", q)), null)
+        m.offer(manifest(3, nodeInfo(1, "a", "a2", p)), null)            // A moved, B removed
+        val c = m.candidates(false)
+        assertEquals(listOf("a2", "a1"), c.map { it.host })               // B's b1 is gone at once
+        assertTrue(c[1].priority >= ManifestUpdater.FALLBACK_PRIORITY)
+        m.offer(manifest(4, nodeInfo(1, "a", "a3", r)), null)            // pin P withdrawn
+        assertEquals(listOf("a3"), hosts())
+    }
+
+    @Test fun removedNodeIsDroppedAtOnceAndFallbackEndsAfterSevenDays() = runBlocking {
         g.register(node.bootstrapLink(), "Мама", "mama").getOrThrow() // v1: fake
         assertEquals(listOf("fake"), m.candidates(true).map { it.label })
-        m.offer(node.signManifest(2, withSelf = false, extraHosts = listOf("b", "c")).toByteArray(), null)
-        val c = m.candidates(true)
-        assertEquals(listOf("b", "c", "fake"), c.map { it.label }) // old endpoint kept, last
-        assertTrue(c.last().priority > c[1].priority)
-        clock.advance(ManifestUpdater.FALLBACK_MS)
-        assertEquals(listOf("b", "c"), m.candidates(true).map { it.label })
         assertTrue(m.candidates(allowPlaintext = false).isEmpty()) // release builds drop WS_PLAIN
+        m.offer(node.signManifest(2, withSelf = false, extraHosts = listOf("b", "c")).toByteArray(), null)
+        assertEquals(listOf("b", "c"), m.candidates(true).map { it.label }) // "fake" was removed: no fallback
+        val p = ByteArray(32) { 1 }
+        m.offer(manifest(3, nodeInfo(1, "b", "b2", p)), null)
+        m.offer(manifest(4, nodeInfo(1, "b", "b3", p)), null)
+        assertEquals(listOf("b3", "b2"), hosts())
+        clock.advance(ManifestUpdater.FALLBACK_MS)
+        assertEquals(listOf("b3"), hosts())
     }
 
     @Test fun newsKeysFromTheLatestManifest() = runBlocking {
