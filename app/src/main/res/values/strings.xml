@@ -7,6 +7,8 @@
     <string name="superseded_reclaim_text">Другой телефон с этим аккаунтом перестанет получать сообщения. Контакты увидят, что сеанс обновился.</string>
     <string name="superseded_reclaim_yes">Да, этот</string>
     <string name="superseded_reclaim_no">Отмена</string>
+    <string name="revoked_title">Аккаунт отключён</string>
+    <string name="revoked_text">Администратор сети отключил этот аккаунт. Сообщения больше не отправляются и не приходят. Если это ошибка, свяжитесь с администратором.</string>
     <!-- notifications (D62) -->
     <string name="notif_channel_messages">Сообщения</string>
     <string name="notif_channel_groups">Группы</string>

@@ -28,6 +28,7 @@
     <string name="onb_err_username_taken">Это имя пользователя уже занято. Выберите другое.</string>
     <string name="onb_err_invite_used">Это приглашение уже использовано. Попросите новое.</string>
     <string name="onb_err_invite_expired">Срок приглашения истёк. Попросите новое.</string>
+    <string name="onb_err_invite_outdated">Ссылка устарела. Попросите новое приглашение.</string>
     <string name="onb_err_network">Не удалось подключиться. Проверьте интернет и повторите.</string>
     <string name="onb_err_unknown">Не получилось создать аккаунт. Повторите попытку.</string>
     <string name="onb_retry">Повторить</string>

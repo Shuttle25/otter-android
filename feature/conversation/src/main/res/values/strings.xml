@@ -18,6 +18,9 @@
     <string name="conv_empty_text">Напишите первое сообщение</string>
     <string name="conv_info">Сведения</string>
     <string name="conv_not_member">Вы больше не участник этой группы</string>
+    <string name="conv_peer_removed">Участник удалён</string>
+    <string name="conv_member_removed">Участник удалён</string>
+    <string name="conv_member_duplicate">Приглашение использовали дважды, этот аккаунт отключён</string>
     <plurals name="conv_members">
         <item quantity="one">%1$d участник</item>
         <item quantity="few">%1$d участника</item>

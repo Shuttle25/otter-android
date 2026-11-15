@@ -65,4 +65,15 @@ class VectorsTest {
             type = app.ottermsg.proto.v1.RecordType.ACK, author = Ids.id16(kp.publicKey), payload = byteArrayOf(1)), kp)
         assertTrue(RecordCodec.verify(rec, kp.publicKey))
     }
+
+    @Test fun inviteRedeemMatchesGo() {
+        val secret = hex(v.getValue("invite_secret_hex"))
+        val k = InviteKeys.redeemKey(secret)
+        assertArrayEquals(hex(v.getValue("invite_redeem_pub_hex")), k.publicKey)
+        val inviteId = java.security.MessageDigest.getInstance("SHA-256").digest(secret)
+        val accPub = hex(v.getValue("account_pub_hex"))
+        val msg = InviteKeys.redeemMessage(inviteId, hex(v.getValue("user_id_hex")), accPub)
+        assertTrue(Ed25519.verify(k.publicKey, msg, hex(v.getValue("invite_proof_hex"))))
+        assertArrayEquals(hex(v.getValue("invite_proof_hex")), k.sign(msg)) // Ed25519 is deterministic
+    }
 }

@@ -36,7 +36,8 @@ class GroupSender @Inject constructor(private val db: OtterDatabase, private val
         groups.insertMyDistribution(MyDistributionEntity(groupId, uuidBytes(UUID.randomUUID()), g.version))
         val dist = uuid(checkNotNull(groups.myDistribution(groupId)).distributionId)
         val have = groups.sharedWith(groupId, uuidBytes(dist)).map { it.toList() }.toSet()
-        val lacking = groups.members(groupId).map { it.userId }.filter { !it.contentEquals(me) && it.toList() !in have }
+        val lacking = groups.members(groupId).map { it.userId }
+            .filter { !it.contentEquals(me) && it.toList() !in have && !revoked(it) }
         if (lacking.isEmpty()) return dist to emptyList()
         val skdm = signal.withGroups { it.distribution(dist) }
         val content = Content.newBuilder().setSenderKey(SenderKeyDistribution.newBuilder().setGroupId(bs(groupId))
@@ -53,14 +54,14 @@ class GroupSender @Inject constructor(private val db: OtterDatabase, private val
 
     /**
      * Encrypts [item] once with our sender key and builds the signed SENDER_KEY record for the frozen recipient set,
-     * minus anyone no longer in the group (never send to a removed member). Null when nobody is left to receive it.
+     * minus anyone no longer in the group or revoked (never send to a removed member). Null when nobody is left to receive it.
      */
     suspend fun buildRecord(item: OutboxEntity, me: LocalAccount, dist: UUID): Record? {
         val groupId = checkNotNull(item.groupId)
         val current = groups.members(groupId).map { it.userId.toList() }.toSet()
         val frozen = item.messageLocalId?.let { id -> db.messageRecipientDao().forMessage(id).map { it.userId } }
             ?: groups.members(groupId).map { it.userId }
-        val to = frozen.filter { it.toList() in current && !it.contentEquals(me.userId) }
+        val to = frozen.filter { it.toList() in current && !it.contentEquals(me.userId) && !revoked(it) }
         if (to.isEmpty()) return null
         val ct = signal.withGroups { it.encrypt(dist, item.contentBytes) }
         val env = Envelope.newBuilder().setSenderUser(bs(me.userId)).setSenderDevice(1).setKind(Envelope.Kind.SENDER_KEY)
@@ -68,6 +69,9 @@ class GroupSender @Inject constructor(private val db: OtterDatabase, private val
             .addAllRecipients(to.map { Recipient.newBuilder().setUser(bs(it)).setDevice(1).build() }).build()
         return RecordCodec.sign(RecordCodec.body(RecordType.ENVELOPE, me.userId, env.toByteArray(), createdMs = clock.now()), me.accountKey)
     }
+
+    /** D104: a revoked member never gets our sender key or a group message, even while the signed state lists it. */
+    private suspend fun revoked(user: ByteArray) = db.contactDao().get(user)?.revoked == true
 
     /** An SKDM that can never be delivered: forget the share so the next send queues it again. */
     suspend fun forgetShare(item: OutboxEntity) {

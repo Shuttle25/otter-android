@@ -7,6 +7,8 @@
     <string name="superseded_reclaim_text">The other phone with this account will stop receiving messages. Your contacts will see that the session was renewed.</string>
     <string name="superseded_reclaim_yes">Yes, this one</string>
     <string name="superseded_reclaim_no">Cancel</string>
+    <string name="revoked_title">Account disabled</string>
+    <string name="revoked_text">The network administrator disabled this account. Messages are no longer sent or received. If this is a mistake, contact the administrator.</string>
     <!-- notifications (D62) -->
     <string name="notif_channel_messages">Messages</string>
     <string name="notif_channel_groups">Groups</string>

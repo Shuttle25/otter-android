@@ -77,6 +77,12 @@ class ManifestUpdater @Inject constructor(
         return current + fallback
     }
 
+    /** Node ids of the latest stored manifest; empty if there is none. */
+    suspend fun nodeIds(): List<ByteArray> {
+        val latest = manifests.latest() ?: return emptyList()
+        return parse(latest.raw, settings.networkPub())?.nodesList?.map { it.nodeId.toByteArray() } ?: emptyList()
+    }
+
     /** News keys of the latest stored manifest (D65); empty if there is none. */
     override suspend fun newsKeys(): List<ByteArray> {
         val latest = manifests.latest() ?: return emptyList()

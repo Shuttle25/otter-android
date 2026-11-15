@@ -3,13 +3,16 @@ package app.ottermsg.core.data
 import app.ottermsg.core.crypto.Bip39
 import app.ottermsg.core.data.backup.BackupManager
 import app.ottermsg.core.data.backup.RestoreError
+import app.ottermsg.core.data.backup.RestoreManager
 import app.ottermsg.core.database.model.MessageKind
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -133,6 +136,65 @@ class RestoreFlowTest {
 
         restored.restore.addHistory(pw).getOrThrow()
         assertEquals(listOf("привет", "как дела", "это ты?"), restored.texts(boris.me.userId))
+        assertTrue(restored.settings.backupSecret() != null)
+    }
+
+    private val pw2 = "второй пароль для бориса"
+    private fun tag(user: ByteArray) = user.copyOf(4).joinToString("") { "%02x".format(it) }
+
+    /** anna and boris both end up named "anna" (the clash a partition would produce, D103); both back up. */
+    private suspend fun clash() {
+        anna.register(node.bootstrapLink(), "Анна", "anna").getOrThrow(); anna.online()
+        boris.register(node.bootstrapLink(), "Анна 2", "anna_x").getOrThrow(); boris.online()
+        assertEquals(BackupManager.OK, anna.backups.setPassword(pw))
+        assertEquals(BackupManager.OK, boris.backups.setPassword(pw2))
+        anna.offline(); boris.offline()
+        node.renameForTest(boris.me.userId, "anna")
+        node.clash("anna")
+    }
+
+    @Test fun clashedNameTriesCandidates() = runBlocking<Unit> {
+        clash()
+        val link = node.bootstrapLink()
+        val first = newGraph()
+        first.restore.withPassword(link, "Anna", pw).getOrThrow() // the first candidate: one try
+        assertArrayEquals(anna.me.userId, first.me.userId)
+        val fetches = node.backupFetches
+        val second = newGraph()
+        second.restore.withPassword(link, "anna", pw2).getOrThrow()
+        assertArrayEquals(boris.me.userId, second.me.userId)
+        assertEquals(2, node.backupFetches - fetches) // stops at the first that decrypts
+        assertEquals(RestoreError.WrongPassword, newGraph().restore.withPassword(link, "anna", "ни один не подходит").exceptionOrNull())
+    }
+
+    @Test fun hostileCandidatesInstallNothing() = runBlocking<Unit> {
+        clash()
+        val link = node.bootstrapLink()
+        val restored = newGraph()
+        // a node lists only the stranger's tag (and a different name): the typed password opens neither
+        val stranger = "anna#" + tag(anna.me.userId)
+        node.authAnswer = { a -> if (a.candidatesCount > 0) a.toBuilder().clearCandidates().addCandidates(stranger)
+            .addCandidates("boris#" + tag(boris.me.userId)).build() else a }
+        val before = node.backupAuthNames.size
+        assertEquals(RestoreError.WrongPassword, restored.restore.withPassword(link, "anna", pw2).exceptionOrNull())
+        assertEquals(listOf("anna", stranger), node.backupAuthNames.drop(before)) // another name is never asked about
+        assertNull(restored.accounts.account.value)
+
+        // at most MAX_CANDIDATES tries, however many the node lists
+        node.authAnswer = { a -> if (a.candidatesCount > 0) a.toBuilder().clearCandidates()
+            .addAllCandidates((0 until 50).map { "anna#%08x".format(it) }).build() else a }
+        val fetches = node.backupFetches
+        assertEquals(RestoreError.WrongPassword, restored.restore.withPassword(link, "anna", pw2).exceptionOrNull())
+        assertEquals(RestoreManager.MAX_CANDIDATES, node.backupFetches - fetches)
+        assertNull(restored.accounts.account.value)
+    }
+
+    @Test fun addHistoryAsksForTheTaggedName() = runBlocking<Unit> {
+        clash()
+        val restored = newGraph()
+        restored.restore.withWords(node.bootstrapLink(), Bip39.toMnemonic(anna.seed)).getOrThrow()
+        restored.restore.addHistory(pw).getOrThrow() // a plain "anna" would be CONFLICT now
+        assertEquals("anna#" + tag(anna.me.userId), node.backupAuthNames.last())
         assertTrue(restored.settings.backupSecret() != null)
     }
 }

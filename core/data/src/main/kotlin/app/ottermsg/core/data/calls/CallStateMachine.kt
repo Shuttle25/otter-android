@@ -4,6 +4,7 @@ import app.ottermsg.core.data.calls.CallEffect.*
 import app.ottermsg.core.data.calls.CallEvent.*
 import app.ottermsg.core.data.calls.CallTimers.ICE_CONNECT_MS
 import app.ottermsg.core.data.calls.CallTimers.ICE_RESTART_MS
+import app.ottermsg.core.data.calls.CallTimers.MAX_SKEW_MS
 import app.ottermsg.core.data.calls.CallTimers.RING_MS
 
 /** One call at a time (D78/D81). Not thread-safe: CallManager serializes events. */
@@ -54,7 +55,8 @@ class CallStateMachine {
             return if (same) listOf(SendAnswer(ev.id, ev.peer, ev.sdp)) else emptyList()
         }
         if (idOf(s) == ev.id) return emptyList() // the same offer delivered twice
-        if (ev.id in ended || ev.nowMs - ev.createdMs >= RING_MS) {
+        val age = ev.nowMs - ev.createdMs
+        if (ev.id in ended || age >= RING_MS || age < -MAX_SKEW_MS) { // stale, or dated from the future (D108)
             return listOf(Line(ev.peer, CallOutcome.MISSED, 0, ev.nowMs), Missed(ev.peer, ev.nowMs))
         }
         if (s is CallState.Outgoing && s.peer == ev.peer) { // glare (D78)

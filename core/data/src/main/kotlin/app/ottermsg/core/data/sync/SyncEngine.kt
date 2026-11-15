@@ -9,6 +9,7 @@ import app.ottermsg.core.data.profile.ProfileRepository
 import app.ottermsg.core.data.di.AllowPlaintext
 import app.ottermsg.core.data.di.ApplicationScope
 import app.ottermsg.core.data.directory.DirectorySync
+import app.ottermsg.core.data.group.GroupRevocations
 import app.ottermsg.core.data.invite.OnlineApi
 import app.ottermsg.core.data.messaging.MailboxReceiver
 import app.ottermsg.core.data.messaging.Outbox
@@ -24,6 +25,9 @@ import app.ottermsg.core.network.NodeApi
 import app.ottermsg.core.network.EndpointStats
 import app.ottermsg.core.network.NetLog
 import app.ottermsg.core.network.NodeSelector
+import app.ottermsg.core.network.RpcException
+import app.ottermsg.proto.v1.Status
+import java.io.IOException
 import app.ottermsg.proto.v1.Event
 import app.ottermsg.proto.v1.ManifestResponse
 import app.ottermsg.proto.v1.PrekeysLow
@@ -54,7 +58,7 @@ class SyncEngine @Inject constructor(
     private val prekeys: PrekeyRefill, private val profile: ProfileRepository, private val media: MediaTransfers,
     @ApplicationScope private val appScope: CoroutineScope, @param:AllowPlaintext private val allowPlaintext: Boolean,
     private val clock: Clock, private val guard: InstallGuard, private val backups: BackupManager,
-    private val news: NewsRepository,
+    private val news: NewsRepository, private val groupRevocations: GroupRevocations,
     netLog: NetLog = NetLog.None,
     private val pushRegistrar: PushRegistrar = PushRegistrar(accounts, settings, clock),
     private val pushMonitor: PushMonitor = PushMonitor(settings, clock),
@@ -85,8 +89,18 @@ class SyncEngine @Inject constructor(
 
     /** Set once another phone restored this account (D52): the engine never connects again. */
     @Volatile private var superseded = false
+    /** Set once the account is verified as disabled by the network administrator (C2): never connects again. */
+    @Volatile private var revoked = false
+    /**
+     * Manifest node ids (hex) whose endpoints answered REVOKED in this run of the app. One such node is not believed
+     * (it could lie to silence a member) and is no longer raced; two of them, or our own network-signed REVOCATION,
+     * mean the account was disabled.
+     */
+    private val revokedBy = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
-    fun start() { if (!superseded) manager.start() }
+    fun start() { if (!superseded && !revoked) manager.start() }
+
+    init { appScope.launch { if (settings.accountRevoked()) { revoked = true; stop() } } } // no connection at all after a restart
     /** After InstallGuard.reclaim: this install may connect again. */
     @Synchronized fun resume() { superseded = false; if (leases.isNotEmpty()) start() }
     fun stop() = manager.stop()
@@ -95,7 +109,11 @@ class SyncEngine @Inject constructor(
     internal var reconnect: () -> Unit = manager::reconnect
     override fun current(): NodeApi? = (connection.value as? ConnectionState.Online)?.api
 
-    private suspend fun candidates(): List<Candidate> = manifests.candidates(allowPlaintext)
+    private suspend fun candidates(): List<Candidate> {
+        val all = manifests.candidates(allowPlaintext)
+        val trusted = all.filterNot { it.nodeId.hex() in revokedBy }
+        return trusted.ifEmpty { all }
+    }
 
     /** Default network switched (Wi-Fi ↔ mobile): a live connection may be stale, a waiting one may work now. */
     fun onNetworkChanged() = manager.networkChanged()
@@ -104,9 +122,16 @@ class SyncEngine @Inject constructor(
     suspend fun runSession(api: NodeApi, session: CoroutineScope) {
         val me = accounts.require()
         if (settings.superseded()) { superseded = true; stop(); return }
+        if (settings.accountRevoked()) { enterRevoked(); return }
         // Subscribe before login: the node pushes queued envelopes right after auth.login.
         session.launch(start = CoroutineStart.UNDISPATCHED) { api.events.collect { e -> onEvent(api, e) } }
-        val login = api.login(me.userId, me.accountKey)
+        val login = try {
+            api.login(me.userId, me.accountKey)
+        } catch (e: RpcException) {
+            if (e.status != Status.STATUS_REVOKED) throw e
+            if (answeredRevoked(api)) return
+            throw IOException("node answered REVOKED; not believed from one node: trying the others")
+        }
         if (!guard.afterLogin(api, login)) {
             superseded = true
             stop() // this install was replaced by a restore on another phone; the UI shows it (settings.superseded)
@@ -126,7 +151,11 @@ class SyncEngine @Inject constructor(
             ManifestUpdater.Result.STORED -> news.purgeRevoked() // a news key may have been revoked (D65)
             ManifestUpdater.Result.IGNORED -> {}
         }
+        // any later request answered REVOKED (the node then closes the session)
+        session.launch { api.awaitRevokedAnswer(); if (!answeredRevoked(api)) reconnect() }
         directory.sync(api)
+        if (revokedByDirectory()) return
+        handleRevocations()
         session.launch {
             try { news.sync(api) }
             catch (e: CancellationException) { throw e }
@@ -159,6 +188,48 @@ class SyncEngine @Inject constructor(
         }
     }
 
+    /**
+     * [api]'s node answered REVOKED. Believed only from two different manifest nodes (by the endpoint's manifest node id,
+     * not the id a node claims in its hello); a single one is treated as failed for this run of the app. True when
+     * the account is now disabled (the engine was stopped).
+     */
+    private suspend fun answeredRevoked(api: NodeApi): Boolean {
+        val node = (api.endpointNodeId ?: api.nodeId()).hex()
+        revokedBy += node
+        val listed = manifests.nodeIds().map { it.hex() }.toSet()
+        val votes = revokedBy.count { it in listed }
+        if (node !in listed || votes < minOf(2, listed.size)) {
+            log.warning("node $node answered REVOKED; not believed without a second node or a signed revocation ($votes/${listed.size})")
+            return false
+        }
+        log.warning("$votes manifest nodes answered REVOKED: this account was disabled")
+        settings.setAccountRevoked(true)
+        enterRevoked()
+        return true
+    }
+
+    /** Our own network-signed REVOCATION came with the directory (DirectorySync sets the flag): stop. */
+    private suspend fun revokedByDirectory(): Boolean {
+        if (!settings.accountRevoked()) return false
+        log.warning("own network-signed REVOCATION: this account was disabled")
+        enterRevoked()
+        return true
+    }
+
+    /** The account is disabled (verified, persisted): unsent messages fail, and the engine never connects again. */
+    private suspend fun enterRevoked() {
+        revoked = true
+        appScope.launch { outbox.cancelAll() } // after stop() has ended the session's outbox worker
+        stop()
+    }
+
+    /** D104: after a directory sync, groups stop encrypting to newly revoked members; a failure never ends the session. */
+    private suspend fun handleRevocations() {
+        try { groupRevocations.handle() }
+        catch (e: CancellationException) { throw e }
+        catch (e: Exception) { log.log(Level.WARNING, "group revocations", e) }
+    }
+
     private suspend fun onEvent(api: NodeApi, e: Event) {
         try {
             when (e.type) {
@@ -169,7 +240,7 @@ class SyncEngine @Inject constructor(
                     pushMonitor.onDelivered(records.map { RecordBody.parseFrom(it.body).createdMs }, sessionStartMs, sessionId)
                     lastActivityMs = clock.now()
                 }
-                "directory" -> directory.sync(api)
+                "directory" -> { directory.sync(api); if (!revokedByDirectory()) handleRevocations() }
                 "news" -> news.sync(api)
                 "prekeys_low" -> prekeys.refill(api, PrekeysLow.parseFrom(e.body).ownerNode.toByteArray())
                 "manifest" -> {
@@ -188,6 +259,8 @@ class SyncEngine @Inject constructor(
             log.log(Level.WARNING, "event ${e.type} failed", x)
         }
     }
+
+    private fun ByteArray.hex() = joinToString("") { "%02x".format(it) }
 
     companion object {
         const val REPROBE_EVERY_MS = 30 * 60_000L

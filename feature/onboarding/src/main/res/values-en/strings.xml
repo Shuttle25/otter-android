@@ -28,6 +28,7 @@
     <string name="onb_err_username_taken">This username is taken. Choose another one.</string>
     <string name="onb_err_invite_used">This invite has already been used. Ask for a new one.</string>
     <string name="onb_err_invite_expired">This invite has expired. Ask for a new one.</string>
+    <string name="onb_err_invite_outdated">This link is outdated. Ask for a new invite.</string>
     <string name="onb_err_network">Could not connect. Check the internet and try again.</string>
     <string name="onb_err_unknown">Could not create the account. Try again.</string>
     <string name="onb_retry">Try again</string>

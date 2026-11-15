@@ -6,7 +6,9 @@ object MessageKind { const val TEXT = 0; const val SYSTEM_UNDECRYPTABLE = 1; con
     /** A verified announcement (D66): body = text in the phone's language, system_data = Announcement bytes. */
     const val NEWS = 5
     /** A local call line in a 1:1 chat (D80): messages.call_outcome / call_duration_s; never sent, never receipted. */
-    const val CALL = 6 }
+    const val CALL = 6
+    /** M9.2 (D104): a member was removed; system_data = "revoked" | "duplicate_invite". Local only, never sent. */
+    const val SYSTEM_MEMBER = 7 }
 
 /** attachments.state (D48). */
 object AttachmentState {

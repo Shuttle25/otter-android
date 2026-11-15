@@ -50,6 +50,8 @@ fun InviteRoute(onBack: () -> Unit, vm: InviteViewModel = hiltViewModel()) {
                     Text(stringResource(R.string.invite_error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
                     Button(onClick = vm::create, modifier = Modifier.heightIn(min = Dimens.minTouch)) { Text(stringResource(R.string.invite_retry)) }
                 }
+                InviteUiState.NoRights ->
+                    Text(stringResource(R.string.invite_no_rights), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
                 is InviteUiState.Ready -> {
                     Box(Modifier.background(Color.White, MaterialTheme.shapes.large).padding(Dimens.s12)) {
                         QrImage(s.link, stringResource(R.string.invite_qr_description))

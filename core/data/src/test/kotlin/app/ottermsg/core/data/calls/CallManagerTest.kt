@@ -270,6 +270,20 @@ class CallManagerTest {
         assertTrue(transport.sent.isEmpty())
     }
 
+    /** Caller cancelled while we slept: only the offer pushed; the hangup comes in the same fetch, right after it (D108). */
+    @Test fun anOfferFollowedByItsHangupInOneFetchIsAMissedCallThatStopsRinging() {
+        val id = CallId.random()
+        deliver(msg(id).setOffer(CallOffer.newBuilder().setSdp("their-offer")).build())
+        deliver(msg(id).setHangup(CallHangup.newBuilder().setReason(CallHangup.Reason.NORMAL)).build())
+        settle("missed") { alerts.missed.isNotEmpty() && alerts.released == 1 }
+        assertEquals(CallState.Idle, manager.state.value)
+        assertEquals(CallOutcome.MISSED.code, callLines().single().callOutcome)
+        assertEquals(peer, alerts.missed.single().first)
+        assertTrue("nothing sent back but the delivery receipt", transport.sent.isEmpty())
+        assertTrue(engines.isEmpty())
+        assertFalse(CallManager.LEASE in link.leases)
+    }
+
     @Test fun losingGlareDropsOurOwnEngineAndAnswersTheirCall() {
         dialToOutgoing()
         val mine = engine()
@@ -336,8 +350,7 @@ class CallManagerTest {
         test.runCurrent()
         assertEquals(listOf<CallNotice>(CallNotice.NotAvailable), late)
         job.cancel()
-        api.turn = TurnCredentials.newBuilder().setUsername("9999999999:abcd").setPassword("p").setTtlS(43_200)
-            .addUrls("turn:203.0.113.7:3478?transport=udp").build()
+        api.turn = turn // a sane answer (D108: expiry within 24 h)
         manager.dial(peer)
         settle("outgoing") { manager.state.value is CallState.Outgoing }
         val next = mutableListOf<CallNotice>()

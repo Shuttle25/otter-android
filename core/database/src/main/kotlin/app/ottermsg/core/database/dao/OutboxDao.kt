@@ -28,5 +28,9 @@ import app.ottermsg.core.database.entity.OutboxEntity
     @Query("UPDATE outbox SET attempts = :attempts, next_attempt_ms = :next WHERE id = :id") suspend fun reschedule(id: Long, attempts: Int, next: Long)
     @Query("DELETE FROM outbox WHERE id = :id") suspend fun delete(id: Long)
     @Query("SELECT * FROM outbox WHERE id = :id") suspend fun get(id: Long): OutboxEntity?
+    /** Messages of items never sent to a node (an account that was disabled fails them). */
+    @Query("SELECT DISTINCT message_local_id FROM outbox WHERE sent_ms IS NULL AND message_local_id IS NOT NULL")
+    suspend fun unsentMessageIds(): List<Long>
+    @Query("DELETE FROM outbox") suspend fun deleteAll()
     @Query("SELECT * FROM outbox WHERE message_local_id = :localId") suspend fun forMessage(localId: Long): List<OutboxEntity>
 }

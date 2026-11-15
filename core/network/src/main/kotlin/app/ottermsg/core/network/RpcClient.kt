@@ -36,6 +36,8 @@ class RpcClient(private val conn: Connection, scope: CoroutineScope, private val
     val hello = CompletableDeferred<Hello>()
     /** Completes when the connection ends (with the cause, or null on clean close). */
     val closed = CompletableDeferred<Throwable?>()
+    /** Completes when the node answers any request with STATUS_REVOKED (our account disabled — or a lying node). */
+    val revoked = CompletableDeferred<Unit>()
     /** Bytes received on the underlying connection so far. */
     val bytesIn: Long get() = conn.bytesIn
     @Volatile private var abortCause: OversizeFrame? = null
@@ -98,6 +100,7 @@ class RpcClient(private val conn: Connection, scope: CoroutineScope, private val
         } finally {
             pending.remove(id)
         }
+        if (r.status == Status.STATUS_REVOKED) revoked.complete(Unit)
         if (r.status != Status.STATUS_OK) throw RpcException(r.status, r.error)
         return r.body
     }

@@ -39,6 +39,8 @@ class MainViewModel @Inject constructor(
 
     /** Another phone restored this account (D52): this one only explains why it stopped. */
     val superseded: StateFlow<Boolean> = settings.observeSuperseded().stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    /** The network administrator disabled this account (verified, C2): the app only says so. */
+    val revoked: StateFlow<Boolean> = settings.observeAccountRevoked().stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     /** A notification tap asks to open this conversation (consumed by AppNavHost). */
     val openConversation = MutableStateFlow<Long?>(null)
@@ -63,7 +65,9 @@ class MainActivity : ComponentActivity() {
                     val hasAccount by vm.hasAccount.collectAsStateWithLifecycle()
                     // Blank themed surface while the local account loads (no skeleton: it is local and fast).
                     val superseded by vm.superseded.collectAsStateWithLifecycle()
-                    if (superseded) SupersededScreen(onReclaim = vm::reclaim) else hasAccount?.let { AppNavHost(it, vm.accounts.account, vm.openConversation) }
+                    val revoked by vm.revoked.collectAsStateWithLifecycle()
+                    if (revoked) RevokedScreen()
+                    else if (superseded) SupersededScreen(onReclaim = vm::reclaim) else hasAccount?.let { AppNavHost(it, vm.accounts.account, vm.openConversation) }
                 }
             }
         }

@@ -49,7 +49,7 @@ class LiveClient {
     val settings = Settings(db.settingsDao())
     val accounts = AccountRepository(db.accountDao(), settings, SeedVault(XorWrapper))
     val signal = SignalService(accounts, db.signalKvDao(), db.contactDao(), scope)
-    val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao(), settings, db.accountDao())
+    val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao(), settings, db.accountDao(), db.manifestDao(), db.messageDao(), clock)
     val profile = ProfileRepository(accounts, db, settings, clock)
     val outbox = Outbox(db, accounts, signal, clock, GroupSender(db, signal, clock))
     private val clientId = java.util.UUID.randomUUID().toString()
@@ -68,13 +68,14 @@ class LiveClient {
     val backups = app.ottermsg.core.data.backup.BackupManager(ApplicationProvider.getApplicationContext(), db, accounts, settings,
         SeedVault(XorWrapper), { engine as app.ottermsg.core.data.invite.OnlineApi }, clock)
     val groups = GroupRepository(db, accounts, applier, outbox, clock)
+    val groupRevocations = app.ottermsg.core.data.group.GroupRevocations(db, accounts, groups, settings)
     val messages = MessageRepository(db, accounts, outbox, clock, files, PhotoPrep(), media)
-    val prekeys = PrekeyRefill(accounts, settings, signal, clock)
+    val prekeys = PrekeyRefill(accounts, settings, signal, clock, db.manifestDao())
     val stats = InMemoryEndpointStats()
     val selector = NodeSelector(transport, stats, clock::now)
     val manifests = ManifestUpdater(db.manifestDao(), settings, clock)
     val engine: SyncEngine = SyncEngine(stats, selector, accounts, settings, manifests, directory, receiver, outbox, prekeys, profile, media, scope, true, clock, guard, backups,
-        app.ottermsg.core.data.news.NewsRepository(db, manifests, clock, app.ottermsg.core.data.push.MessageAlerts.NONE))
+        app.ottermsg.core.data.news.NewsRepository(db, manifests, clock, app.ottermsg.core.data.push.MessageAlerts.NONE), groupRevocations)
     val invites = InviteRepository(accounts, settings, db.manifestDao(), engine, clock)
     val registration = Registration(db, TransportConnector(selector), SeedVault(XorWrapper), accounts, settings, clock, allowPlaintext = true)
     val restore = app.ottermsg.core.data.backup.RestoreManager(db, TransportConnector(selector), SeedVault(XorWrapper), accounts, settings, clock,

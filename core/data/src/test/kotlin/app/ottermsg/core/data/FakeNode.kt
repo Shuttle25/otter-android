@@ -2,6 +2,7 @@ package app.ottermsg.core.data
 
 import app.ottermsg.core.crypto.Ed25519
 import app.ottermsg.core.crypto.Ids
+import app.ottermsg.core.crypto.InviteKeys
 import app.ottermsg.core.crypto.InviteLink
 import app.ottermsg.core.crypto.RecordCodec
 import app.ottermsg.core.network.NodeApi
@@ -47,15 +48,20 @@ private fun ByteString.hex() = toByteArray().hex()
  * In-memory node with the same rules as the Go service for the M1 methods: invites, registration,
  * directory, prekeys (one-time keys consumed), mailboxes with per-session push and ACK.
  */
-class FakeNode(private val clock: () -> Long) {
+class FakeNode(private val clock: () -> Long, val nodeId: ByteArray = ByteArray(16) { 0x42 }) {
     companion object { const val APK_CHUNK = 1 shl 20 }
-    val nodeId = ByteArray(16) { 0x42 }
+    /**
+     * Answers auth.login and every logged-in request with STATUS_REVOKED (served by [FakeNodeTransport]), like a node
+     * whose account was disabled by `otter-admin user revoke` — or a hostile node lying it.
+     */
+    @Volatile var answerRevoked = false
     val network = Ed25519.keyPairFromSeed(ByteArray(32) { 9 })
     /** Signs a manifest; [withSelf] lists this node, [extraHosts] adds other (fake) nodes. */
     fun signManifest(version: Long, withSelf: Boolean = true, extraHosts: List<String> = emptyList(),
-                     newsKeys: List<ByteArray> = emptyList()): Record {
+                     newsKeys: List<ByteArray> = emptyList(), foundingMembers: List<ByteArray> = emptyList()): Record {
         val b = Manifest.newBuilder().setVersion(version).setIssuedMs(version).setNetworkPub(bs(network.publicKey))
         newsKeys.forEach { b.addNewsKeys(bs(it)) }
+        foundingMembers.forEach { b.addFoundingMembers(bs(it)) }
         if (withSelf) b.addNodes(NodeInfo.newBuilder().setNodeId(bs(nodeId)).setLabel("fake")
             .addEndpoints(Endpoint.newBuilder().setKind(Endpoint.Kind.WS_PLAIN).setHost("fake").setPort(1).setPath("/fakepath")))
         extraHosts.forEachIndexed { i, h -> b.addNodes(NodeInfo.newBuilder().setNodeId(bs(ByteArray(16) { (i + 1).toByte() })).setLabel(h)
@@ -124,15 +130,43 @@ class FakeNode(private val clock: () -> Long) {
     /** push.status (D79): whether a non-empty push token is registered for [user]. */
     fun hasPush(user: ByteArray): Boolean = synchronized(lock) { !pushTokens[user.hex()].isNullOrEmpty() }
 
+    /** Like `otter-admin invite`: a network-signed INVITE with its redeem key travels in the link (D100). */
     fun bootstrapLink(ttlMs: Long = 3_600_000): String {
         val secret = ByteArray(32).also(SecureRandom()::nextBytes)
+        val inv = Invite.newBuilder().setInviteId(bs(sha(secret))).setExpiresMs(clock() + ttlMs)
+            .setRedeemPub(bs(InviteKeys.redeemKey(secret).publicKey)).build()
+        val rec = RecordCodec.sign(RecordCodec.body(RecordType.INVITE, Ids.id16(network.publicKey), inv.toByteArray(),
+            expiresMs = clock() + ttlMs, createdMs = clock()), network)
         synchronized(lock) { invites[sha(secret).hex()] = InviteState(Ids.id16(network.publicKey), clock() + ttlMs) }
-        return InviteLink.encode(InviteBundle.newBuilder().setNetworkPub(bs(network.publicKey)).setManifest(manifest).setSecret(bs(secret)).build())
+        return InviteLink.encode(InviteBundle.newBuilder().setNetworkPub(bs(network.publicKey)).setManifest(manifest)
+            .setSecret(bs(secret)).setInvite(rec).build())
     }
+
+    /** Sees every register request (the node side of what the phone sends). */
+    @Volatile var onRegister: (RegisterRequest) -> Unit = {}
+    /** register calls that reached this node. */
+    @Volatile var registrations = 0; private set
+    /** Users whose invite rights the admin withdrew (INVITE_RIGHTS no): invite.create → UNAUTHORIZED. */
+    val noInviteRights = HashSet<String>()
+    fun withdrawInviteRights(user: ByteArray) = synchronized(lock) { noInviteRights += user.hex() }
 
     fun mailbox(user: ByteArray): List<Record> = synchronized(lock) { mailboxes[user.hex()]?.values?.toList() ?: emptyList() }
     fun oneTimeLeft(user: ByteArray): Int = synchronized(lock) { keys[user.hex()]?.oneTime?.size ?: 0 }
-    fun directoryRecords(): List<Record> = synchronized(lock) { users.values.map { it.record } }
+    /** Network-signed REVOCATION / INVITE_RIGHTS records served by directory.sync (D99). */
+    private val membership = mutableListOf<Record>()
+    /** Like `otter-admin user revoke`; a [signer] other than the network key plays a forger. */
+    fun revoke(user: ByteArray, signer: Ed25519.KeyPair = network, createdMs: Long = clock()) = synchronized(lock) {
+        membership += RecordCodec.sign(RecordCodec.body(RecordType.REVOCATION, Ids.id16(network.publicKey),
+            app.ottermsg.proto.v1.Revocation.newBuilder().setUserId(bs(user)).build().toByteArray(), createdMs = createdMs), signer)
+    }
+    /** Like `otter-admin user invite-rights`: a network-signed INVITE_RIGHTS record. */
+    fun inviteRights(user: ByteArray, canInvite: Boolean, version: Long, createdMs: Long = clock(), signer: Ed25519.KeyPair = network) =
+        synchronized(lock) {
+            membership += RecordCodec.sign(RecordCodec.body(RecordType.INVITE_RIGHTS, Ids.id16(network.publicKey),
+                app.ottermsg.proto.v1.InviteRights.newBuilder().setUserId(bs(user)).setCanInvite(canInvite).setVersion(version).build()
+                    .toByteArray(), createdMs = createdMs), signer)
+        }
+    fun directoryRecords(): List<Record> = synchronized(lock) { users.values.map { it.record } + membership }
     private val directoryUpdateCount = HashMap<String, Int>()
     /** Accepted directory.update calls of [user]. */
     fun directoryUpdates(user: ByteArray): Int = synchronized(lock) { directoryUpdateCount[user.hex()] ?: 0 }
@@ -203,14 +237,33 @@ class FakeNode(private val clock: () -> Long) {
             .setNodeId(bs(nodeId)).setManifestVersion(manifestVersion).build()
 
         override suspend fun register(req: RegisterRequest) { check(); synchronized(lock) {
-            if (req.inviteSecret.size() != 32) fail(Status.STATUS_INVALID, "incomplete registration")
-            val inviteId = sha(req.inviteSecret.toByteArray())
-            val inv = invites[inviteId.hex()] ?: fail(Status.STATUS_NOT_FOUND, "unknown invite")
-            if (inv.usedBy != null) fail(Status.STATUS_CONFLICT, "invite already used")
-            if (inv.expiresMs < clock()) fail(Status.STATUS_CONFLICT, "invite expired")
+            registrations++
+            onRegister(req)
+            if (!req.hasDirectoryEntry() || !req.hasPrekeys() || !req.hasInviteUsed()) fail(Status.STATUS_INVALID, "incomplete registration")
             val dirBody = body(req.directoryEntry)
             val entry = DirectoryEntry.parseFrom(dirBody.payload)
             verifyUser(req.directoryEntry, entry.accountPub.toByteArray())
+            // Like Service.admitChain (D100): the INVITE travels in the entry, the proof replaces the secret.
+            if (entry.inviteRecord.isEmpty || entry.inviteProof.size() != 64) fail(Status.STATUS_INVALID, "no invite chain (update the app)")
+            val invRec = Record.parseFrom(entry.inviteRecord)
+            val invBody = body(invRec)
+            if (invBody.type != RecordType.INVITE) fail(Status.STATUS_INVALID, "malformed invite record")
+            val invMsg = Invite.parseFrom(invBody.payload)
+            if (invMsg.inviteId.size() != 32 || invMsg.redeemPub.size() != 32) fail(Status.STATUS_INVALID, "malformed invite record")
+            val signer = if (invBody.author.toByteArray().contentEquals(Ids.id16(network.publicKey))) network.publicKey
+                else users[invBody.author.hex()]?.entry?.accountPub?.toByteArray() ?: fail(Status.STATUS_RETRY_LATER, "inviter not known here yet")
+            if (!RecordCodec.verify(invRec, signer)) fail(Status.STATUS_INVALID, "invite signature")
+            val proofOk = runCatching { Ed25519.verify(invMsg.redeemPub.toByteArray(), InviteKeys.redeemMessage(invMsg.inviteId.toByteArray(),
+                entry.userId.toByteArray(), entry.accountPub.toByteArray()), entry.inviteProof.toByteArray()) }.getOrDefault(false)
+            if (!proofOk) fail(Status.STATUS_INVALID, "invite proof")
+            val inviteId = invMsg.inviteId.toByteArray()
+            val inv = invites.getOrPut(inviteId.hex()) { InviteState(invBody.author.toByteArray(), invMsg.expiresMs) }
+            if (inv.usedBy != null) fail(Status.STATUS_CONFLICT, "invite already used")
+            if (inv.expiresMs < clock()) fail(Status.STATUS_CONFLICT, "invite expired")
+            if (!app.ottermsg.core.data.directory.Membership.inviteLifetimeOk(invBody.createdMs, invMsg.expiresMs))
+                fail(Status.STATUS_INVALID, "invite lifetime over 30 days")
+            if (entry.registeredMs < invBody.createdMs || entry.registeredMs > invMsg.expiresMs)
+                fail(Status.STATUS_INVALID, "registration outside the invite's lifetime")
             if (!entry.userId.toByteArray().contentEquals(Ids.id16(entry.accountPub.toByteArray()))) fail(Status.STATUS_INVALID, "author binding")
             if (users.containsKey(entry.userId.hex())) fail(Status.STATUS_CONFLICT, "already registered")
             if (users.values.any { it.entry.username == entry.username }) fail(Status.STATUS_CONFLICT, "username taken")
@@ -308,6 +361,9 @@ class FakeNode(private val clock: () -> Long) {
             val b = verifyUser(invite)
             if (!b.author.toByteArray().contentEquals(me())) fail(Status.STATUS_UNAUTHORIZED, "author")
             val i = Invite.parseFrom(b.payload)
+            if (i.redeemPub.size() != 32) fail(Status.STATUS_INVALID, "invite without a redeem key (update the app)")
+            if (!app.ottermsg.core.data.directory.Membership.inviteLifetimeOk(b.createdMs, i.expiresMs)) fail(Status.STATUS_INVALID, "bad payload")
+            if (b.author.hex() in noInviteRights) fail(Status.STATUS_UNAUTHORIZED, "inviter may not invite")
             invites[i.inviteId.hex()] = InviteState(b.author.toByteArray(), i.expiresMs)
         } }
 
@@ -411,6 +467,8 @@ class FakeNode(private val clock: () -> Long) {
         @Volatile var grantBlob: ByteArray? = null; private set
 
         override suspend fun backupAuth(username: String): BackupAuthResponse { check(); synchronized(lock) {
+            backupAuthNames += username
+            clashCandidates(username)?.let { return (authAnswer ?: { a -> a })(BackupAuthResponse.newBuilder().addAllCandidates(it).build()) }
             val m = backupByName(username)?.second
             val answer = if (m != null) BackupAuthResponse.newBuilder().setSalt(m.salt).setKdfMKib(m.kdfMKib).setKdfT(m.kdfT).setKdfP(m.kdfP).build()
             else BackupAuthResponse.newBuilder().setSalt(bs(fakeSalt(username))).setKdfMKib(65536).setKdfT(3).setKdfP(1).build()
@@ -419,6 +477,7 @@ class FakeNode(private val clock: () -> Long) {
 
         override suspend fun backupFetch(username: String, authSecret: ByteArray): BackupFetchResponse { check(); synchronized(lock) {
             backupFetches++
+            if (clashCandidates(username) != null) fail(Status.STATUS_CONFLICT, "username is shared, use name#tag")
             val now = clock()
             val recent = authFailures.getOrPut(username) { mutableListOf() }.apply { removeAll { it < now - 3_600_000 } }
             if (recent.size >= 5) fail(Status.STATUS_RETRY_LATER, "too many attempts")
@@ -483,9 +542,25 @@ class FakeNode(private val clock: () -> Long) {
         javax.crypto.Mac.getInstance("HmacSHA256").apply { init(javax.crypto.spec.SecretKeySpec(fakeKey, "HmacSHA256")) }
             .doFinal(username.toByteArray()).copyOf(16)
     private fun backupByName(username: String): Pair<Record, BackupMeta>? {
-        val id = users.values.firstOrNull { it.entry.username == username }?.entry?.userId?.hex() ?: return null
+        val base = username.substringBefore('#')
+        val tag = if ('#' in username) username.substringAfter('#').lowercase() else null
+        // mirror of Store.ResolveUsername: "name#tag" is the account named name whose id starts with tag
+        val id = users.values.firstOrNull { it.entry.username == base && (tag == null || it.entry.userId.hex().take(8) == tag) }
+            ?.entry?.userId?.hex() ?: return null
         return backups[id]
     }
+    /** D103: names that clashed (a partition); a plain one answers with candidates, its fetch is CONFLICT. */
+    private val clashed = mutableSetOf<String>()
+    fun clash(name: String) = synchronized(lock) { clashed += name }
+    private fun clashCandidates(username: String): List<String>? = if ('#' in username || username !in clashed) null
+        else users.values.filter { it.entry.username == username }.map { username + "#" + it.entry.userId.hex().take(8) }
+    /** Gives an account another name without the uniqueness check (the clash a partition would produce). */
+    fun renameForTest(user: ByteArray, name: String) = synchronized(lock) {
+        val u = users.getValue(user.hex())
+        users[user.hex()] = User(u.record, u.entry.toBuilder().setUsername(name).build())
+    }
+    /** Every username backup.auth was asked about, in order. */
+    val backupAuthNames: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
     /** Test hooks. */
     fun backupOf(user: ByteArray): BackupMeta? = synchronized(lock) { backups[user.hex()]?.second }
     fun loginInfo(user: ByteArray): Pair<Int, Long> = synchronized(lock) { keys[user.hex()]!!.let { it.registrationId to it.installedMs } }

@@ -18,6 +18,9 @@
     <string name="conv_empty_text">Write the first message</string>
     <string name="conv_info">Info</string>
     <string name="conv_not_member">You are no longer a member of this group</string>
+    <string name="conv_peer_removed">Member removed</string>
+    <string name="conv_member_removed">Member removed</string>
+    <string name="conv_member_duplicate">The invite was used twice; this account is disabled</string>
     <plurals name="conv_members">
         <item quantity="one">%1$d member</item>
         <item quantity="other">%1$d members</item>

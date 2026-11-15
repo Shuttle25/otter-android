@@ -23,6 +23,7 @@ import app.ottermsg.core.database.entity.ManifestEntity
 import app.ottermsg.core.network.Endpoints
 import app.ottermsg.core.network.NodeApi
 import app.ottermsg.core.network.RpcException
+import app.ottermsg.proto.v1.BackupAuthResponse
 import app.ottermsg.proto.v1.BackupMeta
 import app.ottermsg.proto.v1.BackupSnapshot
 import app.ottermsg.proto.v1.BlobMeta
@@ -100,16 +101,34 @@ class RestoreManager @Inject constructor(
         check(accounts.account.value == null) { "an account is already installed" }
         val net = network(link)
         val d = connector.withNode(Endpoints.candidates(net.manifest, allowPlaintext)) { api ->
-            download(api, username.trim().lowercase(), password)
+            val name = username.trim().lowercase()
+            val auth = api.backupAuth(name)
+            if (auth.candidatesCount == 0) download(api, name, password, auth)
+            else tryCandidates(api, candidatesFor(name, auth.candidatesList), password) // D103: a clashed name
         }
         install(net, d.snapshot, d)
     }
 
+    /**
+     * Each candidate with the same password, in the node's order; the first that decrypts wins (the others fail their
+     * own verifier). Every wrong one counts as a failed attempt on the node, so the loop stops at the first success.
+     */
+    private suspend fun tryCandidates(api: NodeApi, names: List<String>, password: String): Downloaded {
+        for (n in names) {
+            try { return download(api, n, password, api.backupAuth(n)) }
+            catch (e: RpcException) { if (e.status != Status.STATUS_UNAUTHORIZED) throw e }
+        }
+        throw RestoreError.WrongPassword
+    }
+
     private class Downloaded(val snapshot: BackupSnapshot, val keys: BackupKeys.Keys, val meta: BackupMeta, val profile: BackupKeys.Profile)
 
-    /** Fetches, verifies and decrypts the backup over one connection (the fetch grant is per connection, D51). */
-    private suspend fun download(api: NodeApi, username: String, password: String): Downloaded {
-        val auth = api.backupAuth(username)
+    /**
+     * Fetches, verifies and decrypts the backup over one connection (the fetch grant is per connection, D51). [auth] is
+     * the node's backup.auth answer for [username]; a candidate must not be ambiguous itself.
+     */
+    private suspend fun download(api: NodeApi, username: String, password: String, auth: BackupAuthResponse): Downloaded {
+        if (auth.candidatesCount > 0) throw RestoreError.WrongPassword
         // C1: the node's numbers only select one of our profiles; anything else ends here, before the password is used
         val profile = BackupKeys.Profile.match(auth.kdfMKib, auth.kdfT, auth.kdfP, auth.salt.size()) ?: throw RestoreError.Corrupt
         val keys = withContext(Dispatchers.Default) { derive(password, auth.salt.toByteArray(), profile) }
@@ -176,7 +195,9 @@ class RestoreManager @Inject constructor(
     override suspend fun addHistory(password: String): Result<Unit> = guarded {
         val me = accounts.require()
         val m = ManifestVerifier.verify(checkNotNull(db.manifestDao().latest()) { "no manifest" }.raw, settings.networkPub(), 0)
-        val d = connector.withNode(Endpoints.candidates(m, allowPlaintext)) { api -> download(api, me.username, password) }
+        // D103: always the tagged name, never ambiguous (a plain name that ever clashed is CONFLICT)
+        val tagged = me.username.substringBefore('#') + "#" + tag(me.userId)
+        val d = connector.withNode(Endpoints.candidates(m, allowPlaintext)) { api -> download(api, tagged, password, api.backupAuth(tagged)) }
         if (!d.snapshot.seed.toByteArray().contentEquals(me.seed)) throw RestoreError.Corrupt
         SnapshotCodec.import(d.snapshot, db, settings)
         keepBackupOn(d)
@@ -214,5 +235,14 @@ class RestoreManager @Inject constructor(
     companion object {
         /** 100 MiB in 256 KiB chunks (D44). */
         const val MAX_CHUNKS = 400
+        /** A node cannot make the phone run the key derivation (and spend failed attempts) more often than this (D103). */
+        const val MAX_CANDIDATES = 4
+
+        private fun tag(userId: ByteArray) = userId.copyOf(4).joinToString("") { "%02x".format(it) }
+        private val TAGGED = Regex("[0-9a-f]{8}")
+
+        /** The node's candidates that are the typed name with a tag (anything else is not ours to try), at most four. */
+        internal fun candidatesFor(name: String, listed: List<String>): List<String> =
+            listed.filter { it.startsWith("$name#") && TAGGED.matches(it.substring(name.length + 1)) }.distinct().take(MAX_CANDIDATES)
     }
 }

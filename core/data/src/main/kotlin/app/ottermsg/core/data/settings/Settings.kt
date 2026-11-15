@@ -23,6 +23,15 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
     suspend fun setNextOneTimeId(v: Int) = putInt(NEXT_ONE_TIME_ID, v)
     suspend fun networkPub(): ByteArray = checkNotNull(dao.get(NETWORK_PUB)) { "network key missing" }
     suspend fun setNetworkPub(v: ByteArray) = dao.put(SettingEntity(NETWORK_PUB, v))
+    /** Our invite chain (D100): the INVITE record and the redeem proof, copied into every new version of our entry. */
+    suspend fun ownInvite(): Pair<ByteArray, ByteArray>? {
+        val rec = dao.get(OWN_INVITE_RECORD) ?: return null
+        val proof = dao.get(OWN_INVITE_PROOF) ?: return null
+        return rec to proof
+    }
+    suspend fun setOwnInvite(record: ByteArray, proof: ByteArray) {
+        dao.put(SettingEntity(OWN_INVITE_RECORD, record)); dao.put(SettingEntity(OWN_INVITE_PROOF, proof))
+    }
     /** M1 flag: a refill for the connected node was pending. Read once for compatibility. */
     suspend fun prekeysLow(): Boolean = (int(PREKEYS_LOW) ?: 0) != 0
     suspend fun setPrekeysLow(v: Boolean) = putInt(PREKEYS_LOW, if (v) 1 else 0)
@@ -31,6 +40,37 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
     suspend fun pendingRefills(): Set<String> =
         dao.get(PENDING_REFILLS)?.decodeToString()?.split('\n')?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
     suspend fun setPendingRefills(owners: Set<String>) = dao.put(SettingEntity(PENDING_REFILLS, owners.joinToString("\n").encodeToByteArray()))
+
+    /** Recent prekey refill times per owner node (hex), for the refill bounds (D108). */
+    suspend fun refillTimes(): Map<String, List<Long>> =
+        dao.get(REFILL_TIMES)?.decodeToString()?.split('\n')?.mapNotNull { line ->
+            val k = line.substringBefore(':', "").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            k to line.substringAfter(':').split(',').mapNotNull { it.toLongOrNull() }
+        }?.toMap() ?: emptyMap()
+    suspend fun setRefillTimes(m: Map<String, List<Long>>) =
+        dao.put(SettingEntity(REFILL_TIMES, m.entries.joinToString("\n") { (k, v) -> k + ":" + v.joinToString(",") }.encodeToByteArray()))
+
+    /** D104: `<user hex>:<group hex>` pairs whose revocation GroupRevocations already handled (rotate once, remove once). */
+    suspend fun revocationsHandled(): Set<String> =
+        dao.get(REVOCATIONS_HANDLED)?.decodeToString()?.split('\n')?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
+    suspend fun addRevocationsHandled(keys: Collection<String>) {
+        if (keys.isEmpty()) return
+        dao.put(SettingEntity(REVOCATIONS_HANDLED, (revocationsHandled() + keys).joinToString("\n").encodeToByteArray()))
+    }
+
+    /** Accounts (hex) seen losing a doubly redeemed invite (D102). Grows only: a later batch hiding the winner changes nothing. */
+    suspend fun duplicateLosers(): Set<String> =
+        dao.get(DUPLICATE_LOSERS)?.decodeToString()?.split('\n')?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
+    suspend fun setDuplicateLosers(users: Set<String>) = dao.put(SettingEntity(DUPLICATE_LOSERS, users.joinToString("\n").encodeToByteArray()))
+
+    /** Verified inviters (hex) per contact (hex), from their entries' invite chains; kept when a node hides an entry. */
+    suspend fun contactInviters(): Map<String, Set<String>> =
+        dao.get(CONTACT_INVITERS)?.decodeToString()?.split('\n')?.mapNotNull { line ->
+            val k = line.substringBefore(':', "").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            k to line.substringAfter(':').split(',').filter { it.isNotEmpty() }.toSet()
+        }?.toMap() ?: emptyMap()
+    suspend fun setContactInviters(m: Map<String, Set<String>>) =
+        dao.put(SettingEntity(CONTACT_INVITERS, m.entries.joinToString("\n") { (k, v) -> k + ":" + v.joinToString(",") }.encodeToByteArray()))
 
     /** Version of our own DIRECTORY_ENTRY as last published or seen (M1–M3 registrations are version 1). */
     suspend fun entryVersion(): Int = int(ENTRY_VERSION) ?: 1
@@ -61,6 +101,13 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
     suspend fun superseded(): Boolean = (int(SUPERSEDED) ?: 0) != 0
     suspend fun setSuperseded(v: Boolean) = putInt(SUPERSEDED, if (v) 1 else 0)
     fun observeSuperseded(): Flow<Boolean> = observeInt(SUPERSEDED, 0).map { it != 0 }
+    /**
+     * The network administrator disabled this account, and the phone verified it (our own network-signed REVOCATION,
+     * or REVOKED from two manifest nodes): the engine never connects again and the app shows only that.
+     */
+    suspend fun accountRevoked(): Boolean = (int(ACCOUNT_REVOKED) ?: 0) != 0
+    suspend fun setAccountRevoked(v: Boolean) = putInt(ACCOUNT_REVOKED, if (v) 1 else 0)
+    fun observeAccountRevoked(): Flow<Boolean> = observeInt(ACCOUNT_REVOKED, 0).map { it != 0 }
     /** This install's INSTALL record reached a node (C14); cleared by «Этот телефон снова главный». */
     suspend fun installPublished(): Boolean = (int(INSTALL_PUBLISHED) ?: 0) != 0
     suspend fun setInstallPublished(v: Boolean) = putInt(INSTALL_PUBLISHED, if (v) 1 else 0)
@@ -142,6 +189,7 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
         const val INSTALLED_MS = "installed_ms"
         const val RESTORE_PENDING = "restore_pending"
         const val SUPERSEDED = "superseded"
+        const val ACCOUNT_REVOKED = "account_revoked"
         const val INSTALL_PUBLISHED = "install_published"
         const val BACKUP_SECRET = "backup_secret"
         const val BACKUP_SALT = "backup_salt"
@@ -160,7 +208,13 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
         const val REGISTRATION_ID = "registration_id"
         const val NEXT_ONE_TIME_ID = "next_one_time_id"
         const val NETWORK_PUB = "network_pub"
+        const val OWN_INVITE_RECORD = "own_invite_record"
+        const val OWN_INVITE_PROOF = "own_invite_proof"
         const val PREKEYS_LOW = "prekeys_low"
         const val PENDING_REFILLS = "prekeys_pending_owners"
+        const val REFILL_TIMES = "prekeys_refill_times"
+        const val REVOCATIONS_HANDLED = "revocations_handled"
+        const val DUPLICATE_LOSERS = "duplicate_losers"
+        const val CONTACT_INVITERS = "contact_inviters"
     }
 }

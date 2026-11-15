@@ -28,6 +28,16 @@ class RpcClientTest {
         assertEquals(Status.STATUS_INVALID, e.status)
     }
 
+    @Test fun revokedAnswerIsSignalled() = runTest {
+        val t = FakeTransport { r -> if (r.method == "msg.send") err(Status.STATUS_REVOKED, "account revoked") else ok() }
+        val rpc = RpcClient(t.connect(cand("x")), backgroundScope)
+        rpc.call("ping", Empty.getDefaultInstance())
+        assertTrue(!rpc.revoked.isCompleted)
+        val e = runCatching { rpc.call("msg.send", Empty.getDefaultInstance()) }.exceptionOrNull() as RpcException
+        assertEquals(Status.STATUS_REVOKED, e.status)
+        assertTrue(rpc.revoked.isCompleted)
+    }
+
     @Test fun eventsAndClose() = runTest {
         val t = FakeTransport { ok() }
         val conn = t.connect(cand("x")) as FakeTransport.FakeConnection

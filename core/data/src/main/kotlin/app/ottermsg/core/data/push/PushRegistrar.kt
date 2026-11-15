@@ -20,6 +20,7 @@ class PushRegistrar @Inject constructor(
     private val mutex = Mutex()
 
     suspend fun registerIfNeeded(api: NodeApi) = mutex.withLock {
+        if (settings.accountRevoked()) return@withLock // disabled account (C2): its tokens were deleted on every node
         val sent = settings.pushTokenSent()
         val payload = PushToken.newBuilder().setDeviceId(1).setKind(PushToken.Kind.FCM)
         if (!settings.googleWake()) {

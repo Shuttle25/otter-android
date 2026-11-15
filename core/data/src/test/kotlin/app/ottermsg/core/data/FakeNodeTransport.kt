@@ -42,8 +42,11 @@ import java.security.SecureRandom
  */
 class FakeNodeTransport(private val node: FakeNode) : Transport {
     @Volatile var connects = 0; private set
+    /** Slows the connect (a far node): another candidate wins the race. */
+    @Volatile var delayMs = 0L
 
     override suspend fun connect(candidate: Candidate): Connection {
+        if (delayMs > 0) kotlinx.coroutines.delay(delayMs)
         if (!node.reachable) throw IOException("node unreachable")
         connects++
         return Conn(node.connect())
@@ -92,7 +95,12 @@ class FakeNodeTransport(private val node: FakeNode) : Transport {
 
         private fun rec(b: ByteString) = RecordRequest.parseFrom(b).record
 
-        private suspend fun dispatch(method: String, b: ByteString): MessageLite? = when (method) {
+        private suspend fun dispatch(method: String, b: ByteString): MessageLite? {
+            if (node.answerRevoked && (method == "auth.login" || s.user != null)) throw RpcException(Status.STATUS_REVOKED, "account revoked")
+            return serve(method, b)
+        }
+
+        private suspend fun serve(method: String, b: ByteString): MessageLite? = when (method) {
             "register" -> { s.register(RegisterRequest.parseFrom(b)); null }
             "auth.login" -> {
                 val req = LoginRequest.parseFrom(b)

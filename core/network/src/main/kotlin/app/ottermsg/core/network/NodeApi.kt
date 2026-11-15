@@ -29,6 +29,7 @@ import app.ottermsg.proto.v1.RegisterRequest
 import app.ottermsg.proto.v1.Status
 import app.ottermsg.proto.v1.TurnCredentials
 import com.google.protobuf.ByteString
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
 
 /** The node's client API (docs/02 §4). Faked in core:data tests. */
@@ -73,11 +74,22 @@ interface NodeApi {
     suspend fun turnCredentials(): TurnCredentials = throw RpcException(Status.STATUS_UNAVAILABLE, "turn.credentials")
     /** Can the user's phone be woken by push? (D61/D79) Defaults to true so callers never block on it. */
     suspend fun pushStatus(userId: ByteArray): Boolean = true
+    /**
+     * The manifest node id of the endpoint this connection was opened to (null for fakes): unlike the hello's node id,
+     * a node cannot claim another node's id with it.
+     */
+    val endpointNodeId: ByteArray? get() = null
+    /** Returns once this connection answered a request with STATUS_REVOKED; never for fakes without a connection. */
+    suspend fun awaitRevokedAnswer() { awaitCancellation() }
 }
 
-class RemoteNodeApi(private val rpc: RpcClient, private val clock: () -> Long = System::currentTimeMillis) : NodeApi {
+class RemoteNodeApi(
+    private val rpc: RpcClient, private val clock: () -> Long = System::currentTimeMillis,
+    override val endpointNodeId: ByteArray? = null,
+) : NodeApi {
     override val events: Flow<Event> = rpc.events
     override suspend fun hello(): Hello = rpc.hello.await()
+    override suspend fun awaitRevokedAnswer() = rpc.revoked.await()
     private fun req(r: Record) = RecordRequest.newBuilder().setRecord(r).build()
 
     override suspend fun register(req: RegisterRequest) { rpc.call("register", req) }

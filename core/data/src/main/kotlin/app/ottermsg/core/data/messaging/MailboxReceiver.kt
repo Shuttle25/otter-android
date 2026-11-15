@@ -73,6 +73,7 @@ class MailboxReceiver @Inject constructor(
                 log.warning("envelope ${key.toHex()} fails its signature: ignored")
                 continue
             }
+            if (sender.revoked) { acks += key; continue } // D104: a removed member's envelopes are dropped
             val env = runCatching { Envelope.parseFrom(body.payload) }.getOrNull()
             val mine = env?.recipientsList?.firstOrNull { it.user.toByteArray().contentEquals(me.userId) && it.device == 1 }
             if (env == null || mine == null) { markSeen(key); acks += key; continue }

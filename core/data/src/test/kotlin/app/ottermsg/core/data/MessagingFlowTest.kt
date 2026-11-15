@@ -92,4 +92,22 @@ class MessagingFlowTest {
         eventually(what = "B receives reply") { b.thread(a).any { it.body == "ответ" } }
         eventually(what = "A reply delivered") { a.db.messageDao().get(reply)!!.status == MessageStatus.DELIVERED }
     }
+
+    @Test fun aRemovedMemberIsUnreachable() = runBlocking {
+        family()
+        val toB = a.messages.conversationWith(b.me.userId)
+        a.offline()
+        // B writes before A learns of the removal; A also queued a message to B
+        b.messages.sendText(b.messages.conversationWith(a.me.userId), "после удаления")
+        eventually(what = "node holds it for A") { node.mailbox(a.me.userId).size == 1 }
+        node.revoke(b.me.userId)
+        a.directory.apply(node.directoryRecords())
+        assertTrue(a.db.contactDao().get(b.me.userId)!!.revoked)
+        assertTrue(a.thread(b).any { it.kind == MessageKind.SYSTEM_MEMBER && String(it.systemData!!) == "revoked" })
+        val local = a.messages.sendText(toB, "ты тут?")!!
+        a.online()
+        eventually(what = "A's message to B fails") { a.db.messageDao().get(local)!!.status == MessageStatus.FAILED }
+        eventually(what = "B's envelope acked") { node.mailbox(a.me.userId).isEmpty() }
+        assertTrue(a.thread(b).none { it.body == "после удаления" })
+    }
 }

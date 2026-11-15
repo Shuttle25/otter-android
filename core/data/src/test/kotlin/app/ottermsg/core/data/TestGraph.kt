@@ -68,7 +68,7 @@ class TestGraph(
     val settings = Settings(db.settingsDao())
     val accounts = AccountRepository(db.accountDao(), settings, SeedVault(XorWrapper))
     val signal = SignalService(accounts, db.signalKvDao(), db.contactDao(), scope)
-    val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao(), settings, db.accountDao())
+    val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao(), settings, db.accountDao(), db.manifestDao(), db.messageDao(), clock)
     val profile = ProfileRepository(accounts, db, settings, clock)
     val outbox = Outbox(db, accounts, signal, clock, GroupSender(db, signal, clock))
     val files = object : MediaFiles(ApplicationProvider.getApplicationContext()) {
@@ -89,8 +89,9 @@ class TestGraph(
         SeedVault(XorWrapper), { app.ottermsg.core.data.invite.OnlineApi { session } }, clock)
         .apply { derive = { pw, salt, _ -> app.ottermsg.core.crypto.BackupKeys.derive(pw, salt, mKib = 1024, t = 1, p = 1) } }
     val groups = GroupRepository(db, accounts, applier, outbox, clock)
+    val groupRevocations = app.ottermsg.core.data.group.GroupRevocations(db, accounts, groups, settings)
     val messages = MessageRepository(db, accounts, outbox, clock, files, PhotoPrep(), media, alerts)
-    val prekeys = PrekeyRefill(accounts, settings, signal, clock)
+    val prekeys = PrekeyRefill(accounts, settings, signal, clock, db.manifestDao())
     @Volatile var session: FakeNode.Session? = null
     private var sessionScope: CoroutineScope? = null
     val invites = InviteRepository(accounts, settings, db.manifestDao(), { session }, clock)
@@ -106,13 +107,19 @@ class TestGraph(
         .apply { derive = { pw, salt, _ -> app.ottermsg.core.crypto.BackupKeys.derive(pw, salt, mKib = 1024, t = 1, p = 1) } }
     /** The engine's own connections (start / acquire) reach [node] through this. */
     val transport = FakeNodeTransport(node)
+    /** Candidates whose host is listed here reach another (fake) node; every other host reaches [transport]. */
+    val routes = java.util.concurrent.ConcurrentHashMap<String, app.ottermsg.core.network.Transport>()
+    private val router = object : app.ottermsg.core.network.Transport {
+        override suspend fun connect(candidate: app.ottermsg.core.network.Candidate) =
+            (routes[candidate.host] ?: transport).connect(candidate)
+    }
     val manifests = app.ottermsg.core.data.sync.ManifestUpdater(db.manifestDao(), settings, clock)
     val pushMonitor = app.ottermsg.core.data.push.PushMonitor(settings, clock)
     val news = app.ottermsg.core.data.news.NewsRepository(db, manifests, clock, alerts)
     private val endpointStats = app.ottermsg.core.network.InMemoryEndpointStats()
-    val engine = SyncEngine(endpointStats, app.ottermsg.core.network.NodeSelector(transport, endpointStats, clock::now),
+    val engine = SyncEngine(endpointStats, app.ottermsg.core.network.NodeSelector(router, endpointStats, clock::now),
         accounts, settings, manifests, directory, receiver, outbox, prekeys, profile, media, scope, true, clock, guard, backups,
-        news, pushMonitor = pushMonitor)
+        news, groupRevocations, pushMonitor = pushMonitor)
     val foreground = app.ottermsg.core.data.sync.ForegroundSync({ engine.acquire(SyncEngine.FOREGROUND) },
         { engine.release(SyncEngine.FOREGROUND) }, scope)
     val seed = ByteArray(32).also(SecureRandom()::nextBytes)
