@@ -117,6 +117,8 @@ class FakeNode(private val clock: () -> Long) {
     var sends = 0; private set
     /** Current push token per user (hex), from push.register (D60). */
     val pushTokens = mutableMapOf<String, String>()
+    /** The last PUSH_TOKEN payload per user (hex), with the D94 flags (messages_off, withdrawn). */
+    val pushRecords = mutableMapOf<String, app.ottermsg.proto.v1.PushToken>()
     /** Served by turn.credentials (D77); null = TURN off on this node (STATUS_UNAVAILABLE). */
     @Volatile var turn: app.ottermsg.proto.v1.TurnCredentials? = null
     /** push.status (D79): whether a non-empty push token is registered for [user]. */
@@ -394,7 +396,9 @@ class FakeNode(private val clock: () -> Long) {
         override suspend fun registerPush(record: Record) { check(); synchronized(lock) {
             val b = verifyUser(record)
             if (b.type != RecordType.PUSH_TOKEN || !b.author.toByteArray().contentEquals(me())) fail(Status.STATUS_INVALID, "push token")
-            pushTokens[b.author.hex()] = app.ottermsg.proto.v1.PushToken.parseFrom(b.payload).token
+            val p = app.ottermsg.proto.v1.PushToken.parseFrom(b.payload)
+            pushTokens[b.author.hex()] = p.token // "" when withdrawn: hasPush() is false, like a 0.9.0 node
+            pushRecords[b.author.hex()] = p
         } }
 
         override suspend fun turnCredentials(): app.ottermsg.proto.v1.TurnCredentials { check(); me()

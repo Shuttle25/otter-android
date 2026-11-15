@@ -34,14 +34,19 @@ class NotificationsViewModelTest {
             runTest(d) {
                 val mode = MutableStateFlow(PushMode.FAST)
                 val enabled = MutableStateFlow(true)
+                val wake = MutableStateFlow(true)
                 var saved: Boolean? = null
-                val vm = NotificationsViewModel(mode, enabled) { saved = it }
-                assertEquals(NotificationsUi(PushMode.FAST, true), vm.ui.first { it != null })
+                var savedWake: Boolean? = null
+                val vm = NotificationsViewModel(mode, enabled, wake, { saved = it }, { savedWake = it })
+                assertEquals(NotificationsUi(PushMode.FAST, true, true), vm.ui.first { it != null })
                 mode.value = PushMode.SAVER
                 assertEquals(PushMode.SAVER, vm.ui.first { it?.mode == PushMode.SAVER }!!.mode)
                 vm.setEnabled(false)
                 advanceUntilIdle()
                 assertEquals(false, saved)
+                vm.setGoogleWake(false)
+                advanceUntilIdle()
+                assertEquals(false, savedWake)
             }
         } finally { Dispatchers.resetMain() }
     }
@@ -67,5 +72,19 @@ class NotificationsViewModelTest {
         compose.onNodeWithText("Быстрые уведомления").assertExists()
         compose.onNodeWithText("Приходят через Google, почти сразу").assertExists()
         compose.onNodeWithText("Уведомления запрещены в настройках Android").assertDoesNotExist()
+    }
+
+    @Test fun googleWakeOffWarnsAboutCalls() {
+        var wake: Boolean? = null
+        compose.setContent {
+            OtterTheme { NotificationsScreen(NotificationsUi(PushMode.SAVER, true, googleWake = false), systemOn = true, {}, {}, {},
+                onGoogleWake = { wake = it }) }
+        }
+        compose.onNodeWithText("Пробуждение через Google").assertExists()
+        compose.onNodeWithText("Без пробуждения через Google звонки не будут приходить").assertExists()
+        compose.onNodeWithText("Проверяем каждые 15 минут: пробуждение через Google выключено").assertExists()
+        compose.onNodeWithText("Пробуждение через Google").performClick()
+        compose.waitForIdle()
+        assertEquals(true, wake)
     }
 }

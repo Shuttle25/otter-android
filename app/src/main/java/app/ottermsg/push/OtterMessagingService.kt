@@ -22,6 +22,7 @@ class OtterMessagingService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         scope.launch {
+            if (!settings.googleWake()) return@launch // «Пробуждение через Google» off: the token stays withdrawn (D94)
             settings.setPushToken(token)
             engine.current()?.let { api -> runCatching { registrar.registerIfNeeded(api) } }
         }

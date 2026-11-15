@@ -96,6 +96,10 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
     fun observePushToken(): Flow<String?> = dao.observe(PUSH_TOKEN).map { it?.decodeToString() }
     suspend fun pushTokenSent(): String? = dao.get(PUSH_TOKEN_SENT)?.decodeToString()
     suspend fun setPushTokenSent(v: String) = dao.put(SettingEntity(PUSH_TOKEN_SENT, v.encodeToByteArray()))
+    /** «Пробуждение через Google» (D94): off = FCM token deleted and withdrawn, battery saver. Default on. */
+    suspend fun googleWake(): Boolean = (int(GOOGLE_WAKE) ?: 1) != 0
+    suspend fun setGoogleWake(v: Boolean) = putInt(GOOGLE_WAKE, if (v) 1 else 0)
+    fun observeGoogleWake(): Flow<Boolean> = observeInt(GOOGLE_WAKE, 1).map { it != 0 }
     /** Google Play services + Firebase configured in this build (set by the app at start). */
     suspend fun pushAvailable(): Boolean = (int(PUSH_AVAILABLE) ?: 0) != 0
     suspend fun setPushAvailable(v: Boolean) = putInt(PUSH_AVAILABLE, if (v) 1 else 0)
@@ -127,6 +131,7 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
         const val PUSH_TOKEN = "push_token"
         const val PUSH_TOKEN_SENT = "push_token_sent"
         const val PUSH_AVAILABLE = "push_available"
+        const val GOOGLE_WAKE = "google_wake"
         const val PUSH_LAST_WAKE_MS = "push_last_wake_ms"
         const val PUSH_MISSES = "push_misses"
         const val LAST_OFFLINE_MS = "last_offline_ms"
