@@ -58,6 +58,20 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
         dao.put(SettingEntity(REVOCATIONS_HANDLED, (revocationsHandled() + keys).joinToString("\n").encodeToByteArray()))
     }
 
+    /** Accounts (hex) seen losing a doubly redeemed invite (D102). Grows only: a later batch hiding the winner changes nothing. */
+    suspend fun duplicateLosers(): Set<String> =
+        dao.get(DUPLICATE_LOSERS)?.decodeToString()?.split('\n')?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
+    suspend fun setDuplicateLosers(users: Set<String>) = dao.put(SettingEntity(DUPLICATE_LOSERS, users.joinToString("\n").encodeToByteArray()))
+
+    /** Verified inviters (hex) per contact (hex), from their entries' invite chains; kept when a node hides an entry. */
+    suspend fun contactInviters(): Map<String, Set<String>> =
+        dao.get(CONTACT_INVITERS)?.decodeToString()?.split('\n')?.mapNotNull { line ->
+            val k = line.substringBefore(':', "").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            k to line.substringAfter(':').split(',').filter { it.isNotEmpty() }.toSet()
+        }?.toMap() ?: emptyMap()
+    suspend fun setContactInviters(m: Map<String, Set<String>>) =
+        dao.put(SettingEntity(CONTACT_INVITERS, m.entries.joinToString("\n") { (k, v) -> k + ":" + v.joinToString(",") }.encodeToByteArray()))
+
     /** Version of our own DIRECTORY_ENTRY as last published or seen (M1–M3 registrations are version 1). */
     suspend fun entryVersion(): Int = int(ENTRY_VERSION) ?: 1
     suspend fun setEntryVersion(v: Int) = putInt(ENTRY_VERSION, v)
@@ -192,5 +206,7 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
         const val PENDING_REFILLS = "prekeys_pending_owners"
         const val REFILL_TIMES = "prekeys_refill_times"
         const val REVOCATIONS_HANDLED = "revocations_handled"
+        const val DUPLICATE_LOSERS = "duplicate_losers"
+        const val CONTACT_INVITERS = "contact_inviters"
     }
 }

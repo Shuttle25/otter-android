@@ -260,4 +260,62 @@ class DirectorySyncTest {
         g.directory.apply(node.directoryRecords() + member(2, "anna"))
         assertEquals(1, g.db.messageDao().observe(cid).first().count { it.kind == MessageKind.SYSTEM_MEMBER }) // once
     }
+
+    @Test fun contactsInvitedThroughALateDuplicateLoserAreRevoked() = runBlocking {
+        g.register(node.bootstrapLink(), "Я", "me_user").getOrThrow()
+        g.online()
+        val s = ByteArray(32) { 9 }
+        val shared = invite(node.network, networkId, s) // one link redeemed twice
+        val e7 = chained(7, "xenia", shared, s)
+        val e8 = chained(8, "xavier", shared, s)
+        val proofHash = { r: Record -> sha256(DirectoryEntry.parseFrom(RecordBody.parseFrom(r.body).payload).inviteProof.toByteArray()) }
+        val xSeed: Byte = if (compare(proofHash(e7), proofHash(e8)) < 0) 8 else 7 // x is the loser
+        val x = if (xSeed == 7.toByte()) e7 else e8
+        val winner = if (xSeed == 7.toByte()) e8 else e7
+        val winnerId = uid(if (xSeed == 7.toByte()) 8 else 7)
+        val zed = invitedBy(xSeed, 20, "zed")
+        val w = invitedBy(20, 21, "wanda")
+        val c = g.db.contactDao()
+        suspend fun serve(vararg extra: Record) { node.directoryAnswer = { d -> d + extra }; g.directory.sync(g.session!!) }
+
+        // the node first hides the winner: x looks like a normal member, zed and wanda are accepted through it
+        serve(x, zed, w)
+        for (u in listOf(uid(xSeed), uid(20), uid(21))) assertFalse(c.get(u)!!.revoked)
+        val zcid = g.db.conversationDao().getOrCreateDirect(uid(20), "ZED", clock.now())
+
+        // later the race shows (zed's and wanda's entries hidden): x lost, so everyone invited through it is removed
+        serve(winner, x)
+        assertTrue(c.get(uid(xSeed))!!.revoked)
+        assertTrue(c.get(uid(20))!!.revoked)
+        assertTrue(c.get(uid(21))!!.revoked)
+        assertFalse(c.get(winnerId)!!.revoked)
+        assertEquals(listOf("revoked"), g.db.messageDao().observe(zcid).first()
+            .filter { it.kind == MessageKind.SYSTEM_MEMBER }.map { String(it.systemData!!) })
+
+        // hiding the winner again, or everything, un-revokes nobody
+        serve(x, zed, w)
+        serve()
+        for (u in listOf(uid(xSeed), uid(20), uid(21))) assertTrue(c.get(u)!!.revoked)
+        assertEquals(1, g.db.messageDao().observe(zcid).first().count { it.kind == MessageKind.SYSTEM_MEMBER })
+    }
+
+    @Test fun aLateDuplicateLoserSeenWithItsInviteesRevokesThemAll() = runBlocking {
+        g.register(node.bootstrapLink(), "Я", "me_user").getOrThrow()
+        g.online()
+        val s = ByteArray(32) { 9 }
+        val shared = invite(node.network, networkId, s)
+        val e7 = chained(7, "xenia", shared, s)
+        val e8 = chained(8, "xavier", shared, s)
+        val proofHash = { r: Record -> sha256(DirectoryEntry.parseFrom(RecordBody.parseFrom(r.body).payload).inviteProof.toByteArray()) }
+        val xSeed: Byte = if (compare(proofHash(e7), proofHash(e8)) < 0) 8 else 7
+        val x = if (xSeed == 7.toByte()) e7 else e8
+        val winner = if (xSeed == 7.toByte()) e8 else e7
+        val zed = invitedBy(xSeed, 20, "zed")
+        val w = invitedBy(20, 21, "wanda")
+        val c = g.db.contactDao()
+        // contacts learned in two syncs, then the full directory in any order
+        node.directoryAnswer = { d -> d + listOf(w, x, zed) }; g.directory.sync(g.session!!)
+        node.directoryAnswer = { d -> d + listOf(w, zed, winner, x) }; g.directory.sync(g.session!!)
+        for (u in listOf(uid(xSeed), uid(20), uid(21))) assertTrue(c.get(u)!!.revoked)
+    }
 }
