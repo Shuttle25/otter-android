@@ -75,6 +75,8 @@ class RestoreFlowTest {
         restored.online()
         eventually(what = "boris sees the reset") { boris.direct(anna.me.userId).any { it.kind == MessageKind.SYSTEM_RESET } }
         assertFalse(restored.settings.restorePending())
+        assertEquals(restored.settings.installedMs(), node.installOf(anna.me.userId)!!.installedMs) // C14: signed INSTALL published
+        assertTrue(restored.settings.installPublished())
         boris.messages.sendText(boris.messages.conversationWith(anna.me.userId), "ты вернулась!")
         eventually(what = "restored anna reads it") { "ты вернулась!" in restored.texts(boris.me.userId) }
         restored.messages.sendText(restored.messages.conversationWith(boris.me.userId), "да")

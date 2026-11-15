@@ -229,7 +229,21 @@ class FakeNode(private val clock: () -> Long) {
             user = userId
             deliver()
             val k = keys[userId.hex()]
-            return LoginResponse.newBuilder().setRegistrationId(k?.registrationId ?: 0).setInstalledMs(k?.installedMs ?: 0).build()
+            val b = LoginResponse.newBuilder().setRegistrationId(k?.registrationId ?: 0).setInstalledMs(lieInstalledMs ?: k?.installedMs ?: 0)
+            (fakeInstall ?: installs[userId.hex()]?.first)?.let { b.setInstall(it) }
+            return b.build()
+        } }
+
+        override suspend fun publishInstall(record: Record) { check(); if (refuseInstall) fail(Status.STATUS_INVALID, "unknown method"); synchronized(lock) {
+            val b = verifyUser(record)
+            if (b.type != RecordType.INSTALL || !b.author.toByteArray().contentEquals(me())) fail(Status.STATUS_INVALID, "install")
+            val i = app.ottermsg.proto.v1.Install.parseFrom(b.payload)
+            val cur = installs[b.author.hex()]?.second
+            if (cur != null && (i.installedMs < cur.installedMs || (i.installedMs == cur.installedMs && i.registrationId <= cur.registrationId))) return
+            installs[b.author.hex()] = record to i
+            val k = keys[b.author.hex()] ?: return
+            if (i.installedMs > k.installedMs) { k.oneTime.clear(); k.installedMs = i.installedMs }
+            if (i.installedMs >= k.installedMs) k.registrationId = i.registrationId
         } }
 
         override suspend fun manifest(): Record { check(); return manifest }
@@ -430,6 +444,16 @@ class FakeNode(private val clock: () -> Long) {
 
     // ---- backups (D50–D52) ----
     private val backups = HashMap<String, Pair<Record, BackupMeta>>()
+
+    // ---- installs (C14): same rule as the Go node ----
+    private val installs = HashMap<String, Pair<Record, app.ottermsg.proto.v1.Install>>()
+    /** Hostile node: an unsigned installed_ms in every login answer. */
+    @Volatile var lieInstalledMs: Long? = null
+    /** Hostile node: this record in every login answer instead of the stored INSTALL. */
+    @Volatile var fakeInstall: Record? = null
+    /** A 0.8.x node: install.publish is an unknown method. */
+    @Volatile var refuseInstall = false
+    fun installOf(user: ByteArray): app.ottermsg.proto.v1.Install? = synchronized(lock) { installs[user.hex()]?.second }
 
     // ---- hostile node (M9.1): answers rewritten before they leave the node ----
     /** Rewrites every backup.auth answer. */

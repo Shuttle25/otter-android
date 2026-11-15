@@ -61,6 +61,9 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
     suspend fun superseded(): Boolean = (int(SUPERSEDED) ?: 0) != 0
     suspend fun setSuperseded(v: Boolean) = putInt(SUPERSEDED, if (v) 1 else 0)
     fun observeSuperseded(): Flow<Boolean> = observeInt(SUPERSEDED, 0).map { it != 0 }
+    /** This install's INSTALL record reached a node (C14); cleared by «Этот телефон снова главный». */
+    suspend fun installPublished(): Boolean = (int(INSTALL_PUBLISHED) ?: 0) != 0
+    suspend fun setInstallPublished(v: Boolean) = putInt(INSTALL_PUBLISHED, if (v) 1 else 0)
 
     // ---- password backup (D55) ----
     /** backup_key ‖ auth_secret wrapped by SeedVault; null = backup off. */
@@ -131,6 +134,7 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
         const val INSTALLED_MS = "installed_ms"
         const val RESTORE_PENDING = "restore_pending"
         const val SUPERSEDED = "superseded"
+        const val INSTALL_PUBLISHED = "install_published"
         const val BACKUP_SECRET = "backup_secret"
         const val BACKUP_SALT = "backup_salt"
         const val BACKUP_VERSION = "backup_version"
