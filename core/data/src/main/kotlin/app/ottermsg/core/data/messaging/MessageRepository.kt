@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import java.security.SecureRandom
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -58,6 +59,8 @@ interface ConversationStore {
     /** Group conversations: the group and its members (null for direct chats). */
     fun observeGroup(conversationId: Long): Flow<GroupView?> = flowOf(null)
     fun observeContacts(): Flow<List<ContactEntity>> = flowOf(emptyList())
+    /** Hex user ids of removed members (D104). */
+    fun observeRevokedIds(): Flow<Set<String>> = flowOf(emptySet())
     suspend fun myId(): ByteArray = ByteArray(0)
     /** Message info (D23): the frozen recipients of an outgoing group message with their receipt times. */
     fun observeRecipients(localId: Long): Flow<List<RecipientStatus>> = flowOf(emptyList())
@@ -87,6 +90,8 @@ class MessageRepository @Inject constructor(
         combine(db.groupDao().observe(gid), db.groupDao().observeMembers(gid)) { g, ms -> g?.let { GroupView(it, ms) } }
     }
     override fun observeContacts(): Flow<List<ContactEntity>> = contacts.observeAll()
+    override fun observeRevokedIds(): Flow<Set<String>> =
+        contacts.observeRevokedIds().map { l -> l.map { id -> id.joinToString("") { "%02x".format(it) } }.toSet() }
     override suspend fun myId(): ByteArray = accounts.require().userId
     override fun observeRecipients(localId: Long): Flow<List<RecipientStatus>> = db.messageRecipientDao().observeRecipients(localId)
     override fun observeMessage(localId: Long): Flow<MessageEntity?> = messages.observeOne(localId)

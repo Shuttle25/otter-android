@@ -23,8 +23,10 @@ data class MessageUi(
     val news: app.ottermsg.proto.v1.Announcement? = null,
     /** kind = CALL: a local call line (D80), rendered as a tappable chip. */
     val call: CallLineUi? = null,
+    /** kind = SYSTEM_MEMBER (D104): "revoked" | "duplicate_invite", rendered as a centered chip. */
+    val memberNote: String? = null,
 ) {
-    val isEvent: Boolean get() = event != null || resetName != null || call != null
+    val isEvent: Boolean get() = event != null || resetName != null || call != null || memberNote != null
 }
 
 /** [outcome] is CallOutcome.code. */

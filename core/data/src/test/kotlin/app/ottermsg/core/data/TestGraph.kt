@@ -68,7 +68,7 @@ class TestGraph(
     val settings = Settings(db.settingsDao())
     val accounts = AccountRepository(db.accountDao(), settings, SeedVault(XorWrapper))
     val signal = SignalService(accounts, db.signalKvDao(), db.contactDao(), scope)
-    val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao(), settings, db.accountDao())
+    val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao(), settings, db.accountDao(), db.manifestDao(), db.messageDao(), clock)
     val profile = ProfileRepository(accounts, db, settings, clock)
     val outbox = Outbox(db, accounts, signal, clock, GroupSender(db, signal, clock))
     val files = object : MediaFiles(ApplicationProvider.getApplicationContext()) {

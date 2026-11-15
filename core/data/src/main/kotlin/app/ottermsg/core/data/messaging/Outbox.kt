@@ -123,6 +123,8 @@ class Outbox @Inject constructor(
 
     private suspend fun process(api: NodeApi, item: OutboxEntity, me: LocalAccount) {
         if (item.expiresMs in 1..clock.now()) { outbox.delete(item.id); return } // call signaling past its 2 min (D78)
+        // D104: nothing more reaches a removed member, also an item encrypted before the removal
+        if (contacts.get(item.recipientUserId)?.revoked == true) throw PermanentFailure("member removed")
         val record = item.recordBytes?.let { Record.parseFrom(it) } ?: run {
             val contact = contacts.get(item.recipientUserId) ?: throw PermanentFailure("unknown contact")
             // C23: keys known only from an invite link are not used until the directory confirms them (retried later).

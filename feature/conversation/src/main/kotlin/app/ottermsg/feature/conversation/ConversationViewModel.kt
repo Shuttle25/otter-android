@@ -67,6 +67,8 @@ data class ConversationUi(
     /** 1:1 chat with a contact: the top bar shows the call button (D80). */
     val canCall: Boolean = false,
     val peerId: ByteArray = ByteArray(0),
+    /** 1:1 chat with a removed member (D104): «Участник удалён» instead of the composer, no call button. */
+    val peerRemoved: Boolean = false,
 ) {
     fun nameOf(id: ByteArray): String = names[id.hex()] ?: "?"
 }
@@ -85,12 +87,13 @@ internal fun ByteArray.hex() = joinToString("") { "%02x".format(it) }
 /** Pure mapping, unit-tested. */
 fun conversationUi(
     conv: ConversationEntity?, msgs: List<MessageEntity>, group: GroupView?, contacts: List<ContactEntity>, me: ByteArray, zone: ZoneId,
-    attachments: Map<Long, AttachmentEntity> = emptyMap(),
+    attachments: Map<Long, AttachmentEntity> = emptyMap(), revoked: Set<String> = emptySet(),
 ): ConversationUi {
     val title = conv?.title.orEmpty()
     val names = contacts.associate { it.userId.hex() to it.displayName }
     val isGroup = conv?.groupId != null
     val isNews = conv?.type == ConversationType.NEWS
+    val peerRemoved = !isGroup && !isNews && conv?.peerUserId?.hex() in revoked
     val list = msgs.map {
         val author = when {
             it.outgoing -> ""
@@ -104,15 +107,18 @@ fun conversationUi(
             photo = if (it.kind == MessageKind.PHOTO) attachments[it.localId]?.let(::photoUi) else null,
             resetName = if (it.kind == MessageKind.SYSTEM_RESET) (names[it.senderId.hex()] ?: title) else null,
             news = if (it.kind == MessageKind.NEWS) it.systemData?.let { d -> runCatching { Announcement.parseFrom(d) }.getOrNull() } else null,
-            call = if (it.kind == MessageKind.CALL) CallLineUi(it.callOutcome, it.callDurationS) else null)
+            call = if (it.kind == MessageKind.CALL) CallLineUi(it.callOutcome, it.callDurationS) else null,
+            memberNote = if (it.kind == MessageKind.SYSTEM_MEMBER) it.systemData?.decodeToString() ?: "" else null)
     }
     return ConversationUi(true, title, conv?.peerUserId ?: conv?.groupId ?: ByteArray(0), groupMessages(list, zone),
-        msgs.lastOrNull { !it.outgoing && it.kind != MessageKind.SYSTEM_GROUP && it.kind != MessageKind.SYSTEM_RESET }?.localId,
+        msgs.lastOrNull { !it.outgoing && it.kind != MessageKind.SYSTEM_GROUP && it.kind != MessageKind.SYSTEM_RESET &&
+            it.kind != MessageKind.SYSTEM_MEMBER }?.localId,
         isGroup = isGroup, family = group?.group?.family == true, groupIdHex = conv?.groupId?.hex().orEmpty(),
         memberCount = group?.members?.size ?: 0,
-        canWrite = !isNews && (!isGroup || group?.group?.iAmMember == true),
+        canWrite = !isNews && !peerRemoved && (!isGroup || group?.group?.iAmMember == true),
         me = me, names = names, isNews = isNews,
-        canCall = !isGroup && !isNews && conv?.peerUserId != null, peerId = conv?.peerUserId ?: ByteArray(0))
+        canCall = !isGroup && !isNews && !peerRemoved && conv?.peerUserId != null, peerId = conv?.peerUserId ?: ByteArray(0),
+        peerRemoved = peerRemoved)
 }
 
 @OptIn(FlowPreview::class)
@@ -138,8 +144,8 @@ class ConversationViewModel @Inject constructor(
             store.observeConversation(conversationId), store.observeMessages(conversationId), store.observeGroup(conversationId),
             store.observeContacts(), flow { emit(store.myId()) },
         ) { conv, msgs, group, contacts, me -> Parts(conv, msgs, group, contacts, me) },
-        photos.observe(conversationId),
-    ) { p, att -> conversationUi(p.conv, p.msgs, p.group, p.contacts, p.me, zone, att) }
+        photos.observe(conversationId), store.observeRevokedIds(),
+    ) { p, att, rev -> conversationUi(p.conv, p.msgs, p.group, p.contacts, p.me, zone, att, rev) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ConversationUi())
 
     /** Decoded images for the bubbles (no Room or crypto in composables). */

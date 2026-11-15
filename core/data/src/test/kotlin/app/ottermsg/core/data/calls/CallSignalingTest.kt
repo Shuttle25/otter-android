@@ -48,6 +48,7 @@ class CallSignalingTest {
         val sa = node.connect().also { it.login(a.me.userId, a.me.accountKey) }
         val sb = node.connect().also { it.login(b.me.userId, b.me.accountKey) }
         b.directory.sync(sb) // the inviter from the link is used only once the directory confirms it (C23)
+        a.directory.sync(sa) // not left to the background sync that a.offline() may have cut short
         return sa to sb
     }
 

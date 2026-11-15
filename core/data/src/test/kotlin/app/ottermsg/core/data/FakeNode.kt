@@ -54,9 +54,10 @@ class FakeNode(private val clock: () -> Long) {
     val network = Ed25519.keyPairFromSeed(ByteArray(32) { 9 })
     /** Signs a manifest; [withSelf] lists this node, [extraHosts] adds other (fake) nodes. */
     fun signManifest(version: Long, withSelf: Boolean = true, extraHosts: List<String> = emptyList(),
-                     newsKeys: List<ByteArray> = emptyList()): Record {
+                     newsKeys: List<ByteArray> = emptyList(), foundingMembers: List<ByteArray> = emptyList()): Record {
         val b = Manifest.newBuilder().setVersion(version).setIssuedMs(version).setNetworkPub(bs(network.publicKey))
         newsKeys.forEach { b.addNewsKeys(bs(it)) }
+        foundingMembers.forEach { b.addFoundingMembers(bs(it)) }
         if (withSelf) b.addNodes(NodeInfo.newBuilder().setNodeId(bs(nodeId)).setLabel("fake")
             .addEndpoints(Endpoint.newBuilder().setKind(Endpoint.Kind.WS_PLAIN).setHost("fake").setPort(1).setPath("/fakepath")))
         extraHosts.forEachIndexed { i, h -> b.addNodes(NodeInfo.newBuilder().setNodeId(bs(ByteArray(16) { (i + 1).toByte() })).setLabel(h)
@@ -147,7 +148,21 @@ class FakeNode(private val clock: () -> Long) {
 
     fun mailbox(user: ByteArray): List<Record> = synchronized(lock) { mailboxes[user.hex()]?.values?.toList() ?: emptyList() }
     fun oneTimeLeft(user: ByteArray): Int = synchronized(lock) { keys[user.hex()]?.oneTime?.size ?: 0 }
-    fun directoryRecords(): List<Record> = synchronized(lock) { users.values.map { it.record } }
+    /** Network-signed REVOCATION / INVITE_RIGHTS records served by directory.sync (D99). */
+    private val membership = mutableListOf<Record>()
+    /** Like `otter-admin user revoke`; a [signer] other than the network key plays a forger. */
+    fun revoke(user: ByteArray, signer: Ed25519.KeyPair = network, createdMs: Long = clock()) = synchronized(lock) {
+        membership += RecordCodec.sign(RecordCodec.body(RecordType.REVOCATION, Ids.id16(network.publicKey),
+            app.ottermsg.proto.v1.Revocation.newBuilder().setUserId(bs(user)).build().toByteArray(), createdMs = createdMs), signer)
+    }
+    /** Like `otter-admin user invite-rights`: a network-signed INVITE_RIGHTS record. */
+    fun inviteRights(user: ByteArray, canInvite: Boolean, version: Long, createdMs: Long = clock(), signer: Ed25519.KeyPair = network) =
+        synchronized(lock) {
+            membership += RecordCodec.sign(RecordCodec.body(RecordType.INVITE_RIGHTS, Ids.id16(network.publicKey),
+                app.ottermsg.proto.v1.InviteRights.newBuilder().setUserId(bs(user)).setCanInvite(canInvite).setVersion(version).build()
+                    .toByteArray(), createdMs = createdMs), signer)
+        }
+    fun directoryRecords(): List<Record> = synchronized(lock) { users.values.map { it.record } + membership }
     private val directoryUpdateCount = HashMap<String, Int>()
     /** Accepted directory.update calls of [user]. */
     fun directoryUpdates(user: ByteArray): Int = synchronized(lock) { directoryUpdateCount[user.hex()] ?: 0 }

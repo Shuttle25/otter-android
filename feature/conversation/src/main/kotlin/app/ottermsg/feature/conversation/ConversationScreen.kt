@@ -265,6 +265,7 @@ fun ConversationScreen(
         bottomBar = {
             if (ui.canWrite) MessageComposer(text, sending, onText, onSend, Modifier.navigationBarsPadding().imePadding(),
                 onPickPhoto = photoActions.onPick, onTakePhoto = photoActions.onCamera)
+            else if (ui.peerRemoved) PeerRemovedNotice(Modifier.navigationBarsPadding())
             else if (!ui.isNews) NotMemberNotice(Modifier.navigationBarsPadding())
         },
     ) { padding ->
@@ -284,6 +285,9 @@ fun ConversationScreen(
                             val c = item.message.call
                             CallLineChip(callLineText(res, c.outcome, c.durationS), item.message.outgoing,
                                 missed = c.outcome == app.ottermsg.core.data.calls.CallOutcome.MISSED.code, onClick = onCallBack)
+                        } else if (item.message.memberNote != null) {
+                            SystemEventChip(stringResource(if (item.message.memberNote == "duplicate_invite") R.string.conv_member_duplicate
+                                else R.string.conv_member_removed))
                         } else if (item.message.resetName != null) {
                             SystemEventChip(stringResource(R.string.conv_system_reset, item.message.resetName))
                         } else if (item.message.event != null) {
@@ -369,8 +373,15 @@ fun ConversationScreen(
 
 /** Calm notice instead of the composer once we are no longer a member of the group. */
 @Composable
-fun NotMemberNotice(modifier: Modifier = Modifier) {
+fun NotMemberNotice(modifier: Modifier = Modifier) = ComposerNotice(R.string.conv_not_member, modifier)
+
+/** Notice instead of the composer in a 1:1 chat with a removed member (D104). */
+@Composable
+fun PeerRemovedNotice(modifier: Modifier = Modifier) = ComposerNotice(R.string.conv_peer_removed, modifier)
+
+@Composable
+private fun ComposerNotice(@androidx.annotation.StringRes text: Int, modifier: Modifier) {
     Box(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(Dimens.screenGutter), contentAlignment = Alignment.Center) {
-        Text(stringResource(R.string.conv_not_member), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(text), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
