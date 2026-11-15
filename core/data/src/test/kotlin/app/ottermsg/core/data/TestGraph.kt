@@ -89,6 +89,7 @@ class TestGraph(
         SeedVault(XorWrapper), { app.ottermsg.core.data.invite.OnlineApi { session } }, clock)
         .apply { derive = { pw, salt, _ -> app.ottermsg.core.crypto.BackupKeys.derive(pw, salt, mKib = 1024, t = 1, p = 1) } }
     val groups = GroupRepository(db, accounts, applier, outbox, clock)
+    val groupRevocations = app.ottermsg.core.data.group.GroupRevocations(db, accounts, groups, settings)
     val messages = MessageRepository(db, accounts, outbox, clock, files, PhotoPrep(), media, alerts)
     val prekeys = PrekeyRefill(accounts, settings, signal, clock)
     @Volatile var session: FakeNode.Session? = null
@@ -112,7 +113,7 @@ class TestGraph(
     private val endpointStats = app.ottermsg.core.network.InMemoryEndpointStats()
     val engine = SyncEngine(endpointStats, app.ottermsg.core.network.NodeSelector(transport, endpointStats, clock::now),
         accounts, settings, manifests, directory, receiver, outbox, prekeys, profile, media, scope, true, clock, guard, backups,
-        news, pushMonitor = pushMonitor)
+        news, groupRevocations, pushMonitor = pushMonitor)
     val foreground = app.ottermsg.core.data.sync.ForegroundSync({ engine.acquire(SyncEngine.FOREGROUND) },
         { engine.release(SyncEngine.FOREGROUND) }, scope)
     val seed = ByteArray(32).also(SecureRandom()::nextBytes)

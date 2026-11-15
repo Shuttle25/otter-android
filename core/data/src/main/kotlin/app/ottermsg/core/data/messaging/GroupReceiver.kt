@@ -66,6 +66,7 @@ class GroupReceiver @Inject constructor(
 
     /** A 1:1 SenderKeyDistribution: store the sender's key, then retry what was waiting for it. */
     suspend fun onSenderKey(sender: ByteArray, skd: SenderKeyDistribution) {
+        if (db.contactDao().get(sender)?.revoked == true) return // D104: never store a removed member's sender key
         val ok = try {
             signal.withGroups { g -> g.process(g.address(sender), skd.message.toByteArray()) }; true
         } catch (e: CancellationException) { throw e } catch (e: Exception) { log.warning("bad sender key from a member: $e"); false }

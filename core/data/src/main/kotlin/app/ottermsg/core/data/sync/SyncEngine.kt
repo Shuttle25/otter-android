@@ -9,6 +9,7 @@ import app.ottermsg.core.data.profile.ProfileRepository
 import app.ottermsg.core.data.di.AllowPlaintext
 import app.ottermsg.core.data.di.ApplicationScope
 import app.ottermsg.core.data.directory.DirectorySync
+import app.ottermsg.core.data.group.GroupRevocations
 import app.ottermsg.core.data.invite.OnlineApi
 import app.ottermsg.core.data.messaging.MailboxReceiver
 import app.ottermsg.core.data.messaging.Outbox
@@ -54,7 +55,7 @@ class SyncEngine @Inject constructor(
     private val prekeys: PrekeyRefill, private val profile: ProfileRepository, private val media: MediaTransfers,
     @ApplicationScope private val appScope: CoroutineScope, @param:AllowPlaintext private val allowPlaintext: Boolean,
     private val clock: Clock, private val guard: InstallGuard, private val backups: BackupManager,
-    private val news: NewsRepository,
+    private val news: NewsRepository, private val groupRevocations: GroupRevocations,
     netLog: NetLog = NetLog.None,
     private val pushRegistrar: PushRegistrar = PushRegistrar(accounts, settings, clock),
     private val pushMonitor: PushMonitor = PushMonitor(settings, clock),
@@ -127,6 +128,7 @@ class SyncEngine @Inject constructor(
             ManifestUpdater.Result.IGNORED -> {}
         }
         directory.sync(api)
+        handleRevocations()
         session.launch {
             try { news.sync(api) }
             catch (e: CancellationException) { throw e }
@@ -159,6 +161,13 @@ class SyncEngine @Inject constructor(
         }
     }
 
+    /** D104: after a directory sync, groups stop encrypting to newly revoked members; a failure never ends the session. */
+    private suspend fun handleRevocations() {
+        try { groupRevocations.handle() }
+        catch (e: CancellationException) { throw e }
+        catch (e: Exception) { log.log(Level.WARNING, "group revocations", e) }
+    }
+
     private suspend fun onEvent(api: NodeApi, e: Event) {
         try {
             when (e.type) {
@@ -169,7 +178,7 @@ class SyncEngine @Inject constructor(
                     pushMonitor.onDelivered(records.map { RecordBody.parseFrom(it.body).createdMs }, sessionStartMs, sessionId)
                     lastActivityMs = clock.now()
                 }
-                "directory" -> directory.sync(api)
+                "directory" -> { directory.sync(api); handleRevocations() }
                 "news" -> news.sync(api)
                 "prekeys_low" -> prekeys.refill(api, PrekeysLow.parseFrom(e.body).ownerNode.toByteArray())
                 "manifest" -> {

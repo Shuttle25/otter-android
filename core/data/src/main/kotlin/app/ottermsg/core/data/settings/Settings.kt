@@ -41,6 +41,14 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
         dao.get(PENDING_REFILLS)?.decodeToString()?.split('\n')?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
     suspend fun setPendingRefills(owners: Set<String>) = dao.put(SettingEntity(PENDING_REFILLS, owners.joinToString("\n").encodeToByteArray()))
 
+    /** D104: `<user hex>:<group hex>` pairs whose revocation GroupRevocations already handled (rotate once, remove once). */
+    suspend fun revocationsHandled(): Set<String> =
+        dao.get(REVOCATIONS_HANDLED)?.decodeToString()?.split('\n')?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
+    suspend fun addRevocationsHandled(keys: Collection<String>) {
+        if (keys.isEmpty()) return
+        dao.put(SettingEntity(REVOCATIONS_HANDLED, (revocationsHandled() + keys).joinToString("\n").encodeToByteArray()))
+    }
+
     /** Version of our own DIRECTORY_ENTRY as last published or seen (M1–M3 registrations are version 1). */
     suspend fun entryVersion(): Int = int(ENTRY_VERSION) ?: 1
     suspend fun setEntryVersion(v: Int) = putInt(ENTRY_VERSION, v)
@@ -173,5 +181,6 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
         const val OWN_INVITE_PROOF = "own_invite_proof"
         const val PREKEYS_LOW = "prekeys_low"
         const val PENDING_REFILLS = "prekeys_pending_owners"
+        const val REVOCATIONS_HANDLED = "revocations_handled"
     }
 }
