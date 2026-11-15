@@ -460,6 +460,8 @@ class FakeNode(private val clock: () -> Long) {
         @Volatile var grantBlob: ByteArray? = null; private set
 
         override suspend fun backupAuth(username: String): BackupAuthResponse { check(); synchronized(lock) {
+            backupAuthNames += username
+            clashCandidates(username)?.let { return (authAnswer ?: { a -> a })(BackupAuthResponse.newBuilder().addAllCandidates(it).build()) }
             val m = backupByName(username)?.second
             val answer = if (m != null) BackupAuthResponse.newBuilder().setSalt(m.salt).setKdfMKib(m.kdfMKib).setKdfT(m.kdfT).setKdfP(m.kdfP).build()
             else BackupAuthResponse.newBuilder().setSalt(bs(fakeSalt(username))).setKdfMKib(65536).setKdfT(3).setKdfP(1).build()
@@ -468,6 +470,7 @@ class FakeNode(private val clock: () -> Long) {
 
         override suspend fun backupFetch(username: String, authSecret: ByteArray): BackupFetchResponse { check(); synchronized(lock) {
             backupFetches++
+            if (clashCandidates(username) != null) fail(Status.STATUS_CONFLICT, "username is shared, use name#tag")
             val now = clock()
             val recent = authFailures.getOrPut(username) { mutableListOf() }.apply { removeAll { it < now - 3_600_000 } }
             if (recent.size >= 5) fail(Status.STATUS_RETRY_LATER, "too many attempts")
@@ -532,9 +535,25 @@ class FakeNode(private val clock: () -> Long) {
         javax.crypto.Mac.getInstance("HmacSHA256").apply { init(javax.crypto.spec.SecretKeySpec(fakeKey, "HmacSHA256")) }
             .doFinal(username.toByteArray()).copyOf(16)
     private fun backupByName(username: String): Pair<Record, BackupMeta>? {
-        val id = users.values.firstOrNull { it.entry.username == username }?.entry?.userId?.hex() ?: return null
+        val base = username.substringBefore('#')
+        val tag = if ('#' in username) username.substringAfter('#').lowercase() else null
+        // mirror of Store.ResolveUsername: "name#tag" is the account named name whose id starts with tag
+        val id = users.values.firstOrNull { it.entry.username == base && (tag == null || it.entry.userId.hex().take(8) == tag) }
+            ?.entry?.userId?.hex() ?: return null
         return backups[id]
     }
+    /** D103: names that clashed (a partition); a plain one answers with candidates, its fetch is CONFLICT. */
+    private val clashed = mutableSetOf<String>()
+    fun clash(name: String) = synchronized(lock) { clashed += name }
+    private fun clashCandidates(username: String): List<String>? = if ('#' in username || username !in clashed) null
+        else users.values.filter { it.entry.username == username }.map { username + "#" + it.entry.userId.hex().take(8) }
+    /** Gives an account another name without the uniqueness check (the clash a partition would produce). */
+    fun renameForTest(user: ByteArray, name: String) = synchronized(lock) {
+        val u = users.getValue(user.hex())
+        users[user.hex()] = User(u.record, u.entry.toBuilder().setUsername(name).build())
+    }
+    /** Every username backup.auth was asked about, in order. */
+    val backupAuthNames: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
     /** Test hooks. */
     fun backupOf(user: ByteArray): BackupMeta? = synchronized(lock) { backups[user.hex()]?.second }
     fun loginInfo(user: ByteArray): Pair<Int, Long> = synchronized(lock) { keys[user.hex()]!!.let { it.registrationId to it.installedMs } }
