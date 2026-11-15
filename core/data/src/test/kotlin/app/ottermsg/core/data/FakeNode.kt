@@ -256,6 +256,8 @@ class FakeNode(private val clock: () -> Long) {
             val inv = invites.getOrPut(inviteId.hex()) { InviteState(invBody.author.toByteArray(), invMsg.expiresMs) }
             if (inv.usedBy != null) fail(Status.STATUS_CONFLICT, "invite already used")
             if (inv.expiresMs < clock()) fail(Status.STATUS_CONFLICT, "invite expired")
+            if (!app.ottermsg.core.data.directory.Membership.inviteLifetimeOk(invBody.createdMs, invMsg.expiresMs))
+                fail(Status.STATUS_INVALID, "invite lifetime over 30 days")
             if (entry.registeredMs < invBody.createdMs || entry.registeredMs > invMsg.expiresMs)
                 fail(Status.STATUS_INVALID, "registration outside the invite's lifetime")
             if (!entry.userId.toByteArray().contentEquals(Ids.id16(entry.accountPub.toByteArray()))) fail(Status.STATUS_INVALID, "author binding")
@@ -356,6 +358,7 @@ class FakeNode(private val clock: () -> Long) {
             if (!b.author.toByteArray().contentEquals(me())) fail(Status.STATUS_UNAUTHORIZED, "author")
             val i = Invite.parseFrom(b.payload)
             if (i.redeemPub.size() != 32) fail(Status.STATUS_INVALID, "invite without a redeem key (update the app)")
+            if (!app.ottermsg.core.data.directory.Membership.inviteLifetimeOk(b.createdMs, i.expiresMs)) fail(Status.STATUS_INVALID, "bad payload")
             if (b.author.hex() in noInviteRights) fail(Status.STATUS_UNAUTHORIZED, "inviter may not invite")
             invites[i.inviteId.hex()] = InviteState(b.author.toByteArray(), i.expiresMs)
         } }

@@ -27,10 +27,14 @@ class RightsRecord(val userId: ByteArray, val canInvite: Boolean, val version: L
 
 /** Membership rules the phone checks itself (D104): a node can hide entries, it cannot invent members. */
 object Membership {
+    /** An invite lives at most this long, created_ms to expires_ms, as on nodes (Go `records.MaxInviteTTL`, C8, D107). */
+    const val MAX_INVITE_TTL_MS = 30L * 24 * 3_600_000
+
     /**
      * The redemption of [e] if its chain verifies like Go `admitChain` (non-strict): the INVITE is signed by the network
      * key or by the account key [keyOf] gives for an already accepted member, the proof is the redeem key's signature
-     * over this account, and the entry was registered within the invite's lifetime. Whether the inviter was allowed to
+     * over this account, the invite lives at most [MAX_INVITE_TTL_MS] (as on nodes), and the entry was registered within
+     * the invite's lifetime. Whether the inviter was allowed to
      * invite is the caller's check (it needs the revocation and rights records).
      */
     fun chain(e: DirectoryEntry, networkPub: ByteArray, keyOf: (ByteArray) -> ByteArray?): Redemption? = runCatching {
@@ -46,10 +50,15 @@ object Membership {
         if (!RecordCodec.verify(rec, signer)) return null
         val msg = InviteKeys.redeemMessage(inv.inviteId.toByteArray(), e.userId.toByteArray(), e.accountPub.toByteArray())
         if (!Ed25519.verify(inv.redeemPub.toByteArray(), msg, e.inviteProof.toByteArray())) return null
+        if (!inviteLifetimeOk(body.createdMs, inv.expiresMs)) return null
         if (e.registeredMs < body.createdMs || e.registeredMs > inv.expiresMs) return null
         Redemption(inv.inviteId.toByteArray(), MessageDigest.getInstance("SHA-256").digest(e.inviteProof.toByteArray()),
             author, fromNetwork, body.createdMs)
     }.getOrNull()
+
+    /** Go `records.InviteLifetimeOK`: the invite expires after its creation and lives at most [MAX_INVITE_TTL_MS]. */
+    fun inviteLifetimeOk(createdMs: Long, expiresMs: Long): Boolean =
+        expiresMs > createdMs && expiresMs - createdMs <= MAX_INVITE_TTL_MS
 
     /** A REVOCATION signed by the network key, else null (a node or member cannot remove anyone). */
     fun revocation(rec: Record, networkPub: ByteArray): RevocationRecord? = runCatching {

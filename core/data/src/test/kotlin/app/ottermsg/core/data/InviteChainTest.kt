@@ -36,6 +36,7 @@ class InviteChainTest {
         assertArrayEquals(a.me.userId, body.author.toByteArray())
         assertTrue(RecordCodec.verify(bundle.invite, a.me.accountKey.publicKey))
         val inv = Invite.parseFrom(body.payload)
+        assertEquals(7 * 24 * 3_600_000L, inv.expiresMs - body.createdMs) // never longer than 7 days (D107 allows 30)
         val secret = bundle.secret.toByteArray()
         assertArrayEquals(MessageDigest.getInstance("SHA-256").digest(secret), inv.inviteId.toByteArray())
         assertArrayEquals(InviteKeys.redeemKey(secret).publicKey, inv.redeemPub.toByteArray())

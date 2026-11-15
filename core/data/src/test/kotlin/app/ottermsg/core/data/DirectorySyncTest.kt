@@ -50,8 +50,9 @@ class DirectorySyncTest {
     private fun compare(a: ByteArray, b: ByteArray) = Membership.compareUnsigned(a, b)
     private val networkId get() = Ids.id16(node.network.publicKey)
 
-    private fun invite(signer: Ed25519.KeyPair, author: ByteArray, secret: ByteArray, createdMs: Long = 1): Record {
-        val inv = Invite.newBuilder().setInviteId(bs(sha256(secret))).setExpiresMs(Long.MAX_VALUE / 2)
+    private fun invite(signer: Ed25519.KeyPair, author: ByteArray, secret: ByteArray, createdMs: Long = 1,
+                       lifetimeMs: Long = Membership.MAX_INVITE_TTL_MS): Record {
+        val inv = Invite.newBuilder().setInviteId(bs(sha256(secret))).setExpiresMs(createdMs + lifetimeMs)
             .setRedeemPub(bs(InviteKeys.redeemKey(secret).publicKey)).build()
         return RecordCodec.sign(RecordCodec.body(RecordType.INVITE, author, inv.toByteArray(), createdMs = createdMs), signer)
     }
@@ -154,6 +155,23 @@ class DirectorySyncTest {
         val c = g.db.contactDao()
         assertNotNull(c.get(uid(2)))
         for (n in listOf<Byte>(3, 4, 5, 6, 7)) assertNull("seed $n", c.get(uid(n)))
+    }
+
+    @Test fun invitesLivingLongerThanThirtyDaysAreRefused() = runBlocking { // C8, D107: as on nodes
+        g.register(node.bootstrapLink(), "Я", "me_user").getOrThrow()
+        val day = 24 * 3_600_000L
+        val s1 = ByteArray(32) { 11 }
+        val s2 = ByteArray(32) { 12 }
+        val s3 = ByteArray(32) { 13 }
+        val s4 = ByteArray(32) { 14 }
+        val ok = chained(2, "anna", invite(node.network, networkId, s1, lifetimeMs = 30 * day), s1)
+        val long = chained(3, "mallory", invite(node.network, networkId, s2, lifetimeMs = 31 * day), s2)
+        val zero = chained(4, "mallory2", invite(node.network, networkId, s3, createdMs = 1000, lifetimeMs = 0), s3)
+        val ages = chained(5, "mallory3", invite(node.network, networkId, s4, lifetimeMs = Long.MAX_VALUE / 2), s4)
+        g.directory.apply(listOf(long, zero, ages, ok))
+        val c = g.db.contactDao()
+        assertNotNull(c.get(uid(2)))
+        for (n in listOf<Byte>(3, 4, 5)) assertNull("seed $n", c.get(uid(n)))
     }
 
     @Test fun foundingMembersAndChainsThroughTheBatchAreAccepted() = runBlocking {
