@@ -91,6 +91,30 @@ class RestoreFlowTest {
         eventually(what = "old phone superseded") { anna.settings.superseded() }
     }
 
+    @Test fun oldPhoneTakesTheAccountBack() = runBlocking<Unit> {
+        history()
+        val restored = newGraph()
+        restored.restore.withWords(boris.invites.create().link, Bip39.toMnemonic(anna.seed)).getOrThrow()
+        restored.online()
+        eventually(what = "boris sees the restored phone's reset") { boris.direct(anna.me.userId).any { it.kind == MessageKind.SYSTEM_RESET } }
+        restored.offline()
+        anna.online()
+        assertTrue(anna.settings.superseded())
+        anna.offline()
+
+        anna.guard.reclaim() // «Этот телефон снова главный»
+        assertFalse(anna.settings.superseded())
+        anna.online()
+        assertFalse(anna.settings.superseded())
+        assertEquals(anna.settings.installedMs(), node.installOf(anna.me.userId)!!.installedMs)
+        eventually(what = "boris sees anna's second reset") { boris.direct(anna.me.userId).count { it.kind == MessageKind.SYSTEM_RESET } >= 2 }
+        boris.messages.sendText(boris.messages.conversationWith(anna.me.userId), "снова тут")
+        eventually(what = "anna reads it") { "снова тут" in anna.texts(boris.me.userId) }
+
+        restored.online()
+        assertTrue(restored.settings.superseded())
+    }
+
     @Test fun restoreWithWordsThenHistory() = runBlocking<Unit> {
         history()
         val words = Bip39.toMnemonic(anna.seed)

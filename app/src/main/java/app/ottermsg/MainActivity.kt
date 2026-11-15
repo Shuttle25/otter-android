@@ -15,6 +15,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.activity.viewModels
 import app.ottermsg.core.data.account.AccountRepository
+import app.ottermsg.core.data.backup.InstallGuard
+import app.ottermsg.core.data.sync.SyncEngine
 import app.ottermsg.core.data.settings.Settings
 import app.ottermsg.notify.MessageNotifier
 import kotlinx.coroutines.flow.SharingStarted
@@ -28,7 +30,9 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
-class MainViewModel @Inject constructor(val accounts: AccountRepository, settings: Settings) : ViewModel() {
+class MainViewModel @Inject constructor(
+    val accounts: AccountRepository, settings: Settings, private val guard: InstallGuard, private val engine: SyncEngine,
+) : ViewModel() {
     /** null while loading; then whether an account exists. */
     private val _hasAccount = MutableStateFlow<Boolean?>(null)
     val hasAccount: StateFlow<Boolean?> = _hasAccount
@@ -38,6 +42,9 @@ class MainViewModel @Inject constructor(val accounts: AccountRepository, setting
 
     /** A notification tap asks to open this conversation (consumed by AppNavHost). */
     val openConversation = MutableStateFlow<Long?>(null)
+
+    /** «Этот телефон снова главный» (C14): a new install here, then sync again; the next login finishes it. */
+    fun reclaim() { viewModelScope.launch { guard.reclaim(); engine.resume() } }
 
     init { viewModelScope.launch { _hasAccount.value = accounts.load() != null } }
 }
@@ -56,7 +63,7 @@ class MainActivity : ComponentActivity() {
                     val hasAccount by vm.hasAccount.collectAsStateWithLifecycle()
                     // Blank themed surface while the local account loads (no skeleton: it is local and fast).
                     val superseded by vm.superseded.collectAsStateWithLifecycle()
-                    if (superseded) SupersededScreen() else hasAccount?.let { AppNavHost(it, vm.accounts.account, vm.openConversation) }
+                    if (superseded) SupersededScreen(onReclaim = vm::reclaim) else hasAccount?.let { AppNavHost(it, vm.accounts.account, vm.openConversation) }
                 }
             }
         }

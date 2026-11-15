@@ -47,6 +47,17 @@ class InstallGuard @Inject constructor(
         return true
     }
 
+    /**
+     * «Этот телефон снова главный» (C14): this phone becomes a new install. The next login runs the restore finish:
+     * INSTALL (newer than the other phone's), fresh prekeys, a reset to every contact.
+     */
+    suspend fun reclaim() {
+        settings.setInstalledMs(clock.now())
+        settings.setInstallPublished(false)
+        settings.setRestorePending(true)
+        settings.setSuperseded(false)
+    }
+
     /** The INSTALL in [rec] if it is ours and signed by our account key; else null. */
     private fun verified(rec: Record, userId: ByteArray, accountPub: ByteArray): Install? = runCatching {
         val body = RecordBody.parseFrom(rec.body)
