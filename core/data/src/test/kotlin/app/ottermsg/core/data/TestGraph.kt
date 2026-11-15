@@ -107,11 +107,17 @@ class TestGraph(
         .apply { derive = { pw, salt, _ -> app.ottermsg.core.crypto.BackupKeys.derive(pw, salt, mKib = 1024, t = 1, p = 1) } }
     /** The engine's own connections (start / acquire) reach [node] through this. */
     val transport = FakeNodeTransport(node)
+    /** Candidates whose host is listed here reach another (fake) node; every other host reaches [transport]. */
+    val routes = java.util.concurrent.ConcurrentHashMap<String, app.ottermsg.core.network.Transport>()
+    private val router = object : app.ottermsg.core.network.Transport {
+        override suspend fun connect(candidate: app.ottermsg.core.network.Candidate) =
+            (routes[candidate.host] ?: transport).connect(candidate)
+    }
     val manifests = app.ottermsg.core.data.sync.ManifestUpdater(db.manifestDao(), settings, clock)
     val pushMonitor = app.ottermsg.core.data.push.PushMonitor(settings, clock)
     val news = app.ottermsg.core.data.news.NewsRepository(db, manifests, clock, alerts)
     private val endpointStats = app.ottermsg.core.network.InMemoryEndpointStats()
-    val engine = SyncEngine(endpointStats, app.ottermsg.core.network.NodeSelector(transport, endpointStats, clock::now),
+    val engine = SyncEngine(endpointStats, app.ottermsg.core.network.NodeSelector(router, endpointStats, clock::now),
         accounts, settings, manifests, directory, receiver, outbox, prekeys, profile, media, scope, true, clock, guard, backups,
         news, groupRevocations, pushMonitor = pushMonitor)
     val foreground = app.ottermsg.core.data.sync.ForegroundSync({ engine.acquire(SyncEngine.FOREGROUND) },

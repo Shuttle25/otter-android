@@ -136,6 +136,8 @@ class DirectorySync @Inject constructor(
             contacts.upsert(c.copy(revoked = true))
             memberLine(c.userId, c.displayName, REVOKED, create = false)
         }
+        // our own network-signed REVOCATION (or our redemption lost a doubly used invite, as on every node): disabled
+        if (me.userId.hex() in revokedAt || me.userId.hex() in disabled) settings.setAccountRevoked(true)
         settings.setDuplicateLosers(losers.keys)
         val contactIds = contacts.all().map { it.userId.hex() }.toSet()
         settings.setContactInviters(inviters.filterKeys { it in contactIds })

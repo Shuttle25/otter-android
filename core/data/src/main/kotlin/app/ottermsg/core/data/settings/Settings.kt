@@ -101,6 +101,13 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
     suspend fun superseded(): Boolean = (int(SUPERSEDED) ?: 0) != 0
     suspend fun setSuperseded(v: Boolean) = putInt(SUPERSEDED, if (v) 1 else 0)
     fun observeSuperseded(): Flow<Boolean> = observeInt(SUPERSEDED, 0).map { it != 0 }
+    /**
+     * The network administrator disabled this account, and the phone verified it (our own network-signed REVOCATION,
+     * or REVOKED from two manifest nodes): the engine never connects again and the app shows only that.
+     */
+    suspend fun accountRevoked(): Boolean = (int(ACCOUNT_REVOKED) ?: 0) != 0
+    suspend fun setAccountRevoked(v: Boolean) = putInt(ACCOUNT_REVOKED, if (v) 1 else 0)
+    fun observeAccountRevoked(): Flow<Boolean> = observeInt(ACCOUNT_REVOKED, 0).map { it != 0 }
     /** This install's INSTALL record reached a node (C14); cleared by «Этот телефон снова главный». */
     suspend fun installPublished(): Boolean = (int(INSTALL_PUBLISHED) ?: 0) != 0
     suspend fun setInstallPublished(v: Boolean) = putInt(INSTALL_PUBLISHED, if (v) 1 else 0)
@@ -182,6 +189,7 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
         const val INSTALLED_MS = "installed_ms"
         const val RESTORE_PENDING = "restore_pending"
         const val SUPERSEDED = "superseded"
+        const val ACCOUNT_REVOKED = "account_revoked"
         const val INSTALL_PUBLISHED = "install_published"
         const val BACKUP_SECRET = "backup_secret"
         const val BACKUP_SALT = "backup_salt"

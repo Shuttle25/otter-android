@@ -48,9 +48,13 @@ private fun ByteString.hex() = toByteArray().hex()
  * In-memory node with the same rules as the Go service for the M1 methods: invites, registration,
  * directory, prekeys (one-time keys consumed), mailboxes with per-session push and ACK.
  */
-class FakeNode(private val clock: () -> Long) {
+class FakeNode(private val clock: () -> Long, val nodeId: ByteArray = ByteArray(16) { 0x42 }) {
     companion object { const val APK_CHUNK = 1 shl 20 }
-    val nodeId = ByteArray(16) { 0x42 }
+    /**
+     * Answers auth.login and every logged-in request with STATUS_REVOKED (served by [FakeNodeTransport]), like a node
+     * whose account was disabled by `otter-admin user revoke` — or a hostile node lying it.
+     */
+    @Volatile var answerRevoked = false
     val network = Ed25519.keyPairFromSeed(ByteArray(32) { 9 })
     /** Signs a manifest; [withSelf] lists this node, [extraHosts] adds other (fake) nodes. */
     fun signManifest(version: Long, withSelf: Boolean = true, extraHosts: List<String> = emptyList(),

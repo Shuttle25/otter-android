@@ -84,8 +84,9 @@ class Outbox @Inject constructor(
                 outbox.markResent(item.id)
                 return
             }
+            // REVOKED is not final here: one node could lie it; SyncEngine decides whether the account was disabled
             val permanent = e is PermanentFailure || (e is RpcException &&
-                e.status in setOf(Status.STATUS_INVALID, Status.STATUS_NOT_FOUND, Status.STATUS_REVOKED))
+                e.status in setOf(Status.STATUS_INVALID, Status.STATUS_NOT_FOUND))
             if (permanent) {
                 if (item.groupId != null && item.recipientUserId.isNotEmpty()) groupSender.forgetShare(item)
                 db.withTransaction {
@@ -148,6 +149,14 @@ class Outbox @Inject constructor(
         }
         api.send(record) // the same record every time: nodes deduplicate by author‖id
         afterSend(item)
+    }
+
+    /** The account was disabled (verified): nothing will be sent again; unsent messages show as failed. */
+    suspend fun cancelAll() = mutex.withLock {
+        db.withTransaction {
+            outbox.unsentMessageIds().forEach { messages.markFailed(it) }
+            outbox.deleteAll()
+        }
     }
 
     private suspend fun afterSend(item: OutboxEntity) {

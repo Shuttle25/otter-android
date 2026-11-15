@@ -5,6 +5,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -91,8 +93,9 @@ class ConnectionManager(
                 rpc = w.rpc
                 val connectedAt = clock()
                 try {
-                    val api = RemoteNodeApi(w.rpc, clock)
+                    val api = RemoteNodeApi(w.rpc, clock, w.candidate.nodeId)
                     session.onConnected(api)
+                    currentCoroutineContext().ensureActive() // onConnected may have stopped us (superseded, revoked)
                     _state.value = ConnectionState.Online(api, w.candidate.url, w.candidate.label)
                     backoffMs = 1_000L
                     val cause = w.rpc.closed.await()
