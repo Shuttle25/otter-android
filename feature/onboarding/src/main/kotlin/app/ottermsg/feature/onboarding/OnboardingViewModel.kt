@@ -32,7 +32,13 @@ class OnboardingViewModel @Inject constructor(private val registration: Registra
     fun onLink(text: String) = update { copy(link = text, linkError = null) }
     fun submitLink() {
         val b = runCatching { InviteLink.decode(_state.value.link) }.getOrNull()
-        update { if (b == null) copy(linkError = R.string.onb_invite_invalid) else copy(inviterName = b.inviterName.ifEmpty { null }, step = OnboardingStep.PROFILE) }
+        update {
+            when {
+                b == null -> copy(linkError = R.string.onb_invite_invalid)
+                !b.hasInvite() -> copy(linkError = R.string.onb_err_invite_outdated) // made by 0.9.0 or older (D100)
+                else -> copy(inviterName = b.inviterName.ifEmpty { null }, step = OnboardingStep.PROFILE)
+            }
+        }
     }
     fun onDisplayName(v: String) = update { copy(displayName = v.take(64), profileError = null) }
     fun onUsername(v: String) = update { copy(username = v.lowercase().filter { it in 'a'..'z' || it in '0'..'9' || it == '_' }.take(32), profileError = null) }
@@ -125,7 +131,8 @@ class OnboardingViewModel @Inject constructor(private val registration: Registra
                 registering -> this
                 registrationError in PROFILE_ERRORS -> copy(step = OnboardingStep.PROFILE)
                 registrationError == R.string.onb_invite_invalid || registrationError == R.string.onb_err_invite_used ||
-                    registrationError == R.string.onb_err_invite_expired -> copy(step = OnboardingStep.INVITE)
+                    registrationError == R.string.onb_err_invite_expired ||
+                    registrationError == R.string.onb_err_invite_outdated -> copy(step = OnboardingStep.INVITE)
                 else -> copy(step = OnboardingStep.CONFIRM)
             }
             else -> this
@@ -154,6 +161,7 @@ class OnboardingViewModel @Inject constructor(private val registration: Registra
             RegistrationError.BadDisplayName -> R.string.onb_profile_name_required
             RegistrationError.InviteUsed -> R.string.onb_err_invite_used
             RegistrationError.InviteExpired -> R.string.onb_err_invite_expired
+            RegistrationError.InviteOutdated -> R.string.onb_err_invite_outdated
             RegistrationError.InviteUnknown, RegistrationError.BadLink -> R.string.onb_invite_invalid
             RegistrationError.Network -> R.string.onb_err_network
             else -> R.string.onb_err_unknown

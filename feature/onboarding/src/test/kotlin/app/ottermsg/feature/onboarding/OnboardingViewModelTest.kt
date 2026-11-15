@@ -6,6 +6,7 @@ import app.ottermsg.core.data.backup.Restorer
 import app.ottermsg.core.data.registration.Registrar
 import app.ottermsg.core.data.registration.RegistrationError
 import app.ottermsg.proto.v1.InviteBundle
+import app.ottermsg.proto.v1.Record
 import com.google.protobuf.ByteString
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -29,7 +30,8 @@ class OnboardingViewModelTest {
         }
     }
 
-    private val link = InviteLink.encode(InviteBundle.newBuilder().setSecret(ByteString.copyFrom(ByteArray(32))).setInviterName("Мама").build())
+    private val link = InviteLink.encode(InviteBundle.newBuilder().setSecret(ByteString.copyFrom(ByteArray(32))).setInviterName("Мама")
+        .setInvite(Record.getDefaultInstance()).build())
     private class FakeRestorer : Restorer {
         var password: Result<Unit> = Result.success(Unit); var words: Result<Unit> = Result.success(Unit)
         var history: Result<Unit> = Result.success(Unit)
@@ -62,6 +64,17 @@ class OnboardingViewModelTest {
         vm.submitLink()
         assertEquals(OnboardingStep.PROFILE, vm.state.value.step)
         assertEquals("Мама", vm.state.value.inviterName)
+    }
+
+    @Test fun outdatedLinkIsRefusedBeforeTheProfile() {
+        // a link made by 0.9.0 or older carries no signed INVITE (D100): ask for a new one at once
+        val old = InviteLink.encode(InviteLink.decode(link).toBuilder().clearInvite().build())
+        vm.start(); vm.onLink(old); vm.submitLink()
+        assertEquals(R.string.onb_err_invite_outdated, vm.state.value.linkError)
+        assertEquals(OnboardingStep.INVITE, vm.state.value.step)
+        // restoring only needs the network from a link: an old one still works there
+        vm.back(); vm.startRestore(); vm.onLink(old); vm.submitRestoreLink()
+        assertEquals(OnboardingStep.RESTORE_METHOD, vm.state.value.step)
     }
 
     @Test fun usernameRule() {
@@ -104,6 +117,7 @@ class OnboardingViewModelTest {
             RegistrationError.InviteUsed to (R.string.onb_err_invite_used to OnboardingStep.INVITE),
             RegistrationError.InviteExpired to (R.string.onb_err_invite_expired to OnboardingStep.INVITE),
             RegistrationError.InviteUnknown to (R.string.onb_invite_invalid to OnboardingStep.INVITE),
+            RegistrationError.InviteOutdated to (R.string.onb_err_invite_outdated to OnboardingStep.INVITE),
             RegistrationError.Network to (R.string.onb_err_network to OnboardingStep.CONFIRM),
             RegistrationError.Unknown("x") to (R.string.onb_err_unknown to OnboardingStep.CONFIRM),
         )

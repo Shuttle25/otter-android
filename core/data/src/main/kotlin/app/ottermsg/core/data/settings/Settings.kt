@@ -23,6 +23,15 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
     suspend fun setNextOneTimeId(v: Int) = putInt(NEXT_ONE_TIME_ID, v)
     suspend fun networkPub(): ByteArray = checkNotNull(dao.get(NETWORK_PUB)) { "network key missing" }
     suspend fun setNetworkPub(v: ByteArray) = dao.put(SettingEntity(NETWORK_PUB, v))
+    /** Our invite chain (D100): the INVITE record and the redeem proof, copied into every new version of our entry. */
+    suspend fun ownInvite(): Pair<ByteArray, ByteArray>? {
+        val rec = dao.get(OWN_INVITE_RECORD) ?: return null
+        val proof = dao.get(OWN_INVITE_PROOF) ?: return null
+        return rec to proof
+    }
+    suspend fun setOwnInvite(record: ByteArray, proof: ByteArray) {
+        dao.put(SettingEntity(OWN_INVITE_RECORD, record)); dao.put(SettingEntity(OWN_INVITE_PROOF, proof))
+    }
     /** M1 flag: a refill for the connected node was pending. Read once for compatibility. */
     suspend fun prekeysLow(): Boolean = (int(PREKEYS_LOW) ?: 0) != 0
     suspend fun setPrekeysLow(v: Boolean) = putInt(PREKEYS_LOW, if (v) 1 else 0)
@@ -160,6 +169,8 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
         const val REGISTRATION_ID = "registration_id"
         const val NEXT_ONE_TIME_ID = "next_one_time_id"
         const val NETWORK_PUB = "network_pub"
+        const val OWN_INVITE_RECORD = "own_invite_record"
+        const val OWN_INVITE_PROOF = "own_invite_proof"
         const val PREKEYS_LOW = "prekeys_low"
         const val PENDING_REFILLS = "prekeys_pending_owners"
     }

@@ -17,6 +17,7 @@
     <string name="invite_share">Поделиться ссылкой</string>
     <string name="invite_qr_description">QR-код приглашения в семью</string>
     <string name="invite_error">Не удалось создать приглашение. Проверьте подключение и повторите.</string>
+    <string name="invite_no_rights">Администратор запретил вам приглашать новых участников.</string>
     <string name="invite_retry">Повторить</string>
     <string name="chats_empty_title">Пока нет чатов</string>
     <string name="chats_author">%1$s: %2$s</string>

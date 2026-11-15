@@ -17,6 +17,7 @@
     <string name="invite_share">Share link</string>
     <string name="invite_qr_description">Family invite QR code</string>
     <string name="invite_error">Could not create an invite. Check the connection and try again.</string>
+    <string name="invite_no_rights">The administrator has withdrawn your right to invite new members.</string>
     <string name="invite_retry">Try again</string>
     <string name="chats_empty_title">No chats yet</string>
     <string name="chats_author">%1$s: %2$s</string>

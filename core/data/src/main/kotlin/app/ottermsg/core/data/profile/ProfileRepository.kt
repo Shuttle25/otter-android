@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import app.ottermsg.core.data.Clock
 import app.ottermsg.core.data.account.AccountRepository
 import app.ottermsg.core.data.account.DirectoryEntries
+import app.ottermsg.core.data.directory.DirectorySync
 import app.ottermsg.core.data.settings.Settings
 import app.ottermsg.core.database.OtterDatabase
 import app.ottermsg.core.network.NodeApi
@@ -79,7 +80,7 @@ class ProfileRepository @Inject constructor(
             val me = accounts.require()
             val version = settings.entryVersion() + 1
             try {
-                api.updateDirectory(DirectoryEntries.record(me, me.displayName, version, clock.now()))
+                api.updateDirectory(DirectoryEntries.record(me, me.displayName, version, clock.now(), ownInvite(api, me.userId)))
                 db.withTransaction {
                     settings.setEntryVersion(version)
                     // an edit made during the call keeps the flag: compare with what we sent
@@ -93,6 +94,19 @@ class ProfileRepository @Inject constructor(
                 settings.setEntryVersion(maxOf(mine, settings.entryVersion()))
             }
         }
+    }
+
+    /**
+     * Our invite chain for the new version (D100). A restored phone that has not synced the directory yet learns it
+     * from its own entry first (signed by our key, so a node cannot change it); founding members have none.
+     */
+    private suspend fun ownInvite(api: NodeApi, me: ByteArray): Pair<ByteArray, ByteArray>? {
+        settings.ownInvite()?.let { return it }
+        val e = api.directory().mapNotNull { DirectorySync.verifyEntry(it) }
+            .filter { it.userId.toByteArray().contentEquals(me) && !it.inviteRecord.isEmpty }
+            .maxByOrNull { it.version } ?: return null
+        settings.setOwnInvite(e.inviteRecord.toByteArray(), e.inviteProof.toByteArray())
+        return settings.ownInvite()
     }
 
     private fun ownVersion(rec: Record, me: ByteArray): Int? = runCatching {

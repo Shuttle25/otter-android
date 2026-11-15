@@ -63,6 +63,9 @@ class DirectorySync @Inject constructor(
      * its name (an edit made by another install of the account, or a restore).
      */
     private suspend fun applyOwn(e: DirectoryEntry) {
+        // a restored phone learns its invite chain from its own entry (signed by our key), D100
+        if (settings.ownInvite() == null && !e.inviteRecord.isEmpty)
+            settings.setOwnInvite(e.inviteRecord.toByteArray(), e.inviteProof.toByteArray())
         if (e.version.toInt() > settings.entryVersion()) settings.setEntryVersion(e.version.toInt())
         if (!settings.profilePending() && e.version.toInt() >= settings.entryVersion() &&
             e.displayName != accounts.require().displayName) {

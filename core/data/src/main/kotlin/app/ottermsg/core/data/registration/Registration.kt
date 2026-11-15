@@ -2,6 +2,7 @@ package app.ottermsg.core.data.registration
 
 import androidx.room.withTransaction
 import app.ottermsg.core.crypto.Ids
+import app.ottermsg.core.crypto.InviteKeys
 import app.ottermsg.core.crypto.InviteLink
 import app.ottermsg.core.crypto.ManifestException
 import app.ottermsg.core.crypto.ManifestVerifier
@@ -25,8 +26,11 @@ import app.ottermsg.core.signal.IdentityKeys
 import app.ottermsg.core.signal.InMemorySignalKeyValue
 import app.ottermsg.core.signal.OtterProtocolStore
 import app.ottermsg.core.signal.PreKeyFactory
+import app.ottermsg.proto.v1.Invite
 import app.ottermsg.proto.v1.InviteUsed
 import app.ottermsg.proto.v1.PreKeys
+import app.ottermsg.proto.v1.Record
+import app.ottermsg.proto.v1.RecordBody
 import app.ottermsg.proto.v1.RecordType
 import app.ottermsg.proto.v1.RegisterRequest
 import app.ottermsg.proto.v1.Status
@@ -42,6 +46,8 @@ sealed class RegistrationError : Exception() {
     data object UsernameTaken : RegistrationError() { private fun readResolve(): Any = UsernameTaken }
     data object InviteUsed : RegistrationError() { private fun readResolve(): Any = InviteUsed }
     data object InviteExpired : RegistrationError() { private fun readResolve(): Any = InviteExpired }
+    /** A link made by 0.9.0 or older (no signed INVITE): ask for a new one (D100). */
+    data object InviteOutdated : RegistrationError() { private fun readResolve(): Any = InviteOutdated }
     data object InviteUnknown : RegistrationError() { private fun readResolve(): Any = InviteUnknown }
     data object BadLink : RegistrationError() { private fun readResolve(): Any = BadLink }
     data object Network : RegistrationError() { private fun readResolve(): Any = Network }
@@ -78,6 +84,13 @@ class Registration @Inject constructor(
         val networkPub = bundle.networkPub.toByteArray()
         val manifest = try { ManifestVerifier.verify(bundle.manifest.toByteArray(), networkPub, 0) } catch (e: ManifestException) { throw RegistrationError.BadLink }
         if (bundle.secret.size() != 32) throw RegistrationError.BadLink
+        // D100: a link made before 0.9.1 has no signed INVITE; no node admits it any more.
+        if (!bundle.hasInvite()) throw RegistrationError.InviteOutdated
+        val secret = bundle.secret.toByteArray()
+        val inviteId = MessageDigest.getInstance("SHA-256").digest(secret)
+        val redeem = InviteKeys.redeemKey(secret)
+        if (!inviteMatches(bundle.invite, inviteId, redeem.publicKey)) throw RegistrationError.BadLink
+        val inviteRecord = bundle.invite.toByteArray()
 
         val account = SeedKeys.accountKeyPair(seed)
         val userId = Ids.id16(account.publicKey)
@@ -93,13 +106,14 @@ class Registration @Inject constructor(
             PreKeyFactory.oneTime(store, nextId, ONE_TIME_PER_NODE, n.nodeId.toByteArray()).also { nextId += ONE_TIME_PER_NODE }
         }
 
-        val entry = DirectoryEntries.build(userId, user, name, seed, version = 1, registeredMs = now)
+        // The proof replaces the secret: the secret never leaves this phone (D100).
+        val proof = redeem.sign(InviteKeys.redeemMessage(inviteId, userId, account.publicKey))
+        val entry = DirectoryEntries.build(userId, user, name, seed, version = 1, registeredMs = now, invite = inviteRecord to proof)
         val prekeys = PreKeys.newBuilder().setDeviceId(1).setRegistrationId(registrationId).setInstalledMs(now)
             .setSignedPrekey(signed).setKyberPrekey(kyber).addAllOneTime(oneTime).build()
-        val inviteId = MessageDigest.getInstance("SHA-256").digest(bundle.secret.toByteArray())
         val used = InviteUsed.newBuilder().setInviteId(bs(inviteId)).setUserId(bs(userId)).build()
         fun rec(t: RecordType, p: MessageLite) = RecordCodec.sign(RecordCodec.body(t, userId, p.toByteArray(), createdMs = now), account)
-        val req = RegisterRequest.newBuilder().setInviteSecret(bundle.secret)
+        val req = RegisterRequest.newBuilder() // no invite_secret (D100)
             .setDirectoryEntry(rec(RecordType.DIRECTORY_ENTRY, entry)).setPrekeys(rec(RecordType.PREKEYS, prekeys))
             .setInviteUsed(rec(RecordType.INVITE_USED, used)).build()
 
@@ -118,6 +132,7 @@ class Registration @Inject constructor(
             settings.setInstalledMs(now)
             settings.setNextOneTimeId(nextId)
             settings.setNetworkPub(networkPub)
+            settings.setOwnInvite(inviteRecord, proof)
             db.manifestDao().insert(ManifestEntity(manifest.version, bundle.manifest.toByteArray(), receivedMs = now))
             mem.copyInto(RoomSignalKeyValue(db.signalKvDao()))
             // C23: the link's inviter fields are not signed. Keep them only as a placeholder (name in the chat list):
@@ -138,9 +153,18 @@ class Registration @Inject constructor(
             e.status == Status.STATUS_CONFLICT && "used" in msg -> RegistrationError.InviteUsed
             e.status == Status.STATUS_CONFLICT && "expired" in msg -> RegistrationError.InviteExpired
             e.status == Status.STATUS_NOT_FOUND -> RegistrationError.InviteUnknown
+            e.status == Status.STATUS_INVALID && "invite chain" in msg -> RegistrationError.InviteOutdated
             else -> RegistrationError.Unknown(e.message.orEmpty())
         }
     }
+
+    /** The link's INVITE belongs to its secret (else no proof could verify: a tampered or swapped link). */
+    private fun inviteMatches(rec: Record, inviteId: ByteArray, redeemPub: ByteArray): Boolean = runCatching {
+        val body = RecordBody.parseFrom(rec.body)
+        val inv = Invite.parseFrom(body.payload)
+        body.type == RecordType.INVITE && inv.inviteId.toByteArray().contentEquals(inviteId) &&
+            inv.redeemPub.toByteArray().contentEquals(redeemPub)
+    }.getOrDefault(false)
 
     companion object {
         val USERNAME = Regex("^[a-z0-9_]{3,32}$")

@@ -2,6 +2,7 @@ package app.ottermsg.core.data
 
 import app.ottermsg.core.crypto.Ed25519
 import app.ottermsg.core.crypto.Ids
+import app.ottermsg.core.crypto.InviteKeys
 import app.ottermsg.core.crypto.InviteLink
 import app.ottermsg.core.crypto.RecordCodec
 import app.ottermsg.core.network.NodeApi
@@ -124,11 +125,25 @@ class FakeNode(private val clock: () -> Long) {
     /** push.status (D79): whether a non-empty push token is registered for [user]. */
     fun hasPush(user: ByteArray): Boolean = synchronized(lock) { !pushTokens[user.hex()].isNullOrEmpty() }
 
+    /** Like `otter-admin invite`: a network-signed INVITE with its redeem key travels in the link (D100). */
     fun bootstrapLink(ttlMs: Long = 3_600_000): String {
         val secret = ByteArray(32).also(SecureRandom()::nextBytes)
+        val inv = Invite.newBuilder().setInviteId(bs(sha(secret))).setExpiresMs(clock() + ttlMs)
+            .setRedeemPub(bs(InviteKeys.redeemKey(secret).publicKey)).build()
+        val rec = RecordCodec.sign(RecordCodec.body(RecordType.INVITE, Ids.id16(network.publicKey), inv.toByteArray(),
+            expiresMs = clock() + ttlMs, createdMs = clock()), network)
         synchronized(lock) { invites[sha(secret).hex()] = InviteState(Ids.id16(network.publicKey), clock() + ttlMs) }
-        return InviteLink.encode(InviteBundle.newBuilder().setNetworkPub(bs(network.publicKey)).setManifest(manifest).setSecret(bs(secret)).build())
+        return InviteLink.encode(InviteBundle.newBuilder().setNetworkPub(bs(network.publicKey)).setManifest(manifest)
+            .setSecret(bs(secret)).setInvite(rec).build())
     }
+
+    /** Sees every register request (the node side of what the phone sends). */
+    @Volatile var onRegister: (RegisterRequest) -> Unit = {}
+    /** register calls that reached this node. */
+    @Volatile var registrations = 0; private set
+    /** Users whose invite rights the admin withdrew (INVITE_RIGHTS no): invite.create → UNAUTHORIZED. */
+    val noInviteRights = HashSet<String>()
+    fun withdrawInviteRights(user: ByteArray) = synchronized(lock) { noInviteRights += user.hex() }
 
     fun mailbox(user: ByteArray): List<Record> = synchronized(lock) { mailboxes[user.hex()]?.values?.toList() ?: emptyList() }
     fun oneTimeLeft(user: ByteArray): Int = synchronized(lock) { keys[user.hex()]?.oneTime?.size ?: 0 }
@@ -203,14 +218,31 @@ class FakeNode(private val clock: () -> Long) {
             .setNodeId(bs(nodeId)).setManifestVersion(manifestVersion).build()
 
         override suspend fun register(req: RegisterRequest) { check(); synchronized(lock) {
-            if (req.inviteSecret.size() != 32) fail(Status.STATUS_INVALID, "incomplete registration")
-            val inviteId = sha(req.inviteSecret.toByteArray())
-            val inv = invites[inviteId.hex()] ?: fail(Status.STATUS_NOT_FOUND, "unknown invite")
-            if (inv.usedBy != null) fail(Status.STATUS_CONFLICT, "invite already used")
-            if (inv.expiresMs < clock()) fail(Status.STATUS_CONFLICT, "invite expired")
+            registrations++
+            onRegister(req)
+            if (!req.hasDirectoryEntry() || !req.hasPrekeys() || !req.hasInviteUsed()) fail(Status.STATUS_INVALID, "incomplete registration")
             val dirBody = body(req.directoryEntry)
             val entry = DirectoryEntry.parseFrom(dirBody.payload)
             verifyUser(req.directoryEntry, entry.accountPub.toByteArray())
+            // Like Service.admitChain (D100): the INVITE travels in the entry, the proof replaces the secret.
+            if (entry.inviteRecord.isEmpty || entry.inviteProof.size() != 64) fail(Status.STATUS_INVALID, "no invite chain (update the app)")
+            val invRec = Record.parseFrom(entry.inviteRecord)
+            val invBody = body(invRec)
+            if (invBody.type != RecordType.INVITE) fail(Status.STATUS_INVALID, "malformed invite record")
+            val invMsg = Invite.parseFrom(invBody.payload)
+            if (invMsg.inviteId.size() != 32 || invMsg.redeemPub.size() != 32) fail(Status.STATUS_INVALID, "malformed invite record")
+            val signer = if (invBody.author.toByteArray().contentEquals(Ids.id16(network.publicKey))) network.publicKey
+                else users[invBody.author.hex()]?.entry?.accountPub?.toByteArray() ?: fail(Status.STATUS_RETRY_LATER, "inviter not known here yet")
+            if (!RecordCodec.verify(invRec, signer)) fail(Status.STATUS_INVALID, "invite signature")
+            val proofOk = runCatching { Ed25519.verify(invMsg.redeemPub.toByteArray(), InviteKeys.redeemMessage(invMsg.inviteId.toByteArray(),
+                entry.userId.toByteArray(), entry.accountPub.toByteArray()), entry.inviteProof.toByteArray()) }.getOrDefault(false)
+            if (!proofOk) fail(Status.STATUS_INVALID, "invite proof")
+            val inviteId = invMsg.inviteId.toByteArray()
+            val inv = invites.getOrPut(inviteId.hex()) { InviteState(invBody.author.toByteArray(), invMsg.expiresMs) }
+            if (inv.usedBy != null) fail(Status.STATUS_CONFLICT, "invite already used")
+            if (inv.expiresMs < clock()) fail(Status.STATUS_CONFLICT, "invite expired")
+            if (entry.registeredMs < invBody.createdMs || entry.registeredMs > invMsg.expiresMs)
+                fail(Status.STATUS_INVALID, "registration outside the invite's lifetime")
             if (!entry.userId.toByteArray().contentEquals(Ids.id16(entry.accountPub.toByteArray()))) fail(Status.STATUS_INVALID, "author binding")
             if (users.containsKey(entry.userId.hex())) fail(Status.STATUS_CONFLICT, "already registered")
             if (users.values.any { it.entry.username == entry.username }) fail(Status.STATUS_CONFLICT, "username taken")
@@ -308,6 +340,8 @@ class FakeNode(private val clock: () -> Long) {
             val b = verifyUser(invite)
             if (!b.author.toByteArray().contentEquals(me())) fail(Status.STATUS_UNAUTHORIZED, "author")
             val i = Invite.parseFrom(b.payload)
+            if (i.redeemPub.size() != 32) fail(Status.STATUS_INVALID, "invite without a redeem key (update the app)")
+            if (b.author.hex() in noInviteRights) fail(Status.STATUS_UNAUTHORIZED, "inviter may not invite")
             invites[i.inviteId.hex()] = InviteState(b.author.toByteArray(), i.expiresMs)
         } }
 
