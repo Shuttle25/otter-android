@@ -18,11 +18,15 @@ interface CallTransport {
 /** Call signaling over the ordinary Signal outbox (D78): no message row, so never kept for the 24 h resend. */
 @Singleton
 class CallSignaling @Inject constructor(private val outbox: Outbox, private val clock: Clock) : CallTransport {
-    /** Urgent (push wakes the callee), 2-minute record expiry. */
+    /**
+     * 2-minute record expiry. Only an offer is urgent (its push wakes the callee): nodes count every urgent short-lived
+     * envelope against the call-wake budget (D108), and the rest is fetched by a peer that is already awake — the callee
+     * woken by the offer, the caller held online by the call lease.
+     */
     override suspend fun send(peer: ByteArray, msg: CallMessage) {
         val now = clock.now()
         outbox.enqueue(peer, Content.newBuilder().setCall(msg).setSentMs(now).build(), messageLocalId = null,
-            urgent = true, expiresMs = now + EXPIRY_MS)
+            urgent = msg.kindCase == CallMessage.KindCase.OFFER, expiresMs = now + EXPIRY_MS)
     }
 
     /** DELIVERED for an offer: the caller switches «Соединение…» to «Звонит…». */

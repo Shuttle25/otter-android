@@ -270,6 +270,20 @@ class CallManagerTest {
         assertTrue(transport.sent.isEmpty())
     }
 
+    /** Caller cancelled while we slept: only the offer pushed; the hangup comes in the same fetch, right after it (D108). */
+    @Test fun anOfferFollowedByItsHangupInOneFetchIsAMissedCallThatStopsRinging() {
+        val id = CallId.random()
+        deliver(msg(id).setOffer(CallOffer.newBuilder().setSdp("their-offer")).build())
+        deliver(msg(id).setHangup(CallHangup.newBuilder().setReason(CallHangup.Reason.NORMAL)).build())
+        settle("missed") { alerts.missed.isNotEmpty() && alerts.released == 1 }
+        assertEquals(CallState.Idle, manager.state.value)
+        assertEquals(CallOutcome.MISSED.code, callLines().single().callOutcome)
+        assertEquals(peer, alerts.missed.single().first)
+        assertTrue("nothing sent back but the delivery receipt", transport.sent.isEmpty())
+        assertTrue(engines.isEmpty())
+        assertFalse(CallManager.LEASE in link.leases)
+    }
+
     @Test fun losingGlareDropsOurOwnEngineAndAnswersTheirCall() {
         dialToOutgoing()
         val mine = engine()
