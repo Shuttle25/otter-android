@@ -2,6 +2,7 @@ package app.ottermsg.core.network
 
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.suspendCancellableCoroutine
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -50,7 +51,24 @@ class OkHttpTransport(private val base: OkHttpClient = defaultClient()) : Transp
 
     companion object {
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS).pingInterval(60, TimeUnit.SECONDS).build()
+            .connectTimeout(10, TimeUnit.SECONDS).pingInterval(60, TimeUnit.SECONDS)
+            .addInterceptor(NoCompression).build()
+    }
+
+    /**
+     * OkHttp offers permessage-deflate on every web socket; a node that accepted it could inflate a few KB into
+     * gigabytes before the app sees the message (C17, D93). Nodes never compress, so the offer is removed and an
+     * answer that enables it is refused. An application interceptor: OkHttp skips network interceptors for web sockets.
+     */
+    internal object NoCompression : Interceptor {
+        override fun intercept(chain: Interceptor.Chain): Response {
+            val res = chain.proceed(chain.request().newBuilder().removeHeader("Sec-WebSocket-Extensions").build())
+            if (res.header("Sec-WebSocket-Extensions") != null) {
+                res.close()
+                throw java.net.ProtocolException("node enabled WebSocket compression")
+            }
+            return res
+        }
     }
 
     private class OkConnection(

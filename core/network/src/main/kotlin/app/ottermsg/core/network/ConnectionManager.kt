@@ -97,14 +97,23 @@ class ConnectionManager(
                     backoffMs = 1_000L
                     val cause = w.rpc.closed.await()
                     val lived = clock() - connectedAt
-                    // Our own close (stop, reconnect, network change) ends the reader by cancellation: not the censor.
-                    if (cause != null && cause !is CancellationException && lived < THROTTLE_WINDOW_MS && w.rpc.bytesIn >= THROTTLE_BYTES) {
-                        stats.throttled(w.candidate.key, clock())
-                        netLog.add(NetLogEntry(w.candidate.label, w.candidate.logName(), FailureClass.RESET_AFTER_KB,
-                            "${w.rpc.bytesIn} bytes in ${lived / 1000} s: ${cause.message}"))
+                    val over = cause.oversize()
+                    if (over != null) {
+                        // The node broke a receive limit (C17): count it as a failure and race the others now.
+                        stats.failure(w.candidate.key, clock())
+                        netLog.add(NetLogEntry(w.candidate.label, w.candidate.logName(), FailureClass.RESET, "limit: ${over.message}"))
+                        lastError = "node broke a size limit"
+                        remaining = remaining.filter { it.key != w.candidate.key }
+                    } else {
+                        // Our own close (stop, reconnect, network change) ends the reader by cancellation: not the censor.
+                        if (cause != null && cause !is CancellationException && lived < THROTTLE_WINDOW_MS && w.rpc.bytesIn >= THROTTLE_BYTES) {
+                            stats.throttled(w.candidate.key, clock())
+                            netLog.add(NetLogEntry(w.candidate.label, w.candidate.logName(), FailureClass.RESET_AFTER_KB,
+                                "${w.rpc.bytesIn} bytes in ${lived / 1000} s: ${cause.message}"))
+                        }
+                        lastError = "connection lost"
+                        remaining = emptyList() // session ended: race all again (after a short wait unless reconnect())
                     }
-                    lastError = "connection lost"
-                    remaining = emptyList() // session ended: race all again (after a short wait unless reconnect())
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {

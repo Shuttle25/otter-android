@@ -8,6 +8,7 @@ import app.ottermsg.core.data.settings.Settings
 import app.ottermsg.core.database.model.AttachmentState
 import app.ottermsg.core.database.model.MessageKind
 import app.ottermsg.core.database.model.MessageStatus
+import app.ottermsg.core.network.NodeApi
 import app.ottermsg.proto.v1.Record
 import app.ottermsg.proto.v1.Status
 import kotlinx.coroutines.flow.first
@@ -207,5 +208,27 @@ class PhotoFlowTest {
         family()
         val junk = File(ApplicationProvider.getApplicationContext<android.content.Context>().cacheDir, "junk.jpg").apply { writeText("x") }
         assertNull(a.messages.sendPhoto(a.messages.conversationWith(b.me.userId), junk, ""))
+    }
+
+    @Test fun aChunkOfTheWrongSizeIsRefusedBeforeItTouchesTheDisk() = runBlocking {
+        family(policy = Settings.AUTO_MANUAL)
+        a.messages.sendPhoto(a.messages.conversationWith(b.me.userId), picture(2000, 1500, noise = true), "")
+        eventually(what = "B receives") { b.lastIncoming()?.kind == MessageKind.PHOTO }
+        val id = b.lastIncoming()!!.localId
+        b.offline()                 // no worker of its own: we drive the download through a hostile node
+        b.photos.download(id)       // REMOTE → QUEUED
+        assertTrue("needs ≥ 2 chunks", b.db.attachmentDao().forMessage(id)!!.size > 256 * 1024)
+        val s = node.connect().also { it.login(b.me.userId, b.me.accountKey) }
+        var gets = 0
+        val hostile = object : NodeApi by s {
+            override suspend fun blobGet(key: ByteArray, index: Int): ByteArray { gets++; return s.blobGet(key, index).let { it.copyOf(it.size - 1) } }
+        }
+        b.media.drainOnce(hostile)
+        val att = b.db.attachmentDao().forMessage(id)!!
+        assertEquals("stops at the first bad chunk (today it fetches them all and fails only the final digest)", 1, gets)
+        assertEquals(0, att.doneChunks)
+        assertTrue(att.attempts >= 1)
+        assertTrue(att.state != AttachmentState.DOWNLOADED)
+        s.close()
     }
 }

@@ -2,6 +2,7 @@ package app.ottermsg.core.data.news
 
 import app.ottermsg.core.data.di.CacheDir
 import app.ottermsg.core.data.invite.OnlineApi
+import app.ottermsg.core.network.ReceiveLimits
 import app.ottermsg.core.network.RpcException
 import app.ottermsg.proto.v1.AppUpdate
 import app.ottermsg.proto.v1.Status
@@ -23,7 +24,8 @@ sealed interface UpdateResult {
 
 /**
  * Downloads an announced APK from the connected node (`apk.get`, 1 MiB chunks, D68) into `cacheDir/apk/<sha256>.part`,
- * resuming at a full-chunk boundary, then checks size and SHA-256 and renames it to `<sha256>.apk`.
+ * resuming at a full-chunk boundary, then checks size and SHA-256 and renames it to `<sha256>.apk`. The signed size
+ * must be 1 byte..100 MiB and every chunk exactly `min(1 MiB, size − offset)`, else `Corrupt` (C17, D93).
  * Network errors other than NOT_FOUND propagate (the caller shows «Нет связи с сервером»).
  */
 /** What the conversation screen needs from [ApkUpdater] (faked in ViewModel tests). */
@@ -35,6 +37,7 @@ interface UpdateDownloader {
 @Singleton
 class ApkUpdater @Inject constructor(private val online: OnlineApi, @param:CacheDir private val cacheDir: File) : UpdateDownloader {
     override suspend fun download(u: AppUpdate, progress: (Float) -> Unit): UpdateResult = withContext(Dispatchers.IO) {
+        if (u.size <= 0 || u.size > ReceiveLimits.APK_MAX) return@withContext UpdateResult.Corrupt // C17
         val hex = u.sha256.toByteArray().joinToString("") { "%02x".format(it) }
         val dir = File(cacheDir, "apk").apply { mkdirs() }
         val done = File(dir, "$hex.apk")
@@ -50,6 +53,11 @@ class ApkUpdater @Inject constructor(private val online: OnlineApi, @param:Cache
                 while (index.toLong() * CHUNK < u.size) {
                     val api = online.current() ?: return@withContext UpdateResult.Offline
                     val c = api.apkGet(u.sha256.toByteArray(), index)
+                    val want = minOf(CHUNK, u.size - index.toLong() * CHUNK)
+                    if (c.data.size().toLong() != want) { // C17: the file never grows past the signed size
+                        out.close(); part.delete()
+                        return@withContext UpdateResult.Corrupt
+                    }
                     out.write(c.data.toByteArray())
                     index++
                     progress((index.toLong() * CHUNK).coerceAtMost(u.size).toFloat() / u.size)
