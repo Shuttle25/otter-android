@@ -22,9 +22,11 @@ val gitHash: Provider<String> = providers.exec {
     commandLine("git", "rev-parse", "--short=7", "HEAD")
     isIgnoreExitValue = true
 }.standardOutput.asText.map { it.trim().ifEmpty { "dev" } }.orElse("dev")
-// Release signing (D68): the owner's keystore, when keystore.properties (gitignored, with storeFile, storePassword,
-// keyAlias, keyPassword) exists next to settings.gradle.kts; otherwise release builds stay debug-signed as before.
-val keystoreProps = rootProject.file("keystore.properties")
+// Release signing (D68, C19): the owner's keystore.properties (gitignored: storeFile, storePassword, keyAlias,
+// keyPassword) next to settings.gradle.kts. Without it a release build FAILS (no debug-key fallback); debug and
+// staging builds stay debug-signed and unit tests never need it. -PotterKeystore=FILE points elsewhere (tests).
+val keystoreProps = rootProject.file(providers.gradleProperty("otterKeystore").getOrElse("keystore.properties"))
+val hasReleaseKeystore = keystoreProps.exists()
 android {
     namespace = "app.ottermsg"
     compileSdk = 36
@@ -38,7 +40,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     signingConfigs {
-        if (keystoreProps.exists()) create("release") {
+        if (hasReleaseKeystore) create("release") {
             val p = Properties().apply { keystoreProps.inputStream().use { load(it) } }
             storeFile = rootProject.file(p.getProperty("storeFile"))
             storePassword = p.getProperty("storePassword"); keyAlias = p.getProperty("keyAlias"); keyPassword = p.getProperty("keyPassword")
@@ -48,7 +50,7 @@ android {
         debug { buildConfigField("boolean", "ALLOW_PLAINTEXT", "true"); ndk { abiFilters += "x86_64" } }
         release {
             buildConfigField("boolean", "ALLOW_PLAINTEXT", "false")
-            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") // null without the keystore: requireReleaseKeystore stops packaging
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
@@ -73,6 +75,11 @@ android {
         resources { excludes += listOf("libsignal_jni*.so", "libsignal_jni*.dylib", "signal_jni*.dll") }
     }
 }
+val requireReleaseKeystore = tasks.register("requireReleaseKeystore") {
+    val ok = hasReleaseKeystore
+    doLast { if (!ok) throw GradleException("Release builds need keystore.properties (D68, C19); there is no debug-key fallback") }
+}
+tasks.configureEach { if (name == "packageRelease" || name == "signReleaseBundle") dependsOn(requireReleaseKeystore) }
 kotlin { jvmToolchain(21) }
 androidComponents {
     onVariants { variant ->
