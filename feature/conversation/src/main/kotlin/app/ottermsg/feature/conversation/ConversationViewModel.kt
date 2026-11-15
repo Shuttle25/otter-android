@@ -146,6 +146,7 @@ class ConversationViewModel @Inject constructor(
     val photoSource: PhotoSource = object : PhotoSource {
         override suspend fun load(localId: Long, maxPx: Int): ImageBitmap? = photos.load(localId, maxPx)?.asImageBitmap()
         override suspend fun thumb(localId: Long): ImageBitmap? = photos.thumb(localId)?.asImageBitmap()
+        override suspend fun corrupt(localId: Long): Boolean = photos.corrupt(localId)
     }
 
     /** Path of the picked/taken photo shown in the preview (survives process death). */

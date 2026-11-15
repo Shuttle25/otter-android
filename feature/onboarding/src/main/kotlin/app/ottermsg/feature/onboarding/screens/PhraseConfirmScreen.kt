@@ -11,6 +11,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import app.ottermsg.core.ui.components.SecureWindow
 import app.ottermsg.feature.onboarding.OnboardingUiState
 import app.ottermsg.feature.onboarding.R
 

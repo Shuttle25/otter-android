@@ -91,4 +91,42 @@ class PhotoHelpersTest {
         assertTrue(files.mediaBytes() > 0)
         db.close()
     }
+
+    @Test fun sampleForBoundsDecodedSizeAndRefusesHugeSources() {
+        assertNull(PhotoLoader.sampleFor(20_000, 20_000, 400))   // 400 MP
+        assertNull(PhotoLoader.sampleFor(0, 100, 400))
+        assertEquals(4, PhotoLoader.sampleFor(2000, 1000, 400))  // 500 px long edge, as before
+        val s = PhotoLoader.sampleFor(9000, 9000, 4096)!!         // 81 MP, viewer size
+        assertTrue(9000 / s <= PhotoLoader.MAX_DECODED_EDGE)
+    }
+
+    @Test fun hugeHeaderIsCorruptNotDecoded() = runBlocking {
+        val db = Room.inMemoryDatabaseBuilder(context, OtterDatabase::class.java).allowMainThreadQueries().build()
+        val files = MediaFiles(context)
+        val name = files.newName()
+        val key = BlobCipher.newKey(); val blobKey = ByteArray(32) { 4 }
+        val sealed = BlobCipher.encrypt(ByteArrayInputStream(pngHeader(20_000, 20_000)), files.file(name), key, blobKey)
+        db.attachmentDao().insert(AttachmentEntity(messageLocalId = 11, blobKey = blobKey, key = key, digest = sealed.sha256,
+            size = sealed.size, mime = "image/png", width = 1, height = 1, thumb = null, file = name, state = AttachmentState.DOWNLOADED))
+        val loader = PhotoLoader(db, files)
+        assertNull(loader.load(11, 4096))
+        assertTrue(loader.isCorrupt(11))
+        assertNull(loader.thumb(pngHeader(20_000, 20_000)))
+        db.close()
+    }
+
+    /** A PNG with only IHDR (+ IEND): enough for inJustDecodeBounds to report the claimed size. */
+    private fun pngHeader(w: Int, h: Int): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        out.write(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A))
+        fun chunk(type: String, data: ByteArray) {
+            out.write(java.nio.ByteBuffer.allocate(4).putInt(data.size).array())
+            val td = type.toByteArray() + data
+            out.write(td)
+            out.write(java.nio.ByteBuffer.allocate(4).putInt(java.util.zip.CRC32().apply { update(td) }.value.toInt()).array())
+        }
+        chunk("IHDR", java.nio.ByteBuffer.allocate(13).putInt(w).putInt(h).put(8).put(2).put(0).put(0).put(0).array())
+        chunk("IEND", ByteArray(0))
+        return out.toByteArray()
+    }
 }

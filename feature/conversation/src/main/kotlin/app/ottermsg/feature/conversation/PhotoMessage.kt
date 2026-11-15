@@ -53,9 +53,11 @@ fun PhotoContent(localId: Long, p: PhotoUi, width: Dp, onDownload: () -> Unit, m
     val maxPx = with(density) { width.roundToPx() }.coerceAtLeast(64)
     var image by remember(localId) { mutableStateOf<ImageBitmap?>(null) }
     var full by remember(localId) { mutableStateOf(false) }
+    var corrupt by remember(localId) { mutableStateOf(false) }
     LaunchedEffect(localId, p.state) {
         if (p.state == PhotoState.Ready || p.state == PhotoState.Uploading) {
             source.load(localId, maxPx)?.let { image = it; full = true; return@LaunchedEffect }
+            corrupt = source.corrupt(localId)
         }
         if (!full) image = source.thumb(localId)
     }
@@ -83,7 +85,7 @@ fun PhotoContent(localId: Long, p: PhotoUi, width: Dp, onDownload: () -> Unit, m
             }
             PhotoState.Gone -> Label(stringResource(R.string.conv_photo_gone))
             PhotoState.NotInBackup -> Label(stringResource(R.string.conv_photo_not_in_backup))
-            PhotoState.Ready -> {}
+            PhotoState.Ready -> if (corrupt) Label(stringResource(R.string.conv_photo_corrupt))
         }
         overlay()
     }

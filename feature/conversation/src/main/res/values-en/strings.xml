@@ -38,6 +38,7 @@
     <string name="conv_photo_download">Download photo</string>
     <string name="conv_photo_failed">Couldn\'t download</string>
     <string name="conv_photo_gone">Photo unavailable</string>
+    <string name="conv_photo_corrupt">Photo is damaged</string>
     <string name="conv_photo_save">Save to gallery</string>
     <string name="conv_photo_saved">Saved to gallery</string>
     <string name="conv_photo_save_failed">Couldn\'t save</string>

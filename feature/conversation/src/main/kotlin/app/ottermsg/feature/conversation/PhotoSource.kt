@@ -9,6 +9,8 @@ import app.ottermsg.core.database.model.AttachmentState
 interface PhotoSource {
     suspend fun load(localId: Long, maxPx: Int): ImageBitmap?
     suspend fun thumb(localId: Long): ImageBitmap?
+    /** The photo is here but cannot be decoded safely (C21): the bubble says «Фото повреждено». */
+    suspend fun corrupt(localId: Long): Boolean = false
 }
 
 object NoPhotos : PhotoSource {
