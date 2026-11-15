@@ -13,6 +13,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -108,6 +109,8 @@ class MessagingDaoTest {
         val s = db.seenEnvelopeDao()
         val key = ByteArray(32) { 7 }
         assertTrue(s.insert(SeenEnvelopeEntity(key, 100)) > 0)
+        assertFalse(s.exists(ByteArray(32) { 9 }))
+        assertTrue(s.exists(key))
         assertEquals(-1L, s.insert(SeenEnvelopeEntity(key, 200)))
         s.prune(now = 150)
         assertTrue(s.insert(SeenEnvelopeEntity(key, 300)) > 0) // pruned, so new again
