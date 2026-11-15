@@ -233,7 +233,7 @@ class FakeNode(private val clock: () -> Long) {
         } }
 
         override suspend fun manifest(): Record { check(); return manifest }
-        override suspend fun directory(): List<Record> { check(); me(); return directoryRecords() }
+        override suspend fun directory(): List<Record> { check(); me(); val d = directoryRecords(); return directoryAnswer?.invoke(d) ?: d }
 
         override suspend fun uploadPrekeys(record: Record) { check(); synchronized(lock) {
             val b = verifyUser(record)
@@ -436,6 +436,8 @@ class FakeNode(private val clock: () -> Long) {
     @Volatile var authAnswer: ((BackupAuthResponse) -> BackupAuthResponse)? = null
     /** Rewrites every backup.fetch answer. */
     @Volatile var fetchAnswer: ((BackupFetchResponse) -> BackupFetchResponse)? = null
+    /** Rewrites every directory answer. */
+    @Volatile var directoryAnswer: ((List<Record>) -> List<Record>)? = null
     /** backup.fetch calls received (an auth_secret left the phone). */
     @Volatile var backupFetches = 0; private set
     private val authFailures = HashMap<String, MutableList<Long>>()

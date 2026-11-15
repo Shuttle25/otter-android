@@ -1,12 +1,14 @@
 package app.ottermsg.core.data
 
 import app.ottermsg.core.crypto.BackupKeys
+import app.ottermsg.core.crypto.Bip39
 import app.ottermsg.core.crypto.Ed25519
 import app.ottermsg.core.crypto.RecordCodec
 import app.ottermsg.core.data.backup.BackupManager
 import app.ottermsg.core.data.backup.RestoreError
 import app.ottermsg.core.data.backup.RestoreManager
 import app.ottermsg.proto.v1.BackupMeta
+import app.ottermsg.proto.v1.DirectoryEntry
 import app.ottermsg.proto.v1.RecordBody
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -104,5 +106,25 @@ class HostileRestoreTest {
         phone.online()
         eventually(what = "the restored phone's backup wins") { node.backupOf(anna.me.userId)!!.version > 5L }
         assertTrue(phone.settings.backupVersion() > 5L)
+    }
+
+    @Test fun wordsRestoreIgnoresForgedDirectoryEntries() = runBlocking<Unit> {
+        anna.register(node.bootstrapLink(), "Анна", "anna").getOrThrow()
+        val genuine = node.directoryRecords().first { RecordBody.parseFrom(it.body).author.toByteArray().contentEquals(anna.me.userId) }
+        val body = RecordBody.parseFrom(genuine.body)
+        val e = DirectoryEntry.parseFrom(body.payload).toBuilder().setUsername("mallory").setDisplayName("Мэллори").setVersion(99).build()
+        val forged = RecordCodec.sign(body.toBuilder().setPayload(e.toByteString()).build(), mallory)
+        val words = Bip39.toMnemonic(anna.seed)
+
+        node.directoryAnswer = { listOf(forged) + it } // the forged entry first
+        val phone = fresh()
+        phone.restore.withWords(node.bootstrapLink(), words).getOrThrow()
+        assertEquals("anna", phone.me.username)
+        assertEquals("Анна", phone.me.displayName)
+
+        node.directoryAnswer = { listOf(forged) }
+        val other = fresh()
+        assertEquals(RestoreError.UnknownAccount, other.restore.withWords(node.bootstrapLink(), words).exceptionOrNull())
+        assertNull(other.db.accountDao().get())
     }
 }

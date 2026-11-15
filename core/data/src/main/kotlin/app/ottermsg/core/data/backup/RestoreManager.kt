@@ -14,6 +14,7 @@ import app.ottermsg.core.data.account.AccountRepository
 import app.ottermsg.core.data.account.SeedVault
 import app.ottermsg.core.data.bs
 import app.ottermsg.core.data.di.AllowPlaintext
+import app.ottermsg.core.data.directory.DirectorySync
 import app.ottermsg.core.data.registration.NodeConnector
 import app.ottermsg.core.data.settings.Settings
 import app.ottermsg.core.database.OtterDatabase
@@ -25,7 +26,6 @@ import app.ottermsg.core.network.RpcException
 import app.ottermsg.proto.v1.BackupMeta
 import app.ottermsg.proto.v1.BackupSnapshot
 import app.ottermsg.proto.v1.BlobMeta
-import app.ottermsg.proto.v1.DirectoryEntry
 import app.ottermsg.proto.v1.Manifest
 import app.ottermsg.proto.v1.Record
 import app.ottermsg.proto.v1.RecordBody
@@ -162,8 +162,10 @@ class RestoreManager @Inject constructor(
                 if (e.status == Status.STATUS_UNAUTHORIZED || e.status == Status.STATUS_RETRY_LATER) throw RestoreError.UnknownAccount
                 throw e
             }
-            api.directory().map { RecordBody.parseFrom(it.body) }.filter { it.type == RecordType.DIRECTORY_ENTRY }
-                .map { DirectoryEntry.parseFrom(it.payload) }.firstOrNull { it.userId.toByteArray().contentEquals(userId) }
+            // C18: only entries that verify like in sync and belong to the key from the words; the newest wins
+            api.directory().mapNotNull { DirectorySync.verifyEntry(it) }
+                .filter { it.userId.toByteArray().contentEquals(userId) && it.accountPub.toByteArray().contentEquals(account.publicKey) }
+                .maxByOrNull { it.version }
         } ?: throw RestoreError.UnknownAccount
         val snapshot = BackupSnapshot.newBuilder().setFormat(SnapshotCodec.FORMAT).setSeed(bs(seed)).setUsername(entry.username)
             .setDisplayName(entry.displayName).setRegisteredMs(entry.registeredMs).setEntryVersion(entry.version.toInt())
