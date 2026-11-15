@@ -1,5 +1,6 @@
 package app.ottermsg.core.data.settings
 
+import app.ottermsg.core.crypto.BackupKeys
 import app.ottermsg.core.database.dao.SettingsDao
 import app.ottermsg.core.database.entity.SettingEntity
 import kotlinx.coroutines.flow.Flow
@@ -77,6 +78,11 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
     suspend fun setBackupError(v: Int) = putInt(BACKUP_ERROR, v)
     fun observeBackupError(): Flow<Int> = observeInt(BACKUP_ERROR, 0)
     fun observeBackupEnabled(): Flow<Boolean> = dao.observe(BACKUP_SECRET).map { it != null }
+    /** Profile of the stored backup keys (C1); P1 for backups made before 0.9.0. */
+    suspend fun backupProfile(): BackupKeys.Profile =
+        dao.get(BACKUP_PROFILE)?.decodeToString()?.let { n -> BackupKeys.Profile.entries.firstOrNull { it.name == n } }
+            ?: BackupKeys.Profile.P1
+    suspend fun setBackupProfile(p: BackupKeys.Profile) = dao.put(SettingEntity(BACKUP_PROFILE, p.name.encodeToByteArray()))
 
     // ---- push (D60/D61) and notifications (D62) ----
     suspend fun pushToken(): String? = dao.get(PUSH_TOKEN)?.decodeToString()
@@ -130,6 +136,7 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
         const val BACKUP_VERSION = "backup_version"
         const val BACKUP_LAST_MS = "backup_last_ms"
         const val BACKUP_ERROR = "backup_error"
+        const val BACKUP_PROFILE = "backup_profile"
         const val PHOTO_AUTO = "photo_auto_download"
         const val PHOTO_GALLERY = "photo_save_gallery"
         const val AUTO_WIFI = 0

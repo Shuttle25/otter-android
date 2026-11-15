@@ -48,7 +48,7 @@ class BackupManager @Inject constructor(
     private val vault: SeedVault, private val online: Provider<OnlineApi>, private val clock: Clock,
 ) {
     /** Key derivation; tests swap in cheap parameters. */
-    internal var derive: (String, ByteArray) -> BackupKeys.Keys = { pw, salt -> BackupKeys.derive(pw, salt) }
+    internal var derive: (String, ByteArray, BackupKeys.Profile) -> BackupKeys.Keys = { pw, salt, p -> BackupKeys.derive(pw, salt, p) }
     private val mutex = Mutex()
     private val running = MutableStateFlow(false)
 
@@ -61,9 +61,11 @@ class BackupManager @Inject constructor(
     suspend fun setPassword(password: String): Int {
         if (PasswordPolicy.check(password) != PasswordPolicy.Result.OK) return ERR_WEAK
         val salt = BackupKeys.newSalt()
-        val keys = withContext(Dispatchers.Default) { derive(password, salt) }
+        val profile = BackupKeys.Profile.CURRENT
+        val keys = withContext(Dispatchers.Default) { derive(password, salt, profile) }
         mutex.withLock {
             settings.setBackupSalt(salt)
+            settings.setBackupProfile(profile)
             settings.setBackupSecret(vault.wrap(keys.backupKey + keys.authSecret))
             settings.setBackupError(0)
         }
@@ -111,8 +113,9 @@ class BackupManager @Inject constructor(
                 }
             }
             val version = settings.backupVersion() + 1
+            val profile = settings.backupProfile()
             val bm = BackupMeta.newBuilder().setVersion(version).setSalt(bs(checkNotNull(settings.backupSalt())))
-                .setKdfMKib(BackupKeys.M_KIB).setKdfT(BackupKeys.T).setKdfP(BackupKeys.P)
+                .setKdfMKib(profile.mKib).setKdfT(profile.t).setKdfP(profile.p)
                 .setAuthVerifier(bs(BackupKeys.Keys(backupKey, authSecret).verifier)).setBlobKey(bs(blobKey)).setSize(file.length()).build()
             api.backupPublish(RecordCodec.sign(RecordCodec.body(RecordType.BACKUP_META, me.userId, bm.toByteArray(), createdMs = clock.now()), me.accountKey))
             settings.setBackupVersion(version)

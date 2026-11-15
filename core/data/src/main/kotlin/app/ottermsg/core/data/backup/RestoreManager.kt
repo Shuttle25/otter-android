@@ -69,8 +69,8 @@ class RestoreManager @Inject constructor(
     private val accounts: AccountRepository, private val settings: Settings, private val clock: Clock,
     @param:AllowPlaintext private val allowPlaintext: Boolean,
 ) : Restorer {
-    /** Key derivation; tests swap in cheap parameters (the node's KDF params are ignored then). */
-    internal var derive: (String, ByteArray, Int, Int, Int) -> BackupKeys.Keys = { pw, salt, m, t, p -> BackupKeys.derive(pw, salt, m, t, p) }
+    /** Key derivation; tests swap in cheap parameters (the profile's numbers are ignored then). */
+    internal var derive: (String, ByteArray, BackupKeys.Profile) -> BackupKeys.Keys = { pw, salt, p -> BackupKeys.derive(pw, salt, p) }
 
     private class Network(val manifest: Manifest, val raw: ByteArray, val networkPub: ByteArray)
 
@@ -103,12 +103,14 @@ class RestoreManager @Inject constructor(
         install(net, d.snapshot, d)
     }
 
-    private class Downloaded(val snapshot: BackupSnapshot, val keys: BackupKeys.Keys, val meta: BackupMeta)
+    private class Downloaded(val snapshot: BackupSnapshot, val keys: BackupKeys.Keys, val meta: BackupMeta, val profile: BackupKeys.Profile)
 
     /** Fetches, verifies and decrypts the backup over one connection (the fetch grant is per connection, D51). */
     private suspend fun download(api: NodeApi, username: String, password: String): Downloaded {
         val auth = api.backupAuth(username)
-        val keys = withContext(Dispatchers.Default) { derive(password, auth.salt.toByteArray(), auth.kdfMKib, auth.kdfT, auth.kdfP) }
+        // C1: the node's numbers only select one of our profiles; anything else ends here, before the password is used
+        val profile = BackupKeys.Profile.match(auth.kdfMKib, auth.kdfT, auth.kdfP, auth.salt.size()) ?: throw RestoreError.Corrupt
+        val keys = withContext(Dispatchers.Default) { derive(password, auth.salt.toByteArray(), profile) }
         val res = api.backupFetch(username, keys.authSecret)
         val metaBody = RecordBody.parseFrom(res.backupMeta.body)
         val meta = BackupMeta.parseFrom(metaBody.payload)
@@ -130,7 +132,7 @@ class RestoreManager @Inject constructor(
             // the snapshot must belong to the account that signed the BACKUP_META
             val author = Ids.id16(SeedKeys.accountKeyPair(snapshot.seed.toByteArray()).publicKey)
             if (snapshot.format != SnapshotCodec.FORMAT || !author.contentEquals(metaBody.author.toByteArray())) throw RestoreError.Corrupt
-            return Downloaded(snapshot, keys, meta)
+            return Downloaded(snapshot, keys, meta, profile)
         } finally { tmp.delete() }
     }
 
@@ -167,6 +169,7 @@ class RestoreManager @Inject constructor(
     /** The restored phone keeps backing up with the same password; versions continue from the restored one. */
     private suspend fun keepBackupOn(d: Downloaded) {
         settings.setBackupSalt(d.meta.salt.toByteArray())
+        settings.setBackupProfile(d.profile)
         settings.setBackupSecret(vault.wrap(d.keys.backupKey + d.keys.authSecret))
         settings.setBackupVersion(d.meta.version)
         settings.setBackupLastMs(0) // back up from this phone at the first session

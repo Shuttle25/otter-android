@@ -394,11 +394,13 @@ class FakeNode(private val clock: () -> Long) {
 
         override suspend fun backupAuth(username: String): BackupAuthResponse { check(); synchronized(lock) {
             val m = backupByName(username)?.second
-            return if (m != null) BackupAuthResponse.newBuilder().setSalt(m.salt).setKdfMKib(m.kdfMKib).setKdfT(m.kdfT).setKdfP(m.kdfP).build()
+            val answer = if (m != null) BackupAuthResponse.newBuilder().setSalt(m.salt).setKdfMKib(m.kdfMKib).setKdfT(m.kdfT).setKdfP(m.kdfP).build()
             else BackupAuthResponse.newBuilder().setSalt(bs(fakeSalt(username))).setKdfMKib(65536).setKdfT(3).setKdfP(1).build()
+            return (authAnswer ?: { it })(answer)
         } }
 
         override suspend fun backupFetch(username: String, authSecret: ByteArray): BackupFetchResponse { check(); synchronized(lock) {
+            backupFetches++
             val now = clock()
             val recent = authFailures.getOrPut(username) { mutableListOf() }.apply { removeAll { it < now - 3_600_000 } }
             if (recent.size >= 5) fail(Status.STATUS_RETRY_LATER, "too many attempts")
@@ -428,6 +430,12 @@ class FakeNode(private val clock: () -> Long) {
 
     // ---- backups (D50–D52) ----
     private val backups = HashMap<String, Pair<Record, BackupMeta>>()
+
+    // ---- hostile node (M9.1): answers rewritten before they leave the node ----
+    /** Rewrites every backup.auth answer. */
+    @Volatile var authAnswer: ((BackupAuthResponse) -> BackupAuthResponse)? = null
+    /** backup.fetch calls received (an auth_secret left the phone). */
+    @Volatile var backupFetches = 0; private set
     private val authFailures = HashMap<String, MutableList<Long>>()
     private val fakeKey = ByteArray(32).also(SecureRandom()::nextBytes)
     private fun fakeSalt(username: String): ByteArray =

@@ -3,6 +3,8 @@ package app.ottermsg.core.crypto
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.security.MessageDigest
 
@@ -27,5 +29,16 @@ class BackupKeysTest {
         val other = BackupKeys.derive("корова-лодка-зима-8", salt, mKib = 1024, t = 1, p = 1)
         assertFalse(k.backupKey.contentEquals(other.backupKey))
         assertEquals(16, BackupKeys.newSalt().size)
+    }
+
+    @Test fun onlyKnownProfilesMatch() {
+        assertEquals(BackupKeys.Profile.P1, BackupKeys.Profile.match(65536, 3, 1, 16))
+        assertNull(BackupKeys.Profile.match(8, 1, 1, 16))          // cheap: offline guessing
+        assertNull(BackupKeys.Profile.match(4_194_304, 3, 1, 16))  // huge: out of memory
+        assertNull(BackupKeys.Profile.match(65536, 1, 1, 16))
+        assertNull(BackupKeys.Profile.match(65536, 3, 4, 16))
+        assertNull(BackupKeys.Profile.match(65536, 3, 1, 8))
+        assertEquals(BackupKeys.Profile.P1, BackupKeys.Profile.CURRENT)
+        assertThrows(IllegalArgumentException::class.java) { BackupKeys.derive("x", ByteArray(15), BackupKeys.Profile.P1) }
     }
 }

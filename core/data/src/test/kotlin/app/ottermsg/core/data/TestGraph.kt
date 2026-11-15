@@ -87,7 +87,7 @@ class TestGraph(
     val guard = app.ottermsg.core.data.backup.InstallGuard(db, accounts, settings, signal, resets, clock, directory)
     val backups = app.ottermsg.core.data.backup.BackupManager(ApplicationProvider.getApplicationContext(), db, accounts, settings,
         SeedVault(XorWrapper), { app.ottermsg.core.data.invite.OnlineApi { session } }, clock)
-        .apply { derive = { pw, salt -> app.ottermsg.core.crypto.BackupKeys.derive(pw, salt, mKib = 1024, t = 1, p = 1) } }
+        .apply { derive = { pw, salt, _ -> app.ottermsg.core.crypto.BackupKeys.derive(pw, salt, mKib = 1024, t = 1, p = 1) } }
     val groups = GroupRepository(db, accounts, applier, outbox, clock)
     val messages = MessageRepository(db, accounts, outbox, clock, files, PhotoPrep(), media, alerts)
     val prekeys = PrekeyRefill(accounts, settings, signal, clock)
@@ -103,7 +103,7 @@ class TestGraph(
     }
     val registration get() = Registration(db, connector, SeedVault(XorWrapper), accounts, settings, clock, allowPlaintext = true)
     val restore get() = app.ottermsg.core.data.backup.RestoreManager(db, connector, SeedVault(XorWrapper), accounts, settings, clock, allowPlaintext = true)
-        .apply { derive = { pw, salt, _, _, _ -> app.ottermsg.core.crypto.BackupKeys.derive(pw, salt, mKib = 1024, t = 1, p = 1) } }
+        .apply { derive = { pw, salt, _ -> app.ottermsg.core.crypto.BackupKeys.derive(pw, salt, mKib = 1024, t = 1, p = 1) } }
     /** The engine's own connections (start / acquire) reach [node] through this. */
     val transport = FakeNodeTransport(node)
     val manifests = app.ottermsg.core.data.sync.ManifestUpdater(db.manifestDao(), settings, clock)
