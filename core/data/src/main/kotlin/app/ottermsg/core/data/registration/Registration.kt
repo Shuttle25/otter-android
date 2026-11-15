@@ -120,9 +120,13 @@ class Registration @Inject constructor(
             settings.setNetworkPub(networkPub)
             db.manifestDao().insert(ManifestEntity(manifest.version, bundle.manifest.toByteArray(), receivedMs = now))
             mem.copyInto(RoomSignalKeyValue(db.signalKvDao()))
-            if (!bundle.inviterUserId.isEmpty) db.contactDao().upsert(ContactEntity(
-                bundle.inviterUserId.toByteArray(), "", bundle.inviterName, bundle.inviterAccountPub.toByteArray(),
-                bundle.inviterIdentityPub.toByteArray(), verified = true, identityChanged = false, revoked = false, entryVersion = 0))
+            // C23: the link's inviter fields are not signed. Keep them only as a placeholder (name in the chat list):
+            // entryVersion 0 = "only from a link", never verified; the directory entry replaces it.
+            val inviterPub = bundle.inviterAccountPub.toByteArray()
+            if (!bundle.inviterUserId.isEmpty && inviterPub.size == 32 &&
+                bundle.inviterUserId.toByteArray().contentEquals(Ids.id16(inviterPub))) db.contactDao().upsert(ContactEntity(
+                bundle.inviterUserId.toByteArray(), "", bundle.inviterName, inviterPub,
+                bundle.inviterIdentityPub.toByteArray(), verified = false, identityChanged = false, revoked = false, entryVersion = 0))
         }
         accounts.load()
     }

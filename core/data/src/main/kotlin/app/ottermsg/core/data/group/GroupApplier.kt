@@ -89,10 +89,11 @@ class GroupApplier @Inject constructor(
     private suspend fun signerKey(signer: ByteArray, api: NodeApi?): ByteArray? {
         val me = accounts.require()
         if (signer.contentEquals(me.userId)) return me.accountKey.publicKey
-        contacts.get(signer)?.let { return it.accountPub }
+        // a link-only contact (C23) is not trusted to sign group states
+        contacts.get(signer)?.takeIf { it.entryVersion > 0 }?.let { return it.accountPub }
         if (api == null) return null
         try { directory.sync(api) } catch (e: CancellationException) { throw e } catch (e: Exception) { return null }
-        return contacts.get(signer)?.accountPub
+        return contacts.get(signer)?.takeIf { it.entryVersion > 0 }?.accountPub
     }
 
     private suspend fun park(gid: ByteArray, signed: SignedGroupState, from: ByteArray) {

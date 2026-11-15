@@ -60,11 +60,12 @@ class MailboxReceiver @Inject constructor(
             val key = body.author.toByteArray() + body.id.toByteArray()
             // Only verified, processed envelopes are ever in `seen` (C15): a hit is a redelivery we already handled.
             if (seen.exists(key)) { acks += key; continue }
-            var sender = contacts.get(body.author.toByteArray())
+            // a link-only contact (C23) is not trusted to sign envelopes
+            var sender = contacts.get(body.author.toByteArray())?.takeIf { it.entryVersion > 0 }
             if (sender == null && !directorySynced) {
                 directorySynced = true
                 runCatching { directory.sync(api) }.onFailure { if (it is CancellationException) throw it }
-                sender = contacts.get(body.author.toByteArray())
+                sender = contacts.get(body.author.toByteArray())?.takeIf { it.entryVersion > 0 }
             }
             if (sender == null) continue // keep it on the node; retry on a later delivery
             if (!RecordCodec.verify(rec, sender.accountPub)) {
