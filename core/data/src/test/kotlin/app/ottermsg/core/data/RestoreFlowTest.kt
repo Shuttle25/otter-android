@@ -83,7 +83,7 @@ class RestoreFlowTest {
         eventually(what = "restored anna reads the group") { "в группе от бориса" in restored.groupTexts(gid) }
         restored.messages.sendText(restored.db.conversationDao().byGroup(gid)!!.id, "в группе от анны")
         eventually(what = "boris reads the group") { "в группе от анны" in boris.groupTexts(gid) }
-        eventually(what = "restored phone backs up with the same password") { node.backupOf(anna.me.userId)!!.version == 2L }
+        eventually(what = "restored phone backs up with the same password") { node.backupOf(anna.me.userId)!!.version > 1L }
 
         anna.online() // the old phone comes back
         eventually(what = "old phone superseded") { anna.settings.superseded() }

@@ -412,7 +412,7 @@ class FakeNode(private val clock: () -> Long) {
             val blobKey = cur.second.blobKey.toByteArray()
             val blob = blobs[blobKey.hex()] ?: fail(Status.STATUS_RETRY_LATER, "backup not replicated here yet")
             grantBlob = blobKey
-            return BackupFetchResponse.newBuilder().setBackupMeta(cur.first).setBlobMeta(blob.record).build()
+            return (fetchAnswer ?: { it })(BackupFetchResponse.newBuilder().setBackupMeta(cur.first).setBlobMeta(blob.record).build())
         } }
 
         override suspend fun backupPublish(meta: Record) { check(); synchronized(lock) {
@@ -434,6 +434,8 @@ class FakeNode(private val clock: () -> Long) {
     // ---- hostile node (M9.1): answers rewritten before they leave the node ----
     /** Rewrites every backup.auth answer. */
     @Volatile var authAnswer: ((BackupAuthResponse) -> BackupAuthResponse)? = null
+    /** Rewrites every backup.fetch answer. */
+    @Volatile var fetchAnswer: ((BackupFetchResponse) -> BackupFetchResponse)? = null
     /** backup.fetch calls received (an auth_secret left the phone). */
     @Volatile var backupFetches = 0; private set
     private val authFailures = HashMap<String, MutableList<Long>>()

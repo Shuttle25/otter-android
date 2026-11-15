@@ -2,13 +2,17 @@ package app.ottermsg.core.data
 
 import app.ottermsg.core.crypto.BackupKeys
 import app.ottermsg.core.crypto.Ed25519
+import app.ottermsg.core.crypto.RecordCodec
 import app.ottermsg.core.data.backup.BackupManager
 import app.ottermsg.core.data.backup.RestoreError
 import app.ottermsg.core.data.backup.RestoreManager
+import app.ottermsg.proto.v1.BackupMeta
+import app.ottermsg.proto.v1.RecordBody
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -56,5 +60,49 @@ class HostileRestoreTest {
 
         node.authAnswer = null
         fresh().counting().withPassword(link, "anna", pw).getOrThrow() // the honest answer still restores
+    }
+
+    private fun resignedMeta(rec: app.ottermsg.proto.v1.Record, key: Ed25519.KeyPair, edit: (BackupMeta.Builder) -> Unit): app.ottermsg.proto.v1.Record {
+        val body = RecordBody.parseFrom(rec.body)
+        val m = BackupMeta.parseFrom(body.payload).toBuilder().also(edit).build()
+        return RecordCodec.sign(body.toBuilder().setPayload(m.toByteString()).build(), key)
+    }
+
+    @Test fun swappedOrForgedMetaIsCorruptAndNothingIsInstalled() = runBlocking<Unit> {
+        annaBacksUp()
+        val link = node.bootstrapLink()
+        val otherSalt = bs(ByteArray(16) { 1 })
+        val cases = listOf<(app.ottermsg.proto.v1.BackupFetchResponse) -> app.ottermsg.proto.v1.BackupFetchResponse>(
+            // a node swaps the salt and re-signs with its own key
+            { r -> r.toBuilder().setBackupMeta(resignedMeta(r.backupMeta, mallory) { it.setSalt(otherSalt) }).build() },
+            // a genuinely signed but different meta (an older password's salt)
+            { r -> r.toBuilder().setBackupMeta(resignedMeta(r.backupMeta, anna.me.accountKey) { it.setSalt(otherSalt) }).build() },
+            // the blob meta re-signed by another key (same chunk hashes)
+            { r -> r.toBuilder().setBlobMeta(RecordCodec.sign(RecordBody.parseFrom(r.blobMeta.body), mallory)).build() },
+            // a blob meta of another blob of the same author
+            { r -> r.toBuilder().setBlobMeta(RecordCodec.sign(RecordBody.parseFrom(r.blobMeta.body).toBuilder()
+                .setId(bs(ByteArray(16) { 3 })).build(), anna.me.accountKey)).build() },
+        )
+        for (lie in cases) {
+            node.fetchAnswer = lie
+            val phone = fresh()
+            assertEquals(RestoreError.Corrupt, phone.counting().withPassword(link, "anna", pw).exceptionOrNull())
+            assertNull(phone.db.accountDao().get())
+            assertNull(phone.settings.backupSecret())
+        }
+        node.fetchAnswer = null
+        fresh().counting().withPassword(link, "anna", pw).getOrThrow()
+    }
+
+    @Test fun restoredPhonesNextBackupWinsOverANewerOne() = runBlocking<Unit> {
+        annaBacksUp() // version 1 on the node
+        val phone = fresh()
+        phone.counting().withPassword(node.bootstrapLink(), "anna", pw).getOrThrow()
+        // other nodes had a newer backup than the one this node served
+        anna.online(); anna.settings.setBackupVersion(4); assertEquals(BackupManager.OK, anna.backups.runNow()); anna.offline()
+        assertEquals(5L, node.backupOf(anna.me.userId)!!.version)
+        phone.online()
+        eventually(what = "the restored phone's backup wins") { node.backupOf(anna.me.userId)!!.version > 5L }
+        assertTrue(phone.settings.backupVersion() > 5L)
     }
 }

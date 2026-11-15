@@ -7,6 +7,7 @@ import app.ottermsg.core.crypto.BlobCipher
 import app.ottermsg.core.crypto.Ids
 import app.ottermsg.core.crypto.InviteLink
 import app.ottermsg.core.crypto.ManifestVerifier
+import app.ottermsg.core.crypto.RecordCodec
 import app.ottermsg.core.crypto.SeedKeys
 import app.ottermsg.core.data.Clock
 import app.ottermsg.core.data.account.AccountRepository
@@ -26,6 +27,7 @@ import app.ottermsg.proto.v1.BackupSnapshot
 import app.ottermsg.proto.v1.BlobMeta
 import app.ottermsg.proto.v1.DirectoryEntry
 import app.ottermsg.proto.v1.Manifest
+import app.ottermsg.proto.v1.Record
 import app.ottermsg.proto.v1.RecordBody
 import app.ottermsg.proto.v1.RecordType
 import app.ottermsg.proto.v1.Status
@@ -114,7 +116,11 @@ class RestoreManager @Inject constructor(
         val res = api.backupFetch(username, keys.authSecret)
         val metaBody = RecordBody.parseFrom(res.backupMeta.body)
         val meta = BackupMeta.parseFrom(metaBody.payload)
-        val blob = BlobMeta.parseFrom(RecordBody.parseFrom(res.blobMeta.body).payload)
+        val blobBody = RecordBody.parseFrom(res.blobMeta.body)
+        val blob = BlobMeta.parseFrom(blobBody.payload)
+        // the blob meta must be the one the backup meta names, and no bigger than a blob can be (D44)
+        if (!(blobBody.author.toByteArray() + blobBody.id.toByteArray()).contentEquals(meta.blobKey.toByteArray()) ||
+            blob.chunkSha256Count > MAX_CHUNKS) throw RestoreError.Corrupt
         val tmp = File.createTempFile("restore", ".otb")
         try {
             tmp.outputStream().buffered().use { out ->
@@ -129,12 +135,20 @@ class RestoreManager @Inject constructor(
                     BlobCipher.decrypt(tmp, keys.backupKey, meta.blobKey.toByteArray()).use { SnapshotCodec.gunzip(it) }
                 } catch (e: IOException) { throw RestoreError.Corrupt } catch (e: GeneralSecurityException) { throw RestoreError.Corrupt }
             }
-            // the snapshot must belong to the account that signed the BACKUP_META
-            val author = Ids.id16(SeedKeys.accountKeyPair(snapshot.seed.toByteArray()).publicKey)
-            if (snapshot.format != SnapshotCodec.FORMAT || !author.contentEquals(metaBody.author.toByteArray())) throw RestoreError.Corrupt
+            // C13: both records signed by the account in the snapshot; the signed meta names our salt and profile
+            val account = SeedKeys.accountKeyPair(snapshot.seed.toByteArray())
+            val author = Ids.id16(account.publicKey)
+            if (snapshot.format != SnapshotCodec.FORMAT ||
+                !signedBy(res.backupMeta, metaBody, RecordType.BACKUP_META, account.publicKey, author) ||
+                !signedBy(res.blobMeta, blobBody, RecordType.BLOB_META, account.publicKey, author) ||
+                meta.salt != auth.salt ||
+                BackupKeys.Profile.match(meta.kdfMKib, meta.kdfT, meta.kdfP, meta.salt.size()) != profile) throw RestoreError.Corrupt
             return Downloaded(snapshot, keys, meta, profile)
         } finally { tmp.delete() }
     }
+
+    private fun signedBy(rec: Record, body: RecordBody, type: RecordType, pub: ByteArray, author: ByteArray) =
+        body.type == type && body.author.toByteArray().contentEquals(author) && RecordCodec.verify(rec, pub)
 
     override suspend fun withWords(link: String, words: List<String>): Result<Unit> = guarded {
         check(accounts.account.value == null) { "an account is already installed" }
@@ -166,12 +180,15 @@ class RestoreManager @Inject constructor(
         keepBackupOn(d)
     }
 
-    /** The restored phone keeps backing up with the same password; versions continue from the restored one. */
+    /**
+     * The restored phone keeps backing up with the same password. Versions continue from max(restored, now): a node
+     * that served an older backup must not make this phone's next backups lose to a newer one (D87).
+     */
     private suspend fun keepBackupOn(d: Downloaded) {
         settings.setBackupSalt(d.meta.salt.toByteArray())
         settings.setBackupProfile(d.profile)
         settings.setBackupSecret(vault.wrap(d.keys.backupKey + d.keys.authSecret))
-        settings.setBackupVersion(d.meta.version)
+        settings.setBackupVersion(maxOf(d.meta.version, clock.now()))
         settings.setBackupLastMs(0) // back up from this phone at the first session
     }
 
@@ -190,5 +207,10 @@ class RestoreManager @Inject constructor(
             if (d != null) keepBackupOn(d)
         }
         accounts.load()
+    }
+
+    companion object {
+        /** 100 MiB in 256 KiB chunks (D44). */
+        const val MAX_CHUNKS = 400
     }
 }
