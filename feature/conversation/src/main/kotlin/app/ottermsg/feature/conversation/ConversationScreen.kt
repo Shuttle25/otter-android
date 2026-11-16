@@ -266,6 +266,7 @@ fun ConversationScreen(
             if (ui.canWrite) MessageComposer(text, sending, onText, onSend, Modifier.navigationBarsPadding().imePadding(),
                 onPickPhoto = photoActions.onPick, onTakePhoto = photoActions.onCamera)
             else if (ui.peerRemoved) PeerRemovedNotice(Modifier.navigationBarsPadding())
+            else if (ui.peerRekeying) ComposerNotice(R.string.conv_peer_rekeying, Modifier.navigationBarsPadding())
             else if (!ui.isNews) NotMemberNotice(Modifier.navigationBarsPadding())
         },
     ) { padding ->

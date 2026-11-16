@@ -9,6 +9,7 @@ import app.ottermsg.core.data.media.MediaFiles
 import app.ottermsg.core.data.media.MediaTransfers
 import app.ottermsg.core.data.media.PhotoPrep
 import app.ottermsg.core.data.push.MessageAlerts
+import app.ottermsg.core.data.settings.Settings
 import app.ottermsg.core.database.entity.AttachmentEntity
 import app.ottermsg.core.database.model.AttachmentState
 import app.ottermsg.proto.v1.Record
@@ -58,9 +59,15 @@ interface ConversationStore {
     suspend fun markConversationRead(conversationId: Long)
     /** Group conversations: the group and its members (null for direct chats). */
     fun observeGroup(conversationId: Long): Flow<GroupView?> = flowOf(null)
+    /** Every account ever accepted, removed and re-keyed ones too (the authors' names of old messages). */
     fun observeContacts(): Flow<List<ContactEntity>> = flowOf(emptyList())
     /** Hex user ids of removed members (D104). */
     fun observeRevokedIds(): Flow<Set<String>> = flowOf(emptySet())
+    /**
+     * Hex user ids revoked for a re-key (D111 step 1) still waiting for the REKEY (at most GroupRevocations.REKEY_WAIT_MS)
+     * or whose REKEY waits for the new account's entry: their chats are paused, not «removed».
+     */
+    fun observeRekeyingIds(): Flow<Set<String>> = flowOf(emptySet())
     suspend fun myId(): ByteArray = ByteArray(0)
     /** Message info (D23): the frozen recipients of an outgoing group message with their receipt times. */
     fun observeRecipients(localId: Long): Flow<List<RecipientStatus>> = flowOf(emptyList())
@@ -74,6 +81,7 @@ class MessageRepository @Inject constructor(
     private val db: OtterDatabase, private val accounts: AccountRepository, private val outbox: Outbox, private val clock: Clock,
     private val files: MediaFiles, private val prep: PhotoPrep, private val media: MediaTransfers,
     private val alerts: MessageAlerts = MessageAlerts.NONE,
+    private val settings: Settings = Settings(db.settingsDao()),
 ) : ConversationStore {
     private val conversations = db.conversationDao()
     private val messages = db.messageDao()
@@ -89,7 +97,11 @@ class MessageRepository @Inject constructor(
         val gid = c?.groupId ?: return@flatMapLatest flowOf(null)
         combine(db.groupDao().observe(gid), db.groupDao().observeMembers(gid)) { g, ms -> g?.let { GroupView(it, ms) } }
     }
-    override fun observeContacts(): Flow<List<ContactEntity>> = contacts.observeAll()
+    override fun observeContacts(): Flow<List<ContactEntity>> = contacts.observeAllKnown()
+    override fun observeRekeyingIds(): Flow<Set<String>> =
+        combine(settings.observeRekeyWaiting(), db.rekeyDao().observeOldIds()) { waiting, rekeyed ->
+            waiting + rekeyed.map { id -> id.joinToString("") { "%02x".format(it) } }
+        }
     override fun observeRevokedIds(): Flow<Set<String>> =
         contacts.observeRevokedIds().map { l -> l.map { id -> id.joinToString("") { "%02x".format(it) } }.toSet() }
     override suspend fun myId(): ByteArray = accounts.require().userId

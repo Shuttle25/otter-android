@@ -19,6 +19,7 @@
     <string name="conv_info">Сведения</string>
     <string name="conv_not_member">Вы больше не участник этой группы</string>
     <string name="conv_peer_removed">Участник удалён</string>
+    <string name="conv_peer_rekeying">Отправка приостановлена: у собеседника меняется ключ безопасности</string>
     <string name="conv_member_removed">Участник удалён</string>
     <string name="conv_member_duplicate">Приглашение использовали дважды, этот аккаунт отключён</string>
     <plurals name="conv_members">

@@ -9,6 +9,7 @@ import app.ottermsg.core.database.entity.RekeyEntity
     @Query("SELECT * FROM rekeys WHERE old_user_id = :old") suspend fun get(old: ByteArray): RekeyEntity?
     @Query("SELECT * FROM rekeys") suspend fun all(): List<RekeyEntity>
     @Query("SELECT * FROM rekeys WHERE applied_ms = 0") suspend fun pending(): List<RekeyEntity>
+    @Query("SELECT old_user_id FROM rekeys") fun observeOldIds(): kotlinx.coroutines.flow.Flow<List<ByteArray>>
     @Upsert suspend fun upsert(r: RekeyEntity)
     @Query("UPDATE rekeys SET applied_ms = :ms WHERE old_user_id = :old") suspend fun markApplied(old: ByteArray, ms: Long)
 }

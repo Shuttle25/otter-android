@@ -69,6 +69,11 @@ data class ConversationUi(
     val peerId: ByteArray = ByteArray(0),
     /** 1:1 chat with a removed member (D104): «Участник удалён» instead of the composer, no call button. */
     val peerRemoved: Boolean = false,
+    /**
+     * 1:1 chat with a contact revoked for a re-key (D111 step 1) whose REKEY has not moved the chat yet: «Отправка
+     * приостановлена» instead of the composer, no call button. Not a removal: no «Участник удалён».
+     */
+    val peerRekeying: Boolean = false,
 ) {
     fun nameOf(id: ByteArray): String = names[id.hex()] ?: "?"
 }
@@ -87,13 +92,15 @@ internal fun ByteArray.hex() = joinToString("") { "%02x".format(it) }
 /** Pure mapping, unit-tested. */
 fun conversationUi(
     conv: ConversationEntity?, msgs: List<MessageEntity>, group: GroupView?, contacts: List<ContactEntity>, me: ByteArray, zone: ZoneId,
-    attachments: Map<Long, AttachmentEntity> = emptyMap(), revoked: Set<String> = emptySet(),
+    attachments: Map<Long, AttachmentEntity> = emptyMap(), revoked: Set<String> = emptySet(), rekeying: Set<String> = emptySet(),
 ): ConversationUi {
     val title = conv?.title.orEmpty()
     val names = contacts.associate { it.userId.hex() to it.displayName }
     val isGroup = conv?.groupId != null
     val isNews = conv?.type == ConversationType.NEWS
-    val peerRemoved = !isGroup && !isNews && conv?.peerUserId?.hex() in revoked
+    val peerRevoked = !isGroup && !isNews && conv?.peerUserId?.hex() in revoked
+    val peerRekeying = peerRevoked && conv?.peerUserId?.hex() in rekeying
+    val peerRemoved = peerRevoked && !peerRekeying
     val list = msgs.map {
         val author = when {
             it.outgoing -> ""
@@ -116,10 +123,10 @@ fun conversationUi(
             it.kind != MessageKind.SYSTEM_MEMBER && it.kind != MessageKind.SYSTEM_KEY_CHANGED }?.localId,
         isGroup = isGroup, family = group?.group?.family == true, groupIdHex = conv?.groupId?.hex().orEmpty(),
         memberCount = group?.members?.size ?: 0,
-        canWrite = !isNews && !peerRemoved && (!isGroup || group?.group?.iAmMember == true),
+        canWrite = !isNews && !peerRevoked && (!isGroup || group?.group?.iAmMember == true),
         me = me, names = names, isNews = isNews,
-        canCall = !isGroup && !isNews && !peerRemoved && conv?.peerUserId != null, peerId = conv?.peerUserId ?: ByteArray(0),
-        peerRemoved = peerRemoved)
+        canCall = !isGroup && !isNews && !peerRevoked && conv?.peerUserId != null, peerId = conv?.peerUserId ?: ByteArray(0),
+        peerRemoved = peerRemoved, peerRekeying = peerRekeying)
 }
 
 @OptIn(FlowPreview::class)
@@ -145,8 +152,8 @@ class ConversationViewModel @Inject constructor(
             store.observeConversation(conversationId), store.observeMessages(conversationId), store.observeGroup(conversationId),
             store.observeContacts(), flow { emit(store.myId()) },
         ) { conv, msgs, group, contacts, me -> Parts(conv, msgs, group, contacts, me) },
-        photos.observe(conversationId), store.observeRevokedIds(),
-    ) { p, att, rev -> conversationUi(p.conv, p.msgs, p.group, p.contacts, p.me, zone, att, rev) }
+        photos.observe(conversationId), store.observeRevokedIds(), store.observeRekeyingIds(),
+    ) { p, att, rev, rekeying -> conversationUi(p.conv, p.msgs, p.group, p.contacts, p.me, zone, att, rev, rekeying) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ConversationUi())
 
     /** Decoded images for the bubbles (no Room or crypto in composables). */

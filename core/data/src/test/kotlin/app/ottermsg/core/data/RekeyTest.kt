@@ -6,7 +6,9 @@ import app.ottermsg.core.crypto.InviteKeys
 import app.ottermsg.core.crypto.RecordCodec
 import app.ottermsg.core.crypto.SeedKeys
 import app.ottermsg.core.crypto.SigContext
+import app.ottermsg.core.data.directory.ContactRepository
 import app.ottermsg.core.data.directory.Membership
+import app.ottermsg.core.data.group.GroupRevocations
 import app.ottermsg.core.database.model.MessageKind
 import app.ottermsg.core.database.model.MessageStatus
 import app.ottermsg.core.signal.IdentityKeys
@@ -16,6 +18,7 @@ import app.ottermsg.proto.v1.Record
 import app.ottermsg.proto.v1.RecordBody
 import app.ottermsg.proto.v1.RecordType
 import app.ottermsg.proto.v1.Rekey
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -236,5 +239,89 @@ class RekeyTest {
         g.register(node.bootstrapLink(), "Я", "me_user").getOrThrow()
         g.directory.apply(listOf(member(3, "me_user"), rekey(g.me.userId, uid(3))))
         assertTrue(g.settings.accountRevoked())
+    }
+
+    private suspend fun memberLines(cid: Long) = g.db.messageDao().forConversation(cid).filter { it.kind == MessageKind.SYSTEM_MEMBER }
+    private fun ByteArray.hex() = joinToString("") { "%02x".format(it) }
+    private suspend fun syncFromNode() { if (g.session == null) g.online(); g.directory.sync(g.session!!) }
+
+    /** Group messages the old account sent before the re-key keep its name (the old contact is revoked, not forgotten). */
+    @Test fun oldSendersKeepTheirName() = runBlocking {
+        g.register(node.bootstrapLink(), "Я", "me_user").getOrThrow()
+        g.directory.apply(listOf(member(2, "bob")))
+        g.directory.apply(listOf(member(3, "bob"), rekey(uid(2), uid(3))))
+        assertTrue(g.db.contactDao().get(uid(2))!!.revoked)
+        val inChat = g.messages.observeContacts().first().associate { it.userId.hex() to it.displayName }
+        assertEquals("BOB", inChat[uid(2).hex()])
+        assertEquals("BOB", inChat[uid(3).hex()])
+        val inList = ContactRepository(g.db.contactDao()).observeNames().first()
+        assertEquals("BOB", inList[uid(2).hex()])
+        // the new-chat and new-group pickers still list only live members
+        assertTrue(ContactRepository(g.db.contactDao()).observeContacts().first().none { it.userId.contentEquals(uid(2)) })
+    }
+
+    /**
+     * Step 1 of `otter-admin user rekey` (REVOCATION reason "rekey") is not a removal: no «Участник удалён» line, the chat
+     * shows sending as paused until the REKEY moves it to the new account.
+     */
+    @Test fun rekeyRevocationIsNotARemoval() = runBlocking {
+        g.register(node.bootstrapLink(), "Я", "me_user").getOrThrow()
+        val bob = member(2, "bob")
+        val newBob = member(3, "bob")
+        node.directoryAnswer = { d -> d + bob }
+        syncFromNode()
+        val cid = g.db.conversationDao().getOrCreateDirect(uid(2), "BOB", clock.now())
+        node.revoke(uid(2), reason = "rekey")
+        syncFromNode()
+        assertTrue(g.db.contactDao().get(uid(2))!!.revoked) // nothing is sent to the lost key meanwhile
+        assertEquals(0, memberLines(cid).size)
+        assertTrue(uid(2).hex() in g.messages.observeRekeyingIds().first())
+
+        clock.advance(3600_000)
+        node.rekey(uid(2), uid(3))
+        node.directoryAnswer = { d -> d + bob + newBob }
+        syncFromNode()
+        assertEquals(cid, g.db.conversationDao().byPeer(uid(3))!!.id)
+        assertEquals(0, memberLines(cid).size)
+        assertEquals(1, keyChangedLines(cid))
+        clock.advance(GroupRevocations.REKEY_WAIT_MS + 1)
+        syncFromNode()
+        assertEquals(0, memberLines(cid).size) // the REKEY came: never a removal
+    }
+
+    /** Without a REKEY within REKEY_WAIT_MS the re-key revocation is an ordinary removal, line written once. */
+    @Test fun rekeyRevocationWithoutRekeyBecomesARemoval() = runBlocking {
+        g.register(node.bootstrapLink(), "Я", "me_user").getOrThrow()
+        val bob = member(2, "bob")
+        node.directoryAnswer = { d -> d + bob }
+        syncFromNode()
+        val cid = g.db.conversationDao().getOrCreateDirect(uid(2), "BOB", clock.now())
+        node.revoke(uid(2), reason = "rekey")
+        syncFromNode()
+        clock.advance(GroupRevocations.REKEY_WAIT_MS - 1000)
+        syncFromNode()
+        assertEquals(0, memberLines(cid).size)
+        clock.advance(2000)
+        syncFromNode()
+        assertEquals(listOf("revoked"), memberLines(cid).map { it.systemData!!.decodeToString() })
+        assertFalse(uid(2).hex() in g.messages.observeRekeyingIds().first())
+        syncFromNode()
+        assertEquals(1, memberLines(cid).size)
+    }
+
+    /** An ordinary REVOCATION still writes the line at once, and a late-seen expired re-key revocation does too. */
+    @Test fun ordinaryAndExpiredRevocationsWriteTheLine() = runBlocking {
+        g.register(node.bootstrapLink(), "Я", "me_user").getOrThrow()
+        val ann = member(4, "ann")
+        val bob = member(2, "bob")
+        node.directoryAnswer = { d -> d + ann + bob }
+        syncFromNode()
+        val annCid = g.db.conversationDao().getOrCreateDirect(uid(4), "ANN", clock.now())
+        val bobCid = g.db.conversationDao().getOrCreateDirect(uid(2), "BOB", clock.now())
+        node.revoke(uid(4))
+        node.revoke(uid(2), reason = "rekey", createdMs = clock.now() - GroupRevocations.REKEY_WAIT_MS - 1) // phone was away
+        syncFromNode()
+        assertEquals(1, memberLines(annCid).size)
+        assertEquals(1, memberLines(bobCid).size)
     }
 }

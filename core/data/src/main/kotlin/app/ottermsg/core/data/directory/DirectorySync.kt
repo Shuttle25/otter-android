@@ -7,6 +7,7 @@ import app.ottermsg.core.crypto.SigContext
 import app.ottermsg.core.data.Clock
 import app.ottermsg.core.data.account.AccountRepository
 import app.ottermsg.core.data.account.LocalAccount
+import app.ottermsg.core.data.group.GroupRevocations
 import app.ottermsg.core.data.settings.Settings
 import app.ottermsg.core.database.dao.AccountDao
 import app.ottermsg.core.database.dao.ContactDao
@@ -68,11 +69,12 @@ class DirectorySync @Inject constructor(
             ?.foundingMembersList?.map { it.toByteArray().hex() }?.toSet().orEmpty()
         val revokedAt = HashMap<String, Long>() // earliest network-signed revocation per user
         val forRekey = HashMap<String, Long>() // revoked for a re-key (D111 step 1): groups wait for the REKEY (D112)
+        val outright = HashSet<String>() // revoked for any other reason: removed at once
         val rights = HashMap<String, MutableList<RightsRecord>>()
         for (rec in records) {
             Membership.revocation(rec, networkPub, ctx)?.let { r ->
                 revokedAt.merge(r.userId.hex(), r.createdMs, ::minOf)
-                if (r.reason == REKEY_REASON) forRekey.merge(r.userId.hex(), r.createdMs, ::minOf)
+                if (r.reason == REKEY_REASON) forRekey.merge(r.userId.hex(), r.createdMs, ::minOf) else outright += r.userId.hex()
             }
             Membership.rights(rec, networkPub, ctx)?.let { r -> rights.getOrPut(r.userId.hex()) { mutableListOf() } += r }
         }
@@ -82,6 +84,8 @@ class DirectorySync @Inject constructor(
         stored.forEach { k -> revokedAt.merge(k.oldUserId.hex(), k.revokedMs, ::minOf) }
         val rekeyed = stored.map { it.oldUserId.hex() }.toSet()
         val successors = stored.map { it.newUserId.hex() }.toSet()
+        // revoked only for a re-key: not a removal while the REKEY is awaited (the expiry below decides, once)
+        val awaitingRekey = (settings.rekeyRevocations().keys + forRekey.keys) - outright - settings.rekeyWaitOver()
         val known = contacts.all().associateBy { it.userId.hex() }
         val entries = records.mapNotNull { verifyEntry(it, ctx) }
         // Losers of a doubly redeemed invite, and every account invited through one at any depth, are disabled (like
@@ -144,22 +148,42 @@ class DirectorySync @Inject constructor(
             if (revoked && old?.revoked != true && userId.hex() !in rekeyed) { // a re-key shows its own line
                 // the inviter of a doubly used link learns which account was disabled; a removal shows in an open chat
                 if (dup != null) { if (dup.inviter.contentEquals(me.userId)) memberLine(userId, e.displayName, DUPLICATE, create = true) }
-                else memberLine(userId, e.displayName, REVOKED, create = false)
+                else if (userId.hex() !in awaitingRekey) memberLine(userId, e.displayName, REVOKED, create = false)
             }
         }
         // a revocation, or a duplicate loser upstream, of a contact whose entry is not in this batch
         for (c in contacts.all()) {
             if (c.revoked || (c.userId.hex() !in revokedAt && c.userId.hex() !in disabled)) continue
             contacts.upsert(c.copy(revoked = true))
-            if (c.userId.hex() !in rekeyed) memberLine(c.userId, c.displayName, REVOKED, create = false)
+            if (c.userId.hex() !in rekeyed && c.userId.hex() !in awaitingRekey) memberLine(c.userId, c.displayName, REVOKED, create = false)
         }
         // our own network-signed REVOCATION (or our redemption lost a doubly used invite, as on every node): disabled
         if (me.userId.hex() in revokedAt || me.userId.hex() in disabled) settings.setAccountRevoked(true)
         settings.addRekeyRevocations(forRekey)
+        expireRekeyWaits(rekeyed, outright)
         settings.setDuplicateLosers(losers.keys)
         val contactIds = contacts.all().map { it.userId.hex() }.toSet()
         settings.setContactInviters(inviters.filterKeys { it in contactIds })
         rekeys.applyPending(me.userId) // D111: chats move once the new account's entry is known
+    }
+
+    /**
+     * A REVOCATION with reason "rekey" waits at most [GroupRevocations.REKEY_WAIT_MS] for its REKEY (as groups do, D112);
+     * past that, with no REKEY, it is an ordinary removal and the «Участник удалён» line is written now, once. Accounts
+     * also revoked outright were handled as removals already and are only marked.
+     */
+    private suspend fun expireRekeyWaits(rekeyed: Set<String>, outright: Set<String>) {
+        val over = settings.rekeyWaitOver()
+        val now = clock.now()
+        val ended = settings.rekeyRevocations().filter { (u, ms) ->
+            u !in over && u !in rekeyed && (u in outright || now - ms >= GroupRevocations.REKEY_WAIT_MS)
+        }.keys
+        if (ended.isEmpty()) return
+        for (c in contacts.all()) {
+            val u = c.userId.hex()
+            if (u in ended && u !in outright && c.revoked) memberLine(c.userId, c.displayName, REVOKED, create = false)
+        }
+        settings.addRekeyWaitOver(ended)
     }
 
     /**
