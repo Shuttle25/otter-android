@@ -149,7 +149,7 @@ class RegistrationTest {
         val forged = e.toBuilder().setUserId(bs(app.ottermsg.core.crypto.Ids.id16(other.publicKey))).setAccountPub(bs(other.publicKey))
             .setUsername("thief").build()
         val rec = app.ottermsg.core.crypto.RecordCodec.sign(app.ottermsg.core.crypto.RecordCodec.body(app.ottermsg.proto.v1.RecordType.DIRECTORY_ENTRY,
-            app.ottermsg.core.crypto.Ids.id16(other.publicKey), forged.toByteArray(), createdMs = clock.now()), other)
+            app.ottermsg.core.crypto.Ids.id16(other.publicKey), forged.toByteArray(), createdMs = clock.now()), other, node.ctx)
         val err = runCatching { node.connect().register(RegisterRequest.newBuilder().setDirectoryEntry(rec).setPrekeys(rec).setInviteUsed(rec).build()) }
             .exceptionOrNull() as app.ottermsg.core.network.RpcException
         assertEquals(app.ottermsg.proto.v1.Status.STATUS_INVALID, err.status)

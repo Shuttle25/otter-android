@@ -100,6 +100,115 @@ class GroupRulesTest {
         assertTrue(eval(held, held.state, a, previous = v2) is Verdict.Reject) // duplicate
     }
 
+    // ---- D112: a member swaps a re-keyed account (old → new) once its REKEY is known ----
+    private val old = id(5); private val new = id(6); private val x = id(7)
+    private fun bs(b: ByteArray) = ByteString.copyFrom(b)
+    private val known = mapOf(bs(old) to bs(new))
+    private fun rk(current: Applied?, candidate: GroupState, signer: ByteArray, rekeys: Map<ByteString, ByteString> = known,
+                   previous: GroupState? = null) = GroupRules.evaluate(current, previous, candidate, signer, rekeys = rekeys)
+
+    @Test fun memberMaySwapAKnownRekey() {
+        val base = state(version = 3, members = listOf(a, b, old), admins = listOf(a))
+        val swapped = state(version = 4, members = listOf(a, b, new), admins = listOf(a))
+        assertEquals(Verdict.Accept, rk(Applied(base, a), swapped, b))
+        assertEquals(Verdict.Accept, rk(Applied(base, a), swapped, a)) // an admin may anyway
+        // hostile: a member "swaps" a pair no network-signed REKEY names (its own second account): parked, never accepted
+        assertEquals(Verdict.Park("unknown rekey"), rk(Applied(base, a), swapped, b, rekeys = emptyMap()))
+        val toX = state(version = 4, members = listOf(a, b, x), admins = listOf(a))
+        assertEquals(Verdict.Park("unknown rekey"), rk(Applied(base, a), toX, b))
+        val bOut = state(version = 4, members = listOf(a, x, old), admins = listOf(a)) // the signer swaps itself out
+        assertEquals(Verdict.Park("unknown rekey"), rk(Applied(base, a), bOut, b))
+        // a swap that also changes anything else is an ordinary change: admins only
+        val renamedToo = swapped.toBuilder().setName("Другое").build()
+        assertEquals(Verdict.Reject("signer is not an admin"), rk(Applied(base, a), renamedToo, b))
+        val promotesToo = state(version = 4, members = listOf(a, b, new), admins = listOf(a, b))
+        assertEquals(Verdict.Reject("signer is not an admin"), rk(Applied(base, a), promotesToo, b))
+        val removesToo = state(version = 4, members = listOf(b, new), admins = listOf(b))
+        assertEquals(Verdict.Reject("signer is not an admin"), rk(Applied(base, a), removesToo, b))
+        val addsToo = state(version = 4, members = listOf(a, b, new, x), admins = listOf(a))
+        assertEquals(Verdict.Reject("signer is not an admin"), rk(Applied(base, a), addsToo, b))
+        // a version gap is not a swap
+        assertTrue(rk(Applied(base, a), state(5, listOf(a, b, new), listOf(a)), b) is Verdict.Park)
+    }
+
+    @Test fun swapSignedByANonMemberIsNeverAccepted() {
+        val base = state(version = 3, members = listOf(a, b, old), admins = listOf(a))
+        val swapped = state(version = 4, members = listOf(a, b, new), admins = listOf(a))
+        // the new account itself, or an outsider, cannot sign the swap
+        assertTrue(rk(Applied(base, a), swapped, new) !is Verdict.Accept)
+        assertTrue(rk(Applied(base, a), swapped, x) !is Verdict.Accept)
+        assertTrue(rk(Applied(base, a), swapped, d) !is Verdict.Accept)
+    }
+
+    @Test fun soleAdminSwapKeepsAdminFlag() {
+        val base = state(version = 1, members = listOf(old, b), admins = listOf(old))
+        val swapped = state(version = 2, members = listOf(new, b), admins = listOf(new))
+        assertEquals(Verdict.Accept, rk(Applied(base, old), swapped, b))
+        // the admin flag must move with the account
+        assertTrue(rk(Applied(base, old), state(2, listOf(new, b), listOf(b)), b) !is Verdict.Accept)
+        assertTrue(rk(Applied(base, old), state(2, listOf(new, b), listOf(new, b)), b) !is Verdict.Accept)
+    }
+
+    @Test fun oneOfTwoKnownRekeysMaySwapAlone() {
+        val old2 = id(8); val new2 = id(10)
+        val both = mapOf(bs(old) to bs(new), bs(old2) to bs(new2))
+        val base = state(version = 3, members = listOf(a, b, old, old2), admins = listOf(a))
+        assertEquals(Verdict.Accept, rk(Applied(base, a), state(4, listOf(a, b, new, old2), listOf(a)), b, rekeys = both))
+        assertEquals(Verdict.Accept, rk(Applied(base, a), state(4, listOf(a, b, new, new2), listOf(a)), b, rekeys = both))
+    }
+
+    @Test fun swapIntoAnExistingMemberIsNoSwap() {
+        // REKEY old → b while b is already a member: "swapping" would just remove old (and may hand b old's admin flag)
+        val base = state(version = 3, members = listOf(a, b, old), admins = listOf(a, old))
+        val merged = state(version = 4, members = listOf(a, b), admins = listOf(a, b))
+        assertTrue(rk(Applied(base, a), merged, b, rekeys = mapOf(bs(old) to bs(b))) !is Verdict.Accept)
+    }
+
+    @Test fun reKeyedNewcomerTrustsTheSwapOfAMember() {
+        // the new account's phone has no state yet; the swap of a sole admin is signed by a plain member
+        val swapped = state(version = 2, members = listOf(new, b), admins = listOf(new))
+        assertEquals(Verdict.Accept, rk(null, swapped, b))
+        assertTrue(rk(null, swapped, b, rekeys = emptyMap()) is Verdict.Park)
+        assertTrue(rk(null, swapped, x) is Verdict.Park) // signer not in the state
+        // a member-signed state that merely lists a re-keyed account (not as its admin) is not vouched for
+        assertTrue(rk(null, state(version = 2, members = listOf(new, b, a), admins = listOf(a)), b) is Verdict.Park)
+    }
+
+    @Test fun concurrentSwapIsJudgedWithTheRekeys() {
+        val base = state(version = 3, members = listOf(a, b, old), admins = listOf(a))
+        val held = Applied(state(4, listOf(a, b, old), listOf(a), name = "X"), a)
+        val swapped = state(version = 4, members = listOf(a, b, new), admins = listOf(a))
+        // b's id is higher than a's: valid but loses the tie-break
+        assertEquals(Verdict.Reject("superseded"), rk(held, swapped, b, previous = base))
+        assertEquals(Verdict.Reject("invalid concurrent state"), rk(held, swapped, b, rekeys = emptyMap(), previous = base))
+    }
+
+    /** A state held from a signer revoked since: a valid concurrent state of the previous one replaces it, whatever the ids. */
+    @Test fun concurrentStateReplacesOneByARevokedSigner() {
+        val v2 = state(2, listOf(a, b, c), listOf(a, b))
+        val byA = state(3, listOf(a, c), listOf(a))                 // a (lowest id) removes b, then a is revoked
+        val byB = state(3, listOf(a, b, c), listOf(a, b), name = "Y")
+        assertTrue(GroupRules.evaluate(Applied(byA, a), v2, byB, b) is Verdict.Reject) // a still trusted: a wins
+        assertEquals(Verdict.Accept, GroupRules.evaluate(Applied(byA, a), v2, byB, b, currentSignerRevoked = true))
+        // the replacing state must still be valid against the previous one
+        val byC = state(3, listOf(a, b, c), listOf(a, b), name = "Z")
+        assertTrue(GroupRules.evaluate(Applied(byA, a), v2, byC, c, currentSignerRevoked = true) is Verdict.Reject)
+    }
+
+    /** A revoked signer's state stripped the honest admins: their later state is judged against the previous state too. */
+    @Test fun laterStateOfAnAdminTheRevokedSignerDemoted() {
+        val v2 = state(2, listOf(a, b, c), listOf(a, b))
+        val byA = state(3, listOf(a, c), listOf(a))                 // a removed b, then a is revoked
+        val byB = state(4, listOf(a, b, c), listOf(b), name = "Y")  // b (admin of v2) acting on a phone that refused a's v3
+        assertTrue(GroupRules.evaluate(Applied(byA, a), v2, byB, b) is Verdict.Park)
+        assertEquals(Verdict.Accept, GroupRules.evaluate(Applied(byA, a), v2, byB, b, currentSignerRevoked = true))
+        // a phone that never took a's v3 reaches the same verdict
+        assertEquals(Verdict.Accept, GroupRules.evaluate(Applied(v2, a), null, byB, b))
+        // c was never an admin: its state is not accepted either way
+        val byC = state(4, listOf(a, b, c), listOf(a), name = "Z")
+        assertTrue(GroupRules.evaluate(Applied(byA, a), v2, byC, c, currentSignerRevoked = true) !is Verdict.Accept)
+    }
+
     @Test fun signingRoundTrip() {
         val acct = Ed25519.keyPairFromSeed(ByteArray(32) { 5 })
         val other = Ed25519.keyPairFromSeed(ByteArray(32) { 6 })

@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.Flow
     @Insert suspend fun insertPendingUpdate(p: PendingGroupUpdateEntity): Long
     @Query("SELECT * FROM pending_group_updates WHERE group_id = :groupId ORDER BY id") suspend fun pendingUpdates(groupId: ByteArray): List<PendingGroupUpdateEntity>
     @Query("DELETE FROM pending_group_updates WHERE id = :id") suspend fun deletePendingUpdate(id: Long)
+    @Query("SELECT DISTINCT group_id FROM pending_group_updates") suspend fun groupsWithPendingUpdates(): List<ByteArray>
     @Query("DELETE FROM pending_group_updates WHERE received_ms < :cutoff") suspend fun prunePendingUpdates(cutoff: Long): Int
 
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertPendingEnvelope(p: PendingGroupEnvelopeEntity): Long

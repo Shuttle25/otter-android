@@ -102,7 +102,8 @@ class ProfileRepository @Inject constructor(
      */
     private suspend fun ownInvite(api: NodeApi, me: ByteArray): Pair<ByteArray, ByteArray>? {
         settings.ownInvite()?.let { return it }
-        val e = api.directory().mapNotNull { DirectorySync.verifyEntry(it) }
+        val ctx = accounts.sigContext()
+        val e = api.directory().mapNotNull { DirectorySync.verifyEntry(it, ctx) }
             .filter { it.userId.toByteArray().contentEquals(me) && !it.inviteRecord.isEmpty }
             .maxByOrNull { it.version } ?: return null
         settings.setOwnInvite(e.inviteRecord.toByteArray(), e.inviteProof.toByteArray())

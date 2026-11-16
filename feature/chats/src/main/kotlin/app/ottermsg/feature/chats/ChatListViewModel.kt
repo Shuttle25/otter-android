@@ -45,6 +45,8 @@ data class ChatRow(
     val photo: Boolean = false,
     /** Last item: this contact restored their account (D53). */
     val resetBy: String? = null,
+    /** Last item: this contact's account was re-keyed after a lost phone (D111). */
+    val keyChangedBy: String? = null,
     /** The «Новости Выдры» chat (D64): localized title and the otter avatar in the UI. */
     val news: Boolean = false,
     /** Last item is a call line (D80): CallOutcome.code and duration; the preview is its text. */
@@ -71,7 +73,7 @@ fun chatRows(list: List<ConversationSummary>, nowMs: Long, zone: ZoneId, locale:
         ChatRow(
             id = s.id, title = s.title, seed = s.seed,
             preview = if (s.lastKind == MessageKind.SYSTEM_UNDECRYPTABLE || s.lastKind == MessageKind.SYSTEM_GROUP ||
-                s.lastKind == MessageKind.SYSTEM_RESET) "" else if (s.lastKind == MessageKind.NEWS)
+                s.lastKind == MessageKind.SYSTEM_RESET || s.lastKind == MessageKind.SYSTEM_KEY_CHANGED) "" else if (s.lastKind == MessageKind.NEWS)
                 NewsText.of(s.lastSystemData, locale.language) ?: s.lastBody else s.lastBody,
             previewIsSystem = s.lastKind == MessageKind.SYSTEM_UNDECRYPTABLE,
             outgoing = s.lastOutgoing == true,
@@ -84,6 +86,9 @@ fun chatRows(list: List<ConversationSummary>, nowMs: Long, zone: ZoneId, locale:
             event = if (s.lastKind == MessageKind.SYSTEM_GROUP) parseGroupEvent(s.lastSystemData) else null,
             photo = s.lastKind == MessageKind.PHOTO,
             resetBy = if (s.lastKind == MessageKind.SYSTEM_RESET) s.title else null, // resets live in direct chats
+            // a re-key names the person: the chat title in a 1:1 chat, the sender (the new account) in a group
+            keyChangedBy = if (s.lastKind != MessageKind.SYSTEM_KEY_CHANGED) null
+                else if (s.groupId != null) s.lastSenderId?.let(names::of) ?: s.title else s.title,
             news = s.type == ConversationType.NEWS,
             callOutcome = if (call) s.lastCallOutcome ?: 0 else null, callDurationS = if (call) s.lastCallDurationS ?: 0 else 0,
         )
@@ -112,7 +117,8 @@ class ChatListViewModel @Inject constructor(
     messages: MessageRepository, sync: SyncEngine, directory: DirectorySync, contacts: ContactRepository,
 ) : ViewModel() {
     val connection: StateFlow<ConnectionState> = sync.connection
-    val names: StateFlow<Names> = contacts.observeContacts().map { cs -> Names(cs.associate { it.userId.hex() to it.displayName }) }
+    // removed and re-keyed accounts too: their old group messages keep the author's name
+    val names: StateFlow<Names> = contacts.observeNames().map(::Names)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Names.Empty)
     private val rows = combine(messages.observeSummaries(), names) { list, n ->
         chatRows(list, System.currentTimeMillis(), ZoneId.systemDefault(), Locale.getDefault(), n) as List<ChatRow>?

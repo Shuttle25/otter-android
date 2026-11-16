@@ -47,9 +47,11 @@ class LiveClient {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val transport = OkHttpTransport()
     val settings = Settings(db.settingsDao())
-    val accounts = AccountRepository(db.accountDao(), settings, SeedVault(XorWrapper))
+    val manifests = ManifestUpdater(db.manifestDao(), settings, clock)
+    val accounts = AccountRepository(db.accountDao(), settings, SeedVault(XorWrapper), manifests)
     val signal = SignalService(accounts, db.signalKvDao(), db.contactDao(), scope)
-    val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao(), settings, db.accountDao(), db.manifestDao(), db.messageDao(), clock)
+    val rekeys = app.ottermsg.core.data.directory.RekeyApplier(db, clock)
+    val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao(), settings, db.accountDao(), db.manifestDao(), db.messageDao(), clock, rekeys)
     val profile = ProfileRepository(accounts, db, settings, clock)
     val outbox = Outbox(db, accounts, signal, clock, GroupSender(db, signal, clock))
     private val clientId = java.util.UUID.randomUUID().toString()
@@ -68,14 +70,13 @@ class LiveClient {
     val backups = app.ottermsg.core.data.backup.BackupManager(ApplicationProvider.getApplicationContext(), db, accounts, settings,
         SeedVault(XorWrapper), { engine as app.ottermsg.core.data.invite.OnlineApi }, clock)
     val groups = GroupRepository(db, accounts, applier, outbox, clock)
-    val groupRevocations = app.ottermsg.core.data.group.GroupRevocations(db, accounts, groups, settings)
+    val groupRevocations = app.ottermsg.core.data.group.GroupRevocations(db, accounts, groups, applier, settings, clock)
     val messages = MessageRepository(db, accounts, outbox, clock, files, PhotoPrep(), media)
     val prekeys = PrekeyRefill(accounts, settings, signal, clock, db.manifestDao())
     val stats = InMemoryEndpointStats()
     val selector = NodeSelector(transport, stats, clock::now)
-    val manifests = ManifestUpdater(db.manifestDao(), settings, clock)
     val engine: SyncEngine = SyncEngine(stats, selector, accounts, settings, manifests, directory, receiver, outbox, prekeys, profile, media, scope, true, clock, guard, backups,
-        app.ottermsg.core.data.news.NewsRepository(db, manifests, clock, app.ottermsg.core.data.push.MessageAlerts.NONE), groupRevocations)
+        app.ottermsg.core.data.news.NewsRepository(db, manifests, clock, app.ottermsg.core.data.push.MessageAlerts.NONE, manifests), groupRevocations)
     val invites = InviteRepository(accounts, settings, db.manifestDao(), engine, clock)
     val registration = Registration(db, TransportConnector(selector), SeedVault(XorWrapper), accounts, settings, clock, allowPlaintext = true)
     val restore = app.ottermsg.core.data.backup.RestoreManager(db, TransportConnector(selector), SeedVault(XorWrapper), accounts, settings, clock,
@@ -85,7 +86,7 @@ class LiveClient {
     suspend fun preferFor(link: String, label: String?) {
         if (label == null) return
         val m = app.ottermsg.core.crypto.ManifestVerifier.verify(app.ottermsg.core.crypto.InviteLink.decode(link).manifest.toByteArray(),
-            app.ottermsg.core.crypto.InviteLink.decode(link).networkPub.toByteArray(), 0)
+            app.ottermsg.core.crypto.InviteLink.decode(link).networkPub.toByteArray(), 0, 0)
         for (c in app.ottermsg.core.network.Endpoints.candidates(m, true)) {
             if (c.label == label) stats.success(c.key, 1, clock.now()) else stats.failure(c.key, clock.now())
         }

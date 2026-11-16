@@ -36,4 +36,7 @@ import kotlinx.coroutines.flow.Flow
     @Query("DELETE FROM messages WHERE message_id = :messageId AND kind = ${MessageKind.NEWS}") suspend fun deleteNews(messageId: ByteArray): Int
     @Query("SELECT * FROM messages WHERE kind = ${MessageKind.NEWS} ORDER BY local_id") suspend fun allNews(): List<MessageEntity>
     @Query("SELECT COUNT(*) FROM messages WHERE conversation_id = :cid") suspend fun count(cid: Long): Int
+    @Query("SELECT * FROM messages WHERE conversation_id = :cid ORDER BY sent_ms, local_id") suspend fun forConversation(cid: Long): List<MessageEntity>
+    /** A re-key (D111): the messages of chat [from] join chat [to]. */
+    @Query("UPDATE messages SET conversation_id = :to WHERE conversation_id = :from") suspend fun moveConversation(from: Long, to: Long)
 }

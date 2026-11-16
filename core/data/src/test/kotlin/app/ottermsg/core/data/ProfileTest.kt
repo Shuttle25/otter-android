@@ -32,7 +32,7 @@ class ProfileTest {
     }
 
     /** Puts a newer own entry straight into the node (as if published by another install of the account). */
-    private fun bump(g: TestGraph, to: Int, name: String = g.me.displayName) =
+    private suspend fun bump(g: TestGraph, to: Int, name: String = g.me.displayName) =
         node.putDirectoryEntry(DirectoryEntries.record(g.me, name, to, clock.now()))
 
     @Test fun offlineEditIsPublishedWhenOnlineAndOthersSeeIt() = runBlocking {

@@ -4,7 +4,11 @@ import app.ottermsg.core.crypto.Bip39
 import app.ottermsg.core.data.backup.BackupManager
 import app.ottermsg.core.data.backup.RestoreError
 import app.ottermsg.core.data.backup.RestoreManager
+import app.ottermsg.core.data.registration.NodeConnector
 import app.ottermsg.core.database.model.MessageKind
+import app.ottermsg.core.network.Candidate
+import app.ottermsg.core.network.NodeApi
+import app.ottermsg.core.network.RpcTimeoutException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -196,5 +200,50 @@ class RestoreFlowTest {
         restored.restore.addHistory(pw).getOrThrow() // a plain "anna" would be CONFLICT now
         assertEquals("anna#" + tag(anna.me.userId), node.backupAuthNames.last())
         assertTrue(restored.settings.backupSecret() != null)
+    }
+
+    /**
+     * D113/D114: a no_backups node is never asked for a backup directly; a direct connection abroad that freezes (D132)
+     * is retried through the no_backups node's tunnel, with TLS pinned to the node that keeps the backup.
+     */
+    @Test fun restoreSkipsNoBackupsNodesAndRetriesThroughTheTunnel() = runBlocking<Unit> {
+        history()
+        node.publish(node.signManifest(2, extraHosts = listOf("ru"), noBackupsHosts = setOf("ru"), selfPin = ByteArray(32) { 5 }), 2)
+        val ruId = ByteArray(16) { 1 }
+        val seen = mutableListOf<List<Candidate>>()
+        val restored = newGraph()
+        val honest = restored.connector
+        restored.connector = object : NodeConnector {
+            override suspend fun <T> withNode(candidates: List<Candidate>, block: suspend (NodeApi) -> T): T {
+                seen += candidates
+                if (candidates.any { it.via == null }) throw RpcTimeoutException("backup.fetch") // the direct path froze
+                return honest.withNode(candidates, block)
+            }
+        }
+        restored.restore.withPassword(node.bootstrapLink(), "anna", pw).getOrThrow()
+        assertArrayEquals(anna.me.userId, restored.me.userId)
+        restored.restore.addHistory(pw).getOrThrow()
+        assertEquals(4, seen.size) // each: everything first, then the tunnels only
+        assertTrue(seen.flatten().none { it.via == null && it.nodeId.contentEquals(ruId) })
+        for (tunnels in listOf(seen[1], seen[3])) {
+            assertTrue(tunnels.isNotEmpty())
+            assertTrue(tunnels.all { it.via!!.nodeId.contentEquals(ruId) && it.via!!.url.endsWith("/tunnel?to=" + node.nodeId.joinToString("") { "%02x".format(it) }) })
+            assertTrue(tunnels.all { it.pins.isNotEmpty() && it.url.startsWith("wss://") })
+        }
+    }
+
+    @Test fun wrongPasswordIsNotRetriedThroughTheTunnel() = runBlocking<Unit> {
+        history()
+        node.publish(node.signManifest(2, extraHosts = listOf("ru"), noBackupsHosts = setOf("ru"), selfPin = ByteArray(32) { 5 }), 2)
+        val restored = newGraph()
+        val honest = restored.connector
+        var calls = 0
+        restored.connector = object : NodeConnector {
+            override suspend fun <T> withNode(candidates: List<Candidate>, block: suspend (NodeApi) -> T): T { calls++; return honest.withNode(candidates, block) }
+        }
+        val fetches = node.backupFetches
+        assertEquals(RestoreError.WrongPassword, restored.restore.withPassword(node.bootstrapLink(), "anna", "не тот").exceptionOrNull())
+        assertEquals(1, calls)
+        assertEquals(1, node.backupFetches - fetches)
     }
 }

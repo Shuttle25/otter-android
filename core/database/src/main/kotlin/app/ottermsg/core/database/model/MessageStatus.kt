@@ -8,7 +8,9 @@ object MessageKind { const val TEXT = 0; const val SYSTEM_UNDECRYPTABLE = 1; con
     /** A local call line in a 1:1 chat (D80): messages.call_outcome / call_duration_s; never sent, never receipted. */
     const val CALL = 6
     /** M9.2 (D104): a member was removed; system_data = "revoked" | "duplicate_invite". Local only, never sent. */
-    const val SYSTEM_MEMBER = 7 }
+    const val SYSTEM_MEMBER = 7
+    /** M9.3 (D111): a contact's account was re-keyed (lost phone); sender = the new account. Local only, never sent. */
+    const val SYSTEM_KEY_CHANGED = 8 }
 
 /** attachments.state (D48). */
 object AttachmentState {

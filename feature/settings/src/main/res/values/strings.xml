@@ -17,6 +17,9 @@
     <string name="profile_username">Имя пользователя</string>
     <string name="profile_username_fixed">нельзя изменить</string>
     <string name="profile_pending">Имя обновится у близких, когда появится подключение</string>
+    <string name="profile_account_code">Код аккаунта</string>
+    <string name="profile_account_code_hint">Нужен администратору, если телефон потерян</string>
+    <string name="profile_account_code_copy">Копировать код</string>
     <string name="edit_name_title">Изменить имя</string>
     <string name="edit_name_label">Имя</string>
     <string name="edit_name_hint">Так вас видят близкие</string>

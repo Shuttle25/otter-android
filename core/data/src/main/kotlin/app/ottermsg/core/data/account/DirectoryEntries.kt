@@ -24,9 +24,9 @@ object DirectoryEntries {
         return b.build()
     }
 
-    fun record(me: LocalAccount, displayName: String, version: Int, nowMs: Long, invite: Pair<ByteArray, ByteArray>? = null): Record =
-        RecordCodec.sign(RecordCodec.body(RecordType.DIRECTORY_ENTRY, me.userId,
-            build(me.userId, me.username, displayName, me.seed, version, me.createdMs, invite).toByteArray(), createdMs = nowMs), me.accountKey)
+    suspend fun record(me: LocalAccount, displayName: String, version: Int, nowMs: Long, invite: Pair<ByteArray, ByteArray>? = null): Record =
+        me.sign(RecordCodec.body(RecordType.DIRECTORY_ENTRY, me.userId,
+            build(me.userId, me.username, displayName, me.seed, version, me.createdMs, invite).toByteArray(), createdMs = nowMs))
 
     /** Display names: trimmed, 1–64 Unicode code points (the node counts runes). Null when valid. */
     fun validate(name: String): ProfileError? = when {

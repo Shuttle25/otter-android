@@ -5,6 +5,7 @@ import app.ottermsg.core.crypto.Ids
 import app.ottermsg.core.crypto.InviteKeys
 import app.ottermsg.core.crypto.InviteLink
 import app.ottermsg.core.crypto.RecordCodec
+import app.ottermsg.core.crypto.SigContext
 import app.ottermsg.core.network.NodeApi
 import app.ottermsg.core.network.RpcException
 import app.ottermsg.proto.v1.Ack
@@ -56,17 +57,31 @@ class FakeNode(private val clock: () -> Long, val nodeId: ByteArray = ByteArray(
      */
     @Volatile var answerRevoked = false
     val network = Ed25519.keyPairFromSeed(ByteArray(32) { 9 })
-    /** Signs a manifest; [withSelf] lists this node, [extraHosts] adds other (fake) nodes. */
+    /** The current manifest's sig_v1_until_ms (D109): set by [publish]; the node verifies and signs under it. */
+    @Volatile var sigV1UntilMs = 0L; private set
+    /** This node's record signature context (D109), like the Go node's Validator and ContextFor. */
+    val ctx: SigContext get() = SigContext(Ids.id16(network.publicKey), sigV1UntilMs)
+    /**
+     * Signs a manifest; [withSelf] lists this node, [extraHosts] adds other (fake) nodes. A manifest with a cut-over
+     * ([sigV1UntilMs] != 0) is v2-signed, like `otter-admin manifest sign --sig-v1-until`. Extra hosts in
+     * [noBackupsHosts] are marked no_backups (D113); [selfPin] adds a pinned WSS endpoint for this node (a tunnel target, D114).
+     */
     fun signManifest(version: Long, withSelf: Boolean = true, extraHosts: List<String> = emptyList(),
-                     newsKeys: List<ByteArray> = emptyList(), foundingMembers: List<ByteArray> = emptyList()): Record {
+                     newsKeys: List<ByteArray> = emptyList(), foundingMembers: List<ByteArray> = emptyList(),
+                     sigV1UntilMs: Long = 0, noBackupsHosts: Set<String> = emptySet(), selfPin: ByteArray? = null): Record {
         val b = Manifest.newBuilder().setVersion(version).setIssuedMs(version).setNetworkPub(bs(network.publicKey))
+            .setSigV1UntilMs(sigV1UntilMs)
         newsKeys.forEach { b.addNewsKeys(bs(it)) }
         foundingMembers.forEach { b.addFoundingMembers(bs(it)) }
         if (withSelf) b.addNodes(NodeInfo.newBuilder().setNodeId(bs(nodeId)).setLabel("fake")
-            .addEndpoints(Endpoint.newBuilder().setKind(Endpoint.Kind.WS_PLAIN).setHost("fake").setPort(1).setPath("/fakepath")))
+            .addEndpoints(Endpoint.newBuilder().setKind(Endpoint.Kind.WS_PLAIN).setHost("fake").setPort(1).setPath("/fakepath"))
+            .apply { if (selfPin != null) addEndpoints(Endpoint.newBuilder().setKind(Endpoint.Kind.WSS).setHost("fake").setPort(2)
+                .setPath("/fakepath").addTlsSpkiPins(bs(selfPin))) })
         extraHosts.forEachIndexed { i, h -> b.addNodes(NodeInfo.newBuilder().setNodeId(bs(ByteArray(16) { (i + 1).toByte() })).setLabel(h)
+            .setNoBackups(h in noBackupsHosts)
             .addEndpoints(Endpoint.newBuilder().setKind(Endpoint.Kind.WS_PLAIN).setHost(h).setPort(1).setPath("/p"))) }
-        return RecordCodec.sign(RecordCodec.body(RecordType.MANIFEST, Ids.id16(network.publicKey), b.build().toByteArray(), createdMs = version), network)
+        return RecordCodec.sign(RecordCodec.body(RecordType.MANIFEST, Ids.id16(network.publicKey), b.build().toByteArray(), createdMs = version), network,
+            SigContext(Ids.id16(network.publicKey), sigV1UntilMs))
     }
 
     @Volatile var manifest: Record = signManifest(1)
@@ -76,6 +91,7 @@ class FakeNode(private val clock: () -> Long, val nodeId: ByteArray = ByteArray(
     fun publish(rec: Record, version: Long) {
         synchronized(lock) {
             manifest = rec; manifestVersion = version
+            sigV1UntilMs = Manifest.parseFrom(body(rec).payload).sigV1UntilMs
             sessions.forEach { it.emit("manifest", app.ottermsg.proto.v1.ManifestResponse.newBuilder().setManifest(rec).build()) }
         }
     }
@@ -136,7 +152,7 @@ class FakeNode(private val clock: () -> Long, val nodeId: ByteArray = ByteArray(
         val inv = Invite.newBuilder().setInviteId(bs(sha(secret))).setExpiresMs(clock() + ttlMs)
             .setRedeemPub(bs(InviteKeys.redeemKey(secret).publicKey)).build()
         val rec = RecordCodec.sign(RecordCodec.body(RecordType.INVITE, Ids.id16(network.publicKey), inv.toByteArray(),
-            expiresMs = clock() + ttlMs, createdMs = clock()), network)
+            expiresMs = clock() + ttlMs, createdMs = clock()), network, ctx)
         synchronized(lock) { invites[sha(secret).hex()] = InviteState(Ids.id16(network.publicKey), clock() + ttlMs) }
         return InviteLink.encode(InviteBundle.newBuilder().setNetworkPub(bs(network.publicKey)).setManifest(manifest)
             .setSecret(bs(secret)).setInvite(rec).build())
@@ -155,16 +171,25 @@ class FakeNode(private val clock: () -> Long, val nodeId: ByteArray = ByteArray(
     /** Network-signed REVOCATION / INVITE_RIGHTS records served by directory.sync (D99). */
     private val membership = mutableListOf<Record>()
     /** Like `otter-admin user revoke`; a [signer] other than the network key plays a forger. */
-    fun revoke(user: ByteArray, signer: Ed25519.KeyPair = network, createdMs: Long = clock()) = synchronized(lock) {
+    fun revoke(user: ByteArray, signer: Ed25519.KeyPair = network, createdMs: Long = clock(), reason: String = "") = synchronized(lock) {
         membership += RecordCodec.sign(RecordCodec.body(RecordType.REVOCATION, Ids.id16(network.publicKey),
-            app.ottermsg.proto.v1.Revocation.newBuilder().setUserId(bs(user)).build().toByteArray(), createdMs = createdMs), signer)
+            app.ottermsg.proto.v1.Revocation.newBuilder().setUserId(bs(user)).setReason(reason).build().toByteArray(), createdMs = createdMs), signer, ctx)
+    }
+    /**
+     * Like `otter-admin user rekey --new` (D111): a network-signed REKEY old → new, served by directory.sync. A [signer]
+     * or [author] other than the network's plays a forger (the old account, a node key).
+     */
+    fun rekey(old: ByteArray, new: ByteArray, signer: Ed25519.KeyPair = network, createdMs: Long = clock(),
+              author: ByteArray = Ids.id16(network.publicKey), sig: SigContext = ctx): Record = synchronized(lock) {
+        RecordCodec.sign(RecordCodec.body(RecordType.REKEY, author, app.ottermsg.proto.v1.Rekey.newBuilder().setOldUserId(bs(old))
+            .setNewUserId(bs(new)).build().toByteArray(), createdMs = createdMs), signer, sig).also { membership += it }
     }
     /** Like `otter-admin user invite-rights`: a network-signed INVITE_RIGHTS record. */
     fun inviteRights(user: ByteArray, canInvite: Boolean, version: Long, createdMs: Long = clock(), signer: Ed25519.KeyPair = network) =
         synchronized(lock) {
             membership += RecordCodec.sign(RecordCodec.body(RecordType.INVITE_RIGHTS, Ids.id16(network.publicKey),
                 app.ottermsg.proto.v1.InviteRights.newBuilder().setUserId(bs(user)).setCanInvite(canInvite).setVersion(version).build()
-                    .toByteArray(), createdMs = createdMs), signer)
+                    .toByteArray(), createdMs = createdMs), signer, ctx)
         }
     fun directoryRecords(): List<Record> = synchronized(lock) { users.values.map { it.record } + membership }
     private val directoryUpdateCount = HashMap<String, Int>()
@@ -193,6 +218,27 @@ class FakeNode(private val clock: () -> Long, val nodeId: ByteArray = ByteArray(
         users[e.userId.hex()] = User(rec, e)
     }
 
+    /**
+     * A member's DIRECTORY_ENTRY invited by the network key (a valid chain), signed under [sig]: a hostile node can
+     * serve one signed for another network (D109).
+     */
+    fun directoryEntryFor(seed: Byte, name: String, sig: SigContext = ctx): Record {
+        val acc = app.ottermsg.core.crypto.SeedKeys.accountKeyPair(ByteArray(32) { seed })
+        val id = app.ottermsg.core.signal.IdentityKeys.fromSeed(ByteArray(32) { seed })
+        val uid = Ids.id16(acc.publicKey)
+        val secret = ByteArray(32) { (seed + 100).toByte() }
+        val now = clock()
+        val inv = RecordCodec.sign(RecordCodec.body(RecordType.INVITE, Ids.id16(network.publicKey), Invite.newBuilder()
+            .setInviteId(bs(sha(secret))).setExpiresMs(now + 3_600_000).setRedeemPub(bs(InviteKeys.redeemKey(secret).publicKey))
+            .build().toByteArray(), createdMs = now), network, ctx)
+        val e = DirectoryEntry.newBuilder().setUserId(bs(uid)).setUsername(name).setDisplayName(name.uppercase())
+            .setAccountPub(bs(acc.publicKey)).setIdentityPub(bs(id.publicKey.serialize()))
+            .setIdentitySig(bs(app.ottermsg.core.signal.IdentityKeys.bindAccount(id, acc.publicKey))).setVersion(1).setRegisteredMs(now + 1)
+            .setInviteRecord(inv.toByteString())
+            .setInviteProof(bs(InviteKeys.redeemKey(secret).sign(InviteKeys.redeemMessage(sha(secret), uid, acc.publicKey)))).build()
+        return RecordCodec.sign(RecordCodec.body(RecordType.DIRECTORY_ENTRY, uid, e.toByteArray(), createdMs = now + 1), acc, sig)
+    }
+
     fun connect(): Session = Session().also { synchronized(lock) { sessions += it } }
 
     private fun sha(b: ByteArray) = MessageDigest.getInstance("SHA-256").digest(b)
@@ -204,7 +250,7 @@ class FakeNode(private val clock: () -> Long, val nodeId: ByteArray = ByteArray(
     private fun verifyUser(r: Record, pub: ByteArray? = null): RecordBody {
         val b = body(r)
         val key = pub ?: users[b.author.hex()]?.entry?.accountPub?.toByteArray() ?: fail(Status.STATUS_UNAUTHORIZED, "unknown author")
-        if (!RecordCodec.verify(r, key)) fail(Status.STATUS_INVALID, "bad signature")
+        if (!RecordCodec.verify(r, key, ctx)) fail(Status.STATUS_INVALID, "bad signature")
         return b
     }
 
@@ -252,7 +298,7 @@ class FakeNode(private val clock: () -> Long, val nodeId: ByteArray = ByteArray(
             if (invMsg.inviteId.size() != 32 || invMsg.redeemPub.size() != 32) fail(Status.STATUS_INVALID, "malformed invite record")
             val signer = if (invBody.author.toByteArray().contentEquals(Ids.id16(network.publicKey))) network.publicKey
                 else users[invBody.author.hex()]?.entry?.accountPub?.toByteArray() ?: fail(Status.STATUS_RETRY_LATER, "inviter not known here yet")
-            if (!RecordCodec.verify(invRec, signer)) fail(Status.STATUS_INVALID, "invite signature")
+            if (!RecordCodec.verify(invRec, signer, ctx)) fail(Status.STATUS_INVALID, "invite signature")
             val proofOk = runCatching { Ed25519.verify(invMsg.redeemPub.toByteArray(), InviteKeys.redeemMessage(invMsg.inviteId.toByteArray(),
                 entry.userId.toByteArray(), entry.accountPub.toByteArray()), entry.inviteProof.toByteArray()) }.getOrDefault(false)
             if (!proofOk) fail(Status.STATUS_INVALID, "invite proof")

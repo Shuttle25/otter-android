@@ -34,8 +34,8 @@ class PushRegistrar @Inject constructor(
         val state = stateOf(p)
         if (state == sent) return@withLock
         val me = accounts.require()
-        api.registerPush(RecordCodec.sign(RecordCodec.body(RecordType.PUSH_TOKEN, me.userId, p.toByteArray(),
-            createdMs = clock.now()), me.accountKey))
+        api.registerPush(me.sign(RecordCodec.body(RecordType.PUSH_TOKEN, me.userId, p.toByteArray(),
+            createdMs = clock.now())))
         settings.setPushTokenSent(state)
     }
 

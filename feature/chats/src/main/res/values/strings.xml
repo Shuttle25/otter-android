@@ -25,5 +25,6 @@
     <string name="chats_preview_photo">Фото</string>
     <string name="chats_preview_photo_caption">Фото: %1$s</string>
     <string name="chats_system_reset">%1$s восстановил(а) аккаунт</string>
+    <string name="chats_system_key_changed">%1$s: ключ безопасности изменился</string>
     <string name="news_title">Новости Выдры</string>
 </resources>

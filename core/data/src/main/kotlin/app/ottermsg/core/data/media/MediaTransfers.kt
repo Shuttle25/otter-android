@@ -178,8 +178,8 @@ class MediaTransfers @Inject constructor(
 
     private suspend fun ack(api: NodeApi, a: AttachmentEntity) {
         val me = accounts.require()
-        val rec = RecordCodec.sign(RecordCodec.body(RecordType.BLOB_FETCHED, me.userId,
-            BlobFetched.newBuilder().setBlobKey(bs(a.blobKey)).build().toByteArray(), createdMs = clock.now()), me.accountKey)
+        val rec = me.sign(RecordCodec.body(RecordType.BLOB_FETCHED, me.userId,
+            BlobFetched.newBuilder().setBlobKey(bs(a.blobKey)).build().toByteArray(), createdMs = clock.now()))
         try {
             api.blobAck(rec)
             dao.update(a.copy(ackPending = false))

@@ -266,6 +266,7 @@ fun ConversationScreen(
             if (ui.canWrite) MessageComposer(text, sending, onText, onSend, Modifier.navigationBarsPadding().imePadding(),
                 onPickPhoto = photoActions.onPick, onTakePhoto = photoActions.onCamera)
             else if (ui.peerRemoved) PeerRemovedNotice(Modifier.navigationBarsPadding())
+            else if (ui.peerRekeying) ComposerNotice(R.string.conv_peer_rekeying, Modifier.navigationBarsPadding())
             else if (!ui.isNews) NotMemberNotice(Modifier.navigationBarsPadding())
         },
     ) { padding ->
@@ -290,6 +291,8 @@ fun ConversationScreen(
                                 else R.string.conv_member_removed))
                         } else if (item.message.resetName != null) {
                             SystemEventChip(stringResource(R.string.conv_system_reset, item.message.resetName))
+                        } else if (item.message.keyChangedName != null) {
+                            SystemEventChip(stringResource(R.string.conv_system_key_changed, item.message.keyChangedName))
                         } else if (item.message.event != null) {
                             SystemEventChip(groupEventText(item.message.event, ui.me, ui::nameOf))
                         } else if (item.message.news != null) {

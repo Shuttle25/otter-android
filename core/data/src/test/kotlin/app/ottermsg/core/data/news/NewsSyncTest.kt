@@ -27,7 +27,7 @@ class NewsSyncTest {
     @After fun tearDown() = a.close()
 
     private fun item(text: String) = RecordCodec.sign(RecordCodec.body(RecordType.ANNOUNCEMENT, Ids.id16(key.publicKey),
-        Announcement.newBuilder().setTextRu(text).build().toByteArray(), createdMs = clock.now()), key)
+        Announcement.newBuilder().setTextRu(text).build().toByteArray(), createdMs = clock.now()), key, node.ctx)
 
     private suspend fun bodies() = a.db.messageDao().allNews().map { it.body }
 

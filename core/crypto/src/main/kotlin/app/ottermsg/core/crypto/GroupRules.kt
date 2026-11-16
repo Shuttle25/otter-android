@@ -1,6 +1,7 @@
 package app.ottermsg.core.crypto
 
 import app.ottermsg.proto.v1.GroupState
+import com.google.protobuf.ByteString
 import java.security.MessageDigest
 
 /**
@@ -24,13 +25,20 @@ object GroupRules {
     /**
      * @param current the state we hold now (null: unknown group)
      * @param previous the state [current] replaced (needed to judge a concurrent edit at the same version)
+     * @param rekeys the winning verified REKEYs this client knows, old user id → new user id (D112)
+     * @param currentSignerRevoked [current] was signed by an account revoked since (REVOCATION, REKEY, duplicate-invite
+     *   loser). Its signature no longer authorizes anything, so a candidate that is valid against [previous] is accepted
+     *   too, and wins a same-version conflict whatever the ids: phones that refused the revoked signer's state (the caller
+     *   rejects states signed by a revoked account outright) and phones that took it before they learned of the
+     *   revocation then converge on the next honest state.
      */
     fun evaluate(
         current: Applied?, previous: GroupState?, candidate: GroupState, signer: ByteArray,
-        candidateBytes: ByteArray = candidate.toByteArray(),
+        candidateBytes: ByteArray = candidate.toByteArray(), rekeys: Map<ByteString, ByteString> = emptyMap(),
+        currentSignerRevoked: Boolean = false,
     ): Verdict {
         structuralError(candidate)?.let { return Verdict.Reject(it) }
-        if (current == null) return againstBase(null, candidate, signer)
+        if (current == null) return againstBase(null, candidate, signer, rekeys)
         val cur = current.state
         if (!candidate.groupId.equals(cur.groupId)) return Verdict.Reject("other group")
         if (candidate.family != cur.family || candidate.createdBy != cur.createdBy || candidate.createdMs != cur.createdMs) {
@@ -38,21 +46,30 @@ object GroupRules {
         }
         return when {
             candidate.version < cur.version -> Verdict.Reject("old")
-            candidate.version > cur.version -> againstBase(cur, candidate, signer)
+            candidate.version > cur.version -> againstBase(cur, candidate, signer, rekeys).let { v ->
+                if (v != Verdict.Accept && currentSignerRevoked && previous != null &&
+                    againstBase(previous, candidate, signer, rekeys) == Verdict.Accept) Verdict.Accept else v
+            }
             candidateBytes.contentEquals(current.stateBytes) -> Verdict.Reject("duplicate")
-            else -> concurrent(current, previous, candidate, signer, candidateBytes)
+            currentSignerRevoked && previous != null && againstBase(previous, candidate, signer, rekeys) == Verdict.Accept -> Verdict.Accept
+            else -> concurrent(current, previous, candidate, signer, candidateBytes, rekeys)
         }
     }
 
     /** Successor rules against [base] (null = no state known: creation, or trust-on-first-use by an admin). */
-    private fun againstBase(base: GroupState?, candidate: GroupState, signer: ByteArray): Verdict {
+    private fun againstBase(base: GroupState?, candidate: GroupState, signer: ByteArray, rekeys: Map<ByteString, ByteString>): Verdict {
         if (base == null) {
             val signerIsAdmin = candidate.adminsList.any { it.toByteArray().contentEquals(signer) }
+            val signerIsMember = candidate.membersList.any { it.toByteArray().contentEquals(signer) }
             return when {
                 candidate.version == 1L && signer.contentEquals(candidate.createdBy.toByteArray()) && signerIsAdmin -> Verdict.Accept
                 candidate.version == 1L -> Verdict.Reject("creation not signed by its creator")
                 // A member added later never sees the creation: an admin of the candidate vouches for it.
                 signerIsAdmin -> Verdict.Accept
+                // D112: a re-keyed account (a known REKEY's new id) learns its group from the swap, which a plain member
+                // signs when the old account was the only admin (so the new one is an admin of it); the account held that
+                // place under its old id. Anything else from a non-admin stays parked.
+                signerIsMember && candidate.adminsList.any { it in rekeys.values } -> Verdict.Accept
                 else -> Verdict.Park("unknown group")
             }
         }
@@ -62,6 +79,8 @@ object GroupRules {
             return when {
                 signerIsAdmin -> Verdict.Accept
                 isSelfLeave(base, candidate, signer) -> Verdict.Accept
+                signerIsMember && isRekeySwap(base, candidate, rekeys) -> Verdict.Accept
+                signerIsMember && looksLikeSwap(base, candidate) -> Verdict.Park("unknown rekey")
                 !signerIsMember -> Verdict.Park("signer not a member yet")
                 else -> Verdict.Reject("signer is not an admin")
             }
@@ -78,9 +97,38 @@ object GroupRules {
             candidate.adminsList.map { Key(it.toByteArray()) }.toSet() == minus(base.adminsList)
     }
 
+    /**
+     * D112: [candidate] is [base] with one or more members whose REKEY we know replaced by their new ids, in members and
+     * admins alike (the admin flag moves with the account); nothing else changed. A new id must not be a member already
+     * (that would be a plain removal of the old one).
+     */
+    private fun isRekeySwap(base: GroupState, candidate: GroupState, rekeys: Map<ByteString, ByteString>): Boolean {
+        if (candidate.name != base.name) return false
+        val cand = candidate.membersList.toSet()
+        val swapped = base.membersList.filter { it !in cand && rekeys[it] != null }.toSet()
+        if (swapped.isEmpty()) return false
+        if (swapped.any { rekeys.getValue(it) in base.membersList }) return false
+        fun map(l: List<ByteString>) = l.map { if (it in swapped) rekeys.getValue(it) else it }.toSet()
+        return cand == map(base.membersList) && candidate.adminsList.toSet() == map(base.adminsList)
+    }
+
+    /** Same name, exactly one member out and one in, the admin flag carried over: a swap whose REKEY we may not know yet. */
+    private fun looksLikeSwap(base: GroupState, candidate: GroupState): Boolean {
+        if (candidate.name != base.name) return false
+        val out = base.membersList.filter { it !in candidate.membersList }
+        val inn = candidate.membersList.filter { it !in base.membersList }
+        if (out.size != 1 || inn.size != 1) return false
+        val wasAdmin = out[0] in base.adminsList
+        return (inn[0] in candidate.adminsList) == wasAdmin &&
+            candidate.adminsList.filter { it != inn[0] }.toSet() == base.adminsList.filter { it != out[0] }.toSet()
+    }
+
     /** D37: two different states at the same version. Both must be valid successors of [previous]. */
-    private fun concurrent(current: Applied, previous: GroupState?, candidate: GroupState, signer: ByteArray, candidateBytes: ByteArray): Verdict {
-        if (againstBase(previous, candidate, signer) != Verdict.Accept) return Verdict.Reject("invalid concurrent state")
+    private fun concurrent(
+        current: Applied, previous: GroupState?, candidate: GroupState, signer: ByteArray, candidateBytes: ByteArray,
+        rekeys: Map<ByteString, ByteString>,
+    ): Verdict {
+        if (againstBase(previous, candidate, signer, rekeys) != Verdict.Accept) return Verdict.Reject("invalid concurrent state")
         val bySigner = compareUnsigned(signer, current.signer)
         val candidateWins = if (bySigner != 0) bySigner < 0 else compareUnsigned(sha256(candidateBytes), sha256(current.stateBytes)) < 0
         return if (candidateWins) Verdict.Accept else Verdict.Reject("superseded")

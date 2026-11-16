@@ -42,7 +42,7 @@ class PrekeyRefill @Inject constructor(
         val keys = signal.withSessions { store, _ -> PreKeyFactory.oneTime(store, first, count, node) }
         val payload = PreKeys.newBuilder().setDeviceId(1).setRegistrationId(me.registrationId).setInstalledMs(settings.installedMs())
             .addAllOneTime(keys).build()
-        val rec = RecordCodec.sign(RecordCodec.body(RecordType.PREKEYS, me.userId, payload.toByteArray(), createdMs = clock.now()), me.accountKey)
+        val rec = me.sign(RecordCodec.body(RecordType.PREKEYS, me.userId, payload.toByteArray(), createdMs = clock.now()))
         settings.setNextOneTimeId(first + count) // never reuse ids, even if the upload fails
         api.uploadPrekeys(rec)
         settings.setPendingRefills(settings.pendingRefills() - key)
@@ -59,7 +59,7 @@ class PrekeyRefill @Inject constructor(
 
     /** Owner nodes we upload keys for: the verified manifest's nodes and the node we are connected to. */
     private suspend fun knownOwners(api: NodeApi): Set<String> {
-        val m = manifests.latest()?.let { runCatching { ManifestVerifier.verify(it.raw, settings.networkPub(), 0) }.getOrNull() }
+        val m = manifests.latest()?.let { runCatching { ManifestVerifier.verify(it.raw, settings.networkPub(), 0, 0) }.getOrNull() }
         return (m?.nodesList?.map { it.nodeId.toByteArray().toHex() } ?: emptyList()).toSet() + api.nodeId().toHex()
     }
 

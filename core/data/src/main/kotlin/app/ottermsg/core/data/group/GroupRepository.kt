@@ -92,21 +92,39 @@ class GroupRepository @Inject constructor(
         change(groupId) { s -> s.toBuilder().clearMembers().addAllMembers(s.membersList - me).clearAdmins().addAllAdmins(s.adminsList - me) }
     }
 
-    private suspend fun change(groupId: ByteArray, edit: (GroupState) -> GroupState.Builder) {
+    /**
+     * D112: replaces the re-keyed member [old] by its new account [new] in members and admins (the admin flag moves with
+     * it), nothing else. The caller ([GroupRevocations]) decides that this phone is the one to sign it. The update is not
+     * sent to [old]: that key belongs to whoever holds the lost phone. False if there is nothing to swap.
+     */
+    suspend fun swapMember(groupId: ByteArray, old: ByteArray, new: ByteArray): Boolean {
+        val o = bs(old); val n = bs(new)
+        val cur = applier.current(groupId)?.state ?: return false
+        if (o !in cur.membersList || n in cur.membersList) return false
+        change(groupId, skip = setOf(o)) { s ->
+            if (o !in s.membersList || n in s.membersList) throw GroupChangeRefused("nothing to swap") // changed meanwhile
+            fun swap(l: List<ByteString>) = l.map { if (it == o) n else it }
+            s.toBuilder().clearMembers().addAllMembers(swap(s.membersList)).clearAdmins().addAllAdmins(swap(s.adminsList))
+        }
+        return true
+    }
+
+    private suspend fun change(groupId: ByteArray, skip: Set<ByteString> = emptySet(), edit: (GroupState) -> GroupState.Builder) {
         val (signed, old) = applier.change(groupId) { cur ->
             val s = cur ?: throw GroupChangeRefused("unknown group")
             edit(s).setVersion(s.version + 1).build()
         }
-        distribute(signed, old)
+        distribute(signed, old, skip)
     }
 
-    private suspend fun distribute(signed: SignedGroupState, old: GroupState?) {
+    /** Queues the update to every member of the new state and every member it removed, except us and [skip]. */
+    private suspend fun distribute(signed: SignedGroupState, old: GroupState?, skip: Set<ByteString> = emptySet()) {
         val me = bs(accounts.require().userId)
         val state = GroupState.parseFrom(signed.state)
         val removed = old?.membersList.orEmpty().filter { it !in state.membersList }
         val content = Content.newBuilder().setGroupUpdate(GroupUpdate.newBuilder().setState(signed)).setSentMs(clock.now()).build()
         for (m in (state.membersList + removed).distinct()) {
-            if (m == me) continue
+            if (m == me || m in skip) continue
             outbox.enqueue(m.toByteArray(), content, messageLocalId = null, urgent = true)
         }
     }

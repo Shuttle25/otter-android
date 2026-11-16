@@ -66,9 +66,11 @@ class TestGraph(
 ) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val settings = Settings(db.settingsDao())
-    val accounts = AccountRepository(db.accountDao(), settings, SeedVault(XorWrapper))
+    val manifests = app.ottermsg.core.data.sync.ManifestUpdater(db.manifestDao(), settings, clock)
+    val accounts = AccountRepository(db.accountDao(), settings, SeedVault(XorWrapper), manifests)
     val signal = SignalService(accounts, db.signalKvDao(), db.contactDao(), scope)
-    val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao(), settings, db.accountDao(), db.manifestDao(), db.messageDao(), clock)
+    val rekeys = app.ottermsg.core.data.directory.RekeyApplier(db, clock)
+    val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao(), settings, db.accountDao(), db.manifestDao(), db.messageDao(), clock, rekeys)
     val profile = ProfileRepository(accounts, db, settings, clock)
     val outbox = Outbox(db, accounts, signal, clock, GroupSender(db, signal, clock))
     val files = object : MediaFiles(ApplicationProvider.getApplicationContext()) {
@@ -89,7 +91,7 @@ class TestGraph(
         SeedVault(XorWrapper), { app.ottermsg.core.data.invite.OnlineApi { session } }, clock)
         .apply { derive = { pw, salt, _ -> app.ottermsg.core.crypto.BackupKeys.derive(pw, salt, mKib = 1024, t = 1, p = 1) } }
     val groups = GroupRepository(db, accounts, applier, outbox, clock)
-    val groupRevocations = app.ottermsg.core.data.group.GroupRevocations(db, accounts, groups, settings)
+    val groupRevocations = app.ottermsg.core.data.group.GroupRevocations(db, accounts, groups, applier, settings, clock)
     val messages = MessageRepository(db, accounts, outbox, clock, files, PhotoPrep(), media, alerts)
     val prekeys = PrekeyRefill(accounts, settings, signal, clock, db.manifestDao())
     @Volatile var session: FakeNode.Session? = null
@@ -113,9 +115,8 @@ class TestGraph(
         override suspend fun connect(candidate: app.ottermsg.core.network.Candidate) =
             (routes[candidate.host] ?: transport).connect(candidate)
     }
-    val manifests = app.ottermsg.core.data.sync.ManifestUpdater(db.manifestDao(), settings, clock)
     val pushMonitor = app.ottermsg.core.data.push.PushMonitor(settings, clock)
-    val news = app.ottermsg.core.data.news.NewsRepository(db, manifests, clock, alerts)
+    val news = app.ottermsg.core.data.news.NewsRepository(db, manifests, clock, alerts, manifests)
     private val endpointStats = app.ottermsg.core.network.InMemoryEndpointStats()
     val engine = SyncEngine(endpointStats, app.ottermsg.core.network.NodeSelector(router, endpointStats, clock::now),
         accounts, settings, manifests, directory, receiver, outbox, prekeys, profile, media, scope, true, clock, guard, backups,

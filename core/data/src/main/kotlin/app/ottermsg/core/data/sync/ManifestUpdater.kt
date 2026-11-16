@@ -1,7 +1,9 @@
 package app.ottermsg.core.data.sync
 
 import app.ottermsg.core.crypto.ManifestException
+import app.ottermsg.core.crypto.Ids
 import app.ottermsg.core.crypto.ManifestVerifier
+import app.ottermsg.core.crypto.SigContext
 import app.ottermsg.core.data.Clock
 import app.ottermsg.core.data.settings.Settings
 import app.ottermsg.core.database.dao.ManifestDao
@@ -21,11 +23,16 @@ interface NewsKeys {
     suspend fun newsKeys(): List<ByteArray>
 }
 
+/** Signature context from the newest stored manifest (D109): every record signer and verifier of the app uses it. */
+interface SigContexts {
+    suspend fun sigContext(): SigContext
+}
+
 /** Follows the admin's manifest updates (docs/05): verify, store, and derive connection candidates. */
 @Singleton
 class ManifestUpdater @Inject constructor(
     private val manifests: ManifestDao, private val settings: Settings, private val clock: Clock,
-) : NewsKeys {
+) : NewsKeys, SigContexts {
     enum class Result { IGNORED, STORED, STORED_NODE_REMOVED }
 
     private val mutex = Mutex()
@@ -34,7 +41,8 @@ class ManifestUpdater @Inject constructor(
     suspend fun offer(raw: ByteArray, connectedNode: ByteArray?): Result = mutex.withLock {
         val current = manifests.latest()?.version ?: 0
         val m = try {
-            ManifestVerifier.verify(raw, settings.networkPub(), current)
+            // a cut-over manifest is v2-signed, which is always accepted; after it a v1 manifest is not (D109)
+            ManifestVerifier.verify(raw, settings.networkPub(), current, sigContext().v1UntilMs)
         } catch (e: ManifestException) {
             log.info("manifest ignored: ${e.message}")
             return@withLock Result.IGNORED
@@ -89,8 +97,24 @@ class ManifestUpdater @Inject constructor(
         return parse(latest.raw, settings.networkPub())?.newsKeysList?.map { it.toByteArray() } ?: emptyList()
     }
 
+    @Volatile private var cached: Pair<Long, SigContext>? = null
+
+    /**
+     * Network id and cut-over of the newest stored manifest (D109); cached per stored version and network. Needs the
+     * network key (set at registration or restore).
+     */
+    override suspend fun sigContext(): SigContext {
+        val latest = manifests.latest()
+        val version = latest?.version ?: 0
+        val networkPub = settings.networkPub()
+        cached?.let { (v, c) -> if (v == version && c.networkId.contentEquals(Ids.id16(networkPub))) return c }
+        val ctx = SigContext.of(networkPub, latest?.let { parse(it.raw, networkPub) })
+        cached = version to ctx
+        return ctx
+    }
+
     private fun parse(raw: ByteArray, networkPub: ByteArray): Manifest? =
-        try { ManifestVerifier.verify(raw, networkPub, 0) } catch (e: ManifestException) { null }
+        try { ManifestVerifier.verify(raw, networkPub, 0, 0) } catch (e: ManifestException) { null }
 
     private fun ByteArray.hex() = joinToString("") { "%02x".format(it) }
 

@@ -139,4 +139,57 @@ class GroupRevocationTest {
             } catch (x: Exception) { assertNotNull(x) }
         } finally { a.close(); e.close() }
     }
+
+    /** D112: step 1 of a re-key (REVOCATION reason "rekey") rotates keys but leaves the member for the swap. */
+    @Test fun rekeyRevocationWaitsForTheSwap() = runBlocking {
+        val admin = TestGraph(node, clock); val bob = TestGraph(node, clock); val eve = TestGraph(node, clock)
+        val eve2 = TestGraph(node, clock)
+        try {
+            people(admin, bob, eve, eve2)
+            val gid = checkNotNull(admin.db.conversationDao().get(
+                admin.groups.create("Семья", family = true, members = listOf(bob.me.userId, eve.me.userId)))!!.groupId)
+            eventually(what = "group reaches members") { bob.db.groupDao().get(gid) != null && eve.db.groupDao().get(gid) != null }
+            admin.messages.sendText(admin.conv(gid), "до")
+            eventually(what = "eve reads") { "до" in eve.texts(gid) }
+            eve.goOffline()
+            node.revoke(eve.me.userId, reason = "rekey")
+            for (g in listOf(bob, admin)) { g.directory.sync(g.session!!); g.groupRevocations.handle() }
+            assertNull("keys rotate at once", admin.dist(gid))
+            assertTrue("not removed while the REKEY is due", admin.lists(gid, eve))
+            assertEquals(1L, admin.db.groupDao().get(gid)!!.version)
+            admin.messages.sendText(admin.conv(gid), "между")
+            eventually(what = "bob reads") { "между" in bob.texts(gid) }
+            val rotated = checkNotNull(admin.dist(gid))
+            admin.groupRevocations.handle()
+            assertArrayEquals("rotated once", rotated, admin.dist(gid))
+
+            node.rekey(eve.me.userId, eve2.me.userId)
+            for (g in listOf(bob, admin)) { g.directory.sync(g.session!!); g.groupRevocations.handle() }
+            for (g in listOf(admin, bob, eve2)) eventually(what = "swapped, not removed") { g.db.groupDao().get(gid)?.version == 2L }
+            for (g in listOf(admin, bob)) {
+                assertTrue(g.lists(gid, eve2)); assertTrue(!g.lists(gid, eve))
+                g.groupRevocations.handle()
+                assertEquals("exactly one change", 2L, g.db.groupDao().get(gid)!!.version)
+            }
+        } finally { admin.close(); bob.close(); eve.close(); eve2.close() }
+    }
+
+    /** A re-key that is never completed: after the wait the member is removed like any revoked member. */
+    @Test fun rekeyRevocationWithoutRekeyEndsInRemoval() = runBlocking {
+        val admin = TestGraph(node, clock); val eve = TestGraph(node, clock)
+        try {
+            people(admin, eve)
+            val gid = checkNotNull(admin.db.conversationDao().get(
+                admin.groups.create("Семья", family = true, members = listOf(eve.me.userId)))!!.groupId)
+            eventually(what = "group reaches eve") { eve.db.groupDao().get(gid) != null }
+            eve.goOffline()
+            node.revoke(eve.me.userId, reason = "rekey")
+            admin.directory.sync(admin.session!!); admin.groupRevocations.handle()
+            assertTrue(admin.lists(gid, eve))
+            clock.advance(app.ottermsg.core.data.group.GroupRevocations.REKEY_WAIT_MS + 1)
+            admin.groupRevocations.handle()
+            assertTrue(!admin.lists(gid, eve))
+            assertEquals(2L, admin.db.groupDao().get(gid)!!.version)
+        } finally { admin.close(); eve.close() }
+    }
 }

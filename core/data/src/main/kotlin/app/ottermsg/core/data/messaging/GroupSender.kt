@@ -67,7 +67,7 @@ class GroupSender @Inject constructor(private val db: OtterDatabase, private val
         val env = Envelope.newBuilder().setSenderUser(bs(me.userId)).setSenderDevice(1).setKind(Envelope.Kind.SENDER_KEY)
             .setUrgent(item.urgent).setSharedContent(bs(ct))
             .addAllRecipients(to.map { Recipient.newBuilder().setUser(bs(it)).setDevice(1).build() }).build()
-        return RecordCodec.sign(RecordCodec.body(RecordType.ENVELOPE, me.userId, env.toByteArray(), createdMs = clock.now()), me.accountKey)
+        return me.sign(RecordCodec.body(RecordType.ENVELOPE, me.userId, env.toByteArray(), createdMs = clock.now()))
     }
 
     /** D104: a revoked member never gets our sender key or a group message, even while the signed state lists it. */

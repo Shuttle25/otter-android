@@ -58,6 +58,23 @@ class PeerRemovedTest {
         assertTrue(other.canCall)
     }
 
+    /**
+     * D111 step 1 (REVOCATION reason "rekey"): the contact is revoked but not removed; until the REKEY moves the chat to
+     * the new account, sending is paused (notice, no composer, no call), never «Участник удалён».
+     */
+    @Test fun rekeyWaitIsAPauseNotARemoval() {
+        val ui = conversationUi(conv, listOf(line(1, MessageKind.TEXT)), null, emptyList(), ByteArray(16), ZoneId.of("UTC"),
+            revoked = setOf(anna.hex()), rekeying = setOf(anna.hex()))
+        assertFalse(ui.peerRemoved)
+        assertTrue(ui.peerRekeying)
+        assertFalse(ui.canWrite)
+        assertFalse(ui.canCall)
+        // a group is not affected by a member's re-key wait (its own rules apply)
+        val g = conversationUi(conv.copy(peerUserId = null, groupId = ByteArray(16) { 1 }), emptyList(), null, emptyList(),
+            ByteArray(16), ZoneId.of("UTC"), revoked = setOf(anna.hex()), rekeying = setOf(anna.hex()))
+        assertFalse(g.peerRekeying)
+    }
+
     private class Store(private val revoked: MutableStateFlow<Set<String>>) : ConversationStore {
         override fun observeMessages(conversationId: Long) = MutableStateFlow<List<MessageEntity>>(emptyList())
         override fun observeConversation(conversationId: Long) =

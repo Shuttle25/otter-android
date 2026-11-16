@@ -50,7 +50,7 @@ class NewsApiTest {
         g.register(node.bootstrapLink(), "Мама", "mama").getOrThrow()
         val key = Ed25519.keyPairFromSeed(ByteArray(32) { 7 })
         val rec = RecordCodec.sign(RecordCodec.body(RecordType.ANNOUNCEMENT, Ids.id16(key.publicKey),
-            Announcement.newBuilder().setTextRu("Привет").build().toByteArray()), key)
+            Announcement.newBuilder().setTextRu("Привет").build().toByteArray()), key, node.ctx)
         node.publishNews(rec)
         val apk = ByteArray(FakeNode.APK_CHUNK + 10).also(SecureRandom()::nextBytes)
         node.importApk(apk)

@@ -10,6 +10,7 @@ import app.ottermsg.proto.v1.RecordBody
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -211,5 +212,105 @@ class GroupFlowTest {
         assertEquals(listOf("раз"), c.texts(gid))
         assertNotNull(c.conv(gid))
         s.close()
+    }
+
+    private suspend fun TestGraph.ids(gid: ByteArray) = db.groupDao().members(gid).map { it.userId.toList() }.toSet()
+    private suspend fun TestGraph.adminIds(gid: ByteArray) = db.groupDao().members(gid).filter { it.admin }.map { it.userId.toList() }.toSet()
+    private fun idsOf(vararg gs: TestGraph) = gs.map { it.me.userId.toList() }.toSet()
+    private suspend fun TestGraph.keyChanged(gid: ByteArray) = msgs(gid).filter { it.kind == MessageKind.SYSTEM_KEY_CHANGED }
+    private suspend fun TestGraph.learnDirectory() { directory.sync(session!!); groupRevocations.handle() }
+    private suspend fun signerOf(g: TestGraph, gid: ByteArray) =
+        app.ottermsg.proto.v1.SignedGroupState.parseFrom(g.db.groupDao().get(gid)!!.stateSigned).signer.toByteArray()
+
+    /** D112: C lost its phone and was re-keyed to D; the admin swaps C for D, nobody else signs, nothing reaches C. */
+    @Test fun reKeyedMemberIsSwappedByTheAdmin() = runBlocking {
+        family(a, b, c, d)
+        val gid = create("Дом", false, b, c)
+        for (g in listOf(b, c)) eventually(what = "v1") { g.version(gid) == 1L }
+        send(a, gid, "до")
+        for (g in listOf(b, c)) eventually(what = "members read") { "до" in g.texts(gid) }
+        assertNotNull(a.db.groupDao().myDistribution(gid))
+        c.goOffline()
+        val cMail = node.mailbox(c.me.userId).size
+        node.rekey(c.me.userId, d.me.userId)
+
+        b.learnDirectory() // a plain member: not its job while an admin is there
+        assertEquals(1L, b.version(gid))
+        a.learnDirectory()
+        for (g in listOf(a, b, d)) eventually(what = "the swap reaches everyone") { g.version(gid) == 2L }
+        for (g in listOf(a, b, d)) {
+            assertEquals(idsOf(a, b, d), g.ids(gid))
+            assertEquals(idsOf(a), g.adminIds(gid))
+            assertArrayEquals(a.me.userId, signerOf(g, gid))
+        }
+        for (g in listOf(a, b)) {
+            assertEquals("no removed/added events", listOf(GroupEvent.Type.CREATED), g.events(gid))
+            val lines = g.keyChanged(gid)
+            assertEquals(1, lines.size)
+            assertArrayEquals(d.me.userId, lines.single().senderId)
+        }
+        assertTrue(d.db.groupDao().get(gid)!!.iAmMember)
+        assertNull("our sender key rotated", a.db.groupDao().myDistribution(gid))
+        assertEquals("no group update to the lost phone", cMail, node.mailbox(c.me.userId).size)
+
+        send(b, gid, "после")
+        for (g in listOf(a, d)) eventually(what = "the new account reads") { "после" in g.texts(gid) }
+        assertEquals(cMail, node.mailbox(c.me.userId).size)
+        for (g in listOf(a, b)) g.learnDirectory()
+        assertEquals("swapped once", 2L, a.version(gid))
+    }
+
+    /**
+     * D112: C, the only admin, was re-keyed to D: the remaining member with the lowest id swaps. A member that does not
+     * know the REKEY yet parks the swap and accepts it once it does; the new account learns the group the same way.
+     * Hostile: a swap to an account no REKEY names, or signed by a non-member, is never accepted.
+     */
+    @Test fun soleAdminIsSwappedByTheLowestMember() = runBlocking {
+        family(a, b, c, d)
+        val gid = checkNotNull(c.db.conversationDao().get(c.groups.create("Дача", false, listOf(a.me.userId, b.me.userId)))!!.groupId)
+        for (g in listOf(a, b)) eventually(what = "v1") { g.version(gid) == 1L }
+        c.goOffline()
+        node.rekey(c.me.userId, d.me.userId)
+        val (x, y) = listOf(a, b).sortedWith { p, q -> app.ottermsg.core.crypto.GroupRules.compareUnsigned(p.me.userId, q.me.userId) }
+        val v1 = checkNotNull(x.applier.current(gid)).state
+        fun swap(to: ByteArray) = v1.toBuilder().setVersion(2).clearMembers()
+            .addAllMembers(v1.membersList.map { if (it == bs(c.me.userId)) bs(to) else it })
+            .clearAdmins().addAdmins(bs(to)).build()
+
+        // hostile: y swaps C for an account of its own choosing (no REKEY names it): parked, never accepted
+        val mine = ByteArray(16) { 0x77 }
+        val forged = app.ottermsg.core.crypto.GroupSigning.sign(swap(mine), y.me.accountKey)
+        assertTrue(x.applier.apply(forged, y.me.userId).verdict is app.ottermsg.core.crypto.GroupRules.Verdict.Park)
+        // hostile: the new account signs its own swap before anyone knows it as a member: never accepted
+        val byNew = app.ottermsg.core.crypto.GroupSigning.sign(swap(d.me.userId), d.me.accountKey)
+        assertTrue(y.applier.apply(byNew, d.me.userId).verdict !is app.ottermsg.core.crypto.GroupRules.Verdict.Accept)
+        assertEquals(1L, x.version(gid)); assertEquals(1L, y.version(gid))
+
+        y.learnDirectory() // not the designated member: nothing
+        assertEquals(1L, y.version(gid))
+        x.learnDirectory()
+        assertEquals(2L, x.version(gid))
+        assertArrayEquals(x.me.userId, signerOf(x, gid))
+        // d has not synced the REKEY: the swap of a non-admin waits as "unknown group"
+        eventually(what = "d parked the swap") { d.db.groupDao().pendingUpdates(gid).isNotEmpty() }
+        assertNull(d.version(gid))
+        d.learnDirectory()
+        eventually(what = "d accepted after its REKEY") { d.version(gid) == 2L }
+        for (g in listOf(x, y, d)) {
+            eventually(what = "everyone has the swap") { g.version(gid) == 2L }
+            assertEquals(idsOf(a, b, d), g.ids(gid))
+            assertEquals("the admin flag moved with the account", idsOf(d), g.adminIds(gid))
+            assertArrayEquals(x.me.userId, signerOf(g, gid))
+        }
+        assertTrue("forged and early swaps are gone", x.db.groupDao().pendingUpdates(gid).isEmpty() && y.db.groupDao().pendingUpdates(gid).isEmpty())
+        for (g in listOf(x, y)) {
+            assertEquals(1, g.keyChanged(gid).size)
+            assertArrayEquals(d.me.userId, g.keyChanged(gid).single().senderId)
+        }
+        // the new admin can act and write
+        d.groups.rename(gid, "Дача 2")
+        for (g in listOf(x, y)) eventually(what = "rename by the new admin") { g.version(gid) == 3L }
+        send(d, gid, "снова я")
+        for (g in listOf(x, y)) eventually(what = "members read the new account") { "снова я" in g.texts(gid) }
     }
 }

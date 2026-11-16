@@ -42,7 +42,7 @@ class DirectorySyncTest {
         val e = DirectoryEntry.newBuilder().setUserId(bs(Ids.id16(acc.publicKey))).setUsername(name).setDisplayName(name.uppercase())
             .setAccountPub(bs(acc.publicKey)).setIdentityPub(bs(id.publicKey.serialize())).setIdentitySig(bs(sig))
             .setVersion(version).setCanInvite(true).build()
-        return RecordCodec.sign(RecordCodec.body(RecordType.DIRECTORY_ENTRY, Ids.id16(acc.publicKey), e.toByteArray()), acc)
+        return RecordCodec.sign(RecordCodec.body(RecordType.DIRECTORY_ENTRY, Ids.id16(acc.publicKey), e.toByteArray()), acc, node.ctx)
     }
     private fun uid(seed: Byte) = Ids.id16(SeedKeys.accountKeyPair(ByteArray(32) { seed }).publicKey)
     private fun acc(seed: Byte) = SeedKeys.accountKeyPair(ByteArray(32) { seed })
@@ -54,7 +54,7 @@ class DirectorySyncTest {
                        lifetimeMs: Long = Membership.MAX_INVITE_TTL_MS): Record {
         val inv = Invite.newBuilder().setInviteId(bs(sha256(secret))).setExpiresMs(createdMs + lifetimeMs)
             .setRedeemPub(bs(InviteKeys.redeemKey(secret).publicKey)).build()
-        return RecordCodec.sign(RecordCodec.body(RecordType.INVITE, author, inv.toByteArray(), createdMs = createdMs), signer)
+        return RecordCodec.sign(RecordCodec.body(RecordType.INVITE, author, inv.toByteArray(), createdMs = createdMs), signer, node.ctx)
     }
     private fun chained(seed: Byte, name: String, inv: Record, secret: ByteArray, copyFrom: Record? = null,
                         registeredMs: Long = 1000, version: Long = 1, identitySeed: Byte = seed): Record {
@@ -71,7 +71,7 @@ class DirectorySyncTest {
             b.setInviteRecord(inv.toByteString()).setInviteProof(bs(InviteKeys.redeemKey(secret)
                 .sign(InviteKeys.redeemMessage(sha256(secret), uid, acc.publicKey))))
         }
-        return RecordCodec.sign(RecordCodec.body(RecordType.DIRECTORY_ENTRY, uid, b.build().toByteArray()), acc)
+        return RecordCodec.sign(RecordCodec.body(RecordType.DIRECTORY_ENTRY, uid, b.build().toByteArray()), acc, node.ctx)
     }
     /** An entry invited by the network key (a bootstrap link). */
     private fun member(seed: Byte, name: String): Record {
@@ -183,7 +183,7 @@ class DirectorySyncTest {
         val rogue = Ed25519.keyPairFromSeed(ByteArray(32) { 77 })
         val fake = app.ottermsg.proto.v1.Manifest.newBuilder().setVersion(5).setNetworkPub(bs(node.network.publicKey))
             .addFoundingMembers(bs(uid(3))).build()
-        g.db.manifestDao().insert(ManifestEntity(5, RecordCodec.sign(RecordCodec.body(RecordType.MANIFEST, networkId, fake.toByteArray()), rogue).toByteArray()))
+        g.db.manifestDao().insert(ManifestEntity(5, RecordCodec.sign(RecordCodec.body(RecordType.MANIFEST, networkId, fake.toByteArray()), rogue, node.ctx).toByteArray()))
         g.directory.apply(listOf(founder))
         assertNull(g.db.contactDao().get(uid(3)))
         g.db.manifestDao().insert(ManifestEntity(6, node.signManifest(6, foundingMembers = listOf(uid(3))).toByteArray()))
