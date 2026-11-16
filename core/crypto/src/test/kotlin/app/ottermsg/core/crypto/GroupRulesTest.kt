@@ -183,6 +183,32 @@ class GroupRulesTest {
         assertEquals(Verdict.Reject("invalid concurrent state"), rk(held, swapped, b, rekeys = emptyMap(), previous = base))
     }
 
+    /** A state held from a signer revoked since: a valid concurrent state of the previous one replaces it, whatever the ids. */
+    @Test fun concurrentStateReplacesOneByARevokedSigner() {
+        val v2 = state(2, listOf(a, b, c), listOf(a, b))
+        val byA = state(3, listOf(a, c), listOf(a))                 // a (lowest id) removes b, then a is revoked
+        val byB = state(3, listOf(a, b, c), listOf(a, b), name = "Y")
+        assertTrue(GroupRules.evaluate(Applied(byA, a), v2, byB, b) is Verdict.Reject) // a still trusted: a wins
+        assertEquals(Verdict.Accept, GroupRules.evaluate(Applied(byA, a), v2, byB, b, currentSignerRevoked = true))
+        // the replacing state must still be valid against the previous one
+        val byC = state(3, listOf(a, b, c), listOf(a, b), name = "Z")
+        assertTrue(GroupRules.evaluate(Applied(byA, a), v2, byC, c, currentSignerRevoked = true) is Verdict.Reject)
+    }
+
+    /** A revoked signer's state stripped the honest admins: their later state is judged against the previous state too. */
+    @Test fun laterStateOfAnAdminTheRevokedSignerDemoted() {
+        val v2 = state(2, listOf(a, b, c), listOf(a, b))
+        val byA = state(3, listOf(a, c), listOf(a))                 // a removed b, then a is revoked
+        val byB = state(4, listOf(a, b, c), listOf(b), name = "Y")  // b (admin of v2) acting on a phone that refused a's v3
+        assertTrue(GroupRules.evaluate(Applied(byA, a), v2, byB, b) is Verdict.Park)
+        assertEquals(Verdict.Accept, GroupRules.evaluate(Applied(byA, a), v2, byB, b, currentSignerRevoked = true))
+        // a phone that never took a's v3 reaches the same verdict
+        assertEquals(Verdict.Accept, GroupRules.evaluate(Applied(v2, a), null, byB, b))
+        // c was never an admin: its state is not accepted either way
+        val byC = state(4, listOf(a, b, c), listOf(a), name = "Z")
+        assertTrue(GroupRules.evaluate(Applied(byA, a), v2, byC, c, currentSignerRevoked = true) !is Verdict.Accept)
+    }
+
     @Test fun signingRoundTrip() {
         val acct = Ed25519.keyPairFromSeed(ByteArray(32) { 5 })
         val other = Ed25519.keyPairFromSeed(ByteArray(32) { 6 })

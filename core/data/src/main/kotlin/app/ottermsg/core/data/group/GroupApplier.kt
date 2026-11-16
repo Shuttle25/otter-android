@@ -30,6 +30,12 @@ import kotlin.coroutines.cancellation.CancellationException
 /**
  * Applies signed group states, local and incoming alike: verify → [GroupRules] → store state, members, conversation
  * and system events, or park (D36) / drop. After every accepted state the parked updates of that group are retried.
+ *
+ * A state signed by an account revoked on this phone (verified REVOCATION, verified REKEY of that account, or a
+ * duplicate-invite loser) is refused like a bad signature, never parked: once revoked, an account's signatures no longer
+ * authorize changes, whatever version they carry (a lost phone, or a re-keyed member's old key, could still sign). A
+ * state we already hold from such a signer no longer outranks valid states of the honest members ([GroupRules.evaluate],
+ * `currentSignerRevoked`), so every phone converges on the remaining admins' next state.
  */
 @Singleton
 class GroupApplier @Inject constructor(
@@ -57,7 +63,7 @@ class GroupApplier @Inject constructor(
         val cur = groupId?.let { current(it) }
         val next = build(cur?.state)
         val prev = groups.get(next.groupId.toByteArray())?.prevState?.let { GroupState.parseFrom(it) }
-        val verdict = GroupRules.evaluate(cur, prev, next, me.userId, rekeys = rekeys())
+        val verdict = GroupRules.evaluate(cur, prev, next, me.userId, rekeys = rekeys(), currentSignerRevoked = signedByRevoked(cur))
         if (verdict != Verdict.Accept) throw GroupChangeRefused(verdict.toString())
         val signed = GroupSigning.sign(next, me.accountKey)
         val r = applyLocked(signed, me.userId, null)
@@ -86,10 +92,13 @@ class GroupApplier @Inject constructor(
         val state = runCatching { GroupState.parseFrom(signed.state) }.getOrNull() ?: return Result(Verdict.Reject("malformed"), null, emptyList())
         val gid = state.groupId.toByteArray()
         val signer = signed.signer.toByteArray()
-        val pub = signerKey(signer, api)
-        if (pub == null) {
-            park(gid, signed, from)
-            return Result(Verdict.Park("unknown signer"), gid, emptyList())
+        val pub = when (val k = signerKey(signer, api)) {
+            SignerKey.Unknown -> {
+                park(gid, signed, from)
+                return Result(Verdict.Park("unknown signer"), gid, emptyList())
+            }
+            SignerKey.Revoked -> return Result(Verdict.Reject("revoked signer"), gid, emptyList())
+            is SignerKey.Known -> k.pub
         }
         if (!GroupSigning.verify(signed, pub)) return Result(Verdict.Reject("bad signature"), gid, emptyList())
         val verdict = evaluateAndStore(signed, state, signer, from)
@@ -102,15 +111,35 @@ class GroupApplier @Inject constructor(
         return Result(verdict, gid, accepted)
     }
 
-    private suspend fun signerKey(signer: ByteArray, api: NodeApi?): ByteArray? {
-        val me = accounts.require()
-        if (signer.contentEquals(me.userId)) return me.accountKey.publicKey
-        // a link-only contact (C23) is not trusted to sign group states
-        contacts.get(signer)?.takeIf { it.entryVersion > 0 }?.let { return it.accountPub }
-        if (api == null) return null
-        try { directory.sync(api) } catch (e: CancellationException) { throw e } catch (e: Exception) { return null }
-        return contacts.get(signer)?.takeIf { it.entryVersion > 0 }?.accountPub
+    private sealed interface SignerKey {
+        class Known(val pub: ByteArray) : SignerKey
+        /** Not in the directory yet (or only link-known): park until it is. */
+        data object Unknown : SignerKey
+        /** Revoked on this phone: the signature authorizes nothing, the state is refused. */
+        data object Revoked : SignerKey
     }
+
+    private suspend fun signerKey(signer: ByteArray, api: NodeApi?): SignerKey {
+        val me = accounts.require()
+        if (signer.contentEquals(me.userId)) return SignerKey.Known(me.accountKey.publicKey)
+        suspend fun known(): SignerKey? {
+            if (isRevoked(signer)) return SignerKey.Revoked
+            // a link-only contact (C23) is not trusted to sign group states
+            return contacts.get(signer)?.takeIf { it.entryVersion > 0 }?.let { SignerKey.Known(it.accountPub) }
+        }
+        known()?.let { return it }
+        if (api == null) return SignerKey.Unknown
+        try { directory.sync(api) } catch (e: CancellationException) { throw e } catch (e: Exception) { return SignerKey.Unknown }
+        return known() ?: SignerKey.Unknown
+    }
+
+    /** Revoked on this phone: REVOCATION or duplicate-invite loser (sticky `revoked` flag), or the old side of a verified REKEY. */
+    private suspend fun isRevoked(user: ByteArray): Boolean =
+        contacts.get(user)?.revoked == true || db.rekeyDao().get(user) != null
+
+    /** [state] was signed by someone other than us who is revoked by now. */
+    private suspend fun signedByRevoked(state: GroupRules.Applied?): Boolean =
+        state != null && !state.signer.contentEquals(accounts.require().userId) && isRevoked(state.signer)
 
     private suspend fun park(gid: ByteArray, signed: SignedGroupState, from: ByteArray) {
         groups.insertPendingUpdate(PendingGroupUpdateEntity(groupId = gid, signed = signed.toByteArray(), fromUser = from, receivedMs = clock.now()))
@@ -125,7 +154,7 @@ class GroupApplier @Inject constructor(
             val cur = row?.let { applied(it) }
             val prev = row?.prevState?.let { GroupState.parseFrom(it) }
             val rekeys = rekeys()
-            val verdict = GroupRules.evaluate(cur, prev, state, signer, signed.state.toByteArray(), rekeys)
+            val verdict = GroupRules.evaluate(cur, prev, state, signer, signed.state.toByteArray(), rekeys, signedByRevoked(cur))
             when (verdict) {
                 is Verdict.Park -> { if (parkIt) park(gid, signed, from); return@withTransaction verdict }
                 is Verdict.Reject -> return@withTransaction verdict
@@ -173,9 +202,12 @@ class GroupApplier @Inject constructor(
             for (p in groups.pendingUpdates(gid)) {
                 val signed = runCatching { SignedGroupState.parseFrom(p.signed) }.getOrNull()
                 val state = signed?.let { runCatching { GroupState.parseFrom(it.state) }.getOrNull() }
-                val pub = signed?.let { signerKey(it.signer.toByteArray(), null) }
                 if (signed == null || state == null) { groups.deletePendingUpdate(p.id); continue }
-                if (pub == null) continue
+                val pub = when (val k = signerKey(signed.signer.toByteArray(), null)) {
+                    SignerKey.Unknown -> continue
+                    SignerKey.Revoked -> { groups.deletePendingUpdate(p.id); continue } // revoked while parked
+                    is SignerKey.Known -> k.pub
+                }
                 if (!GroupSigning.verify(signed, pub)) { groups.deletePendingUpdate(p.id); continue }
                 when (evaluateAndStore(signed, state, signed.signer.toByteArray(), p.fromUser, parkIt = false)) {
                     Verdict.Accept -> { groups.deletePendingUpdate(p.id); progress = true }

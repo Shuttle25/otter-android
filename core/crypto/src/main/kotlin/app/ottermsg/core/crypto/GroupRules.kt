@@ -26,10 +26,16 @@ object GroupRules {
      * @param current the state we hold now (null: unknown group)
      * @param previous the state [current] replaced (needed to judge a concurrent edit at the same version)
      * @param rekeys the winning verified REKEYs this client knows, old user id → new user id (D112)
+     * @param currentSignerRevoked [current] was signed by an account revoked since (REVOCATION, REKEY, duplicate-invite
+     *   loser). Its signature no longer authorizes anything, so a candidate that is valid against [previous] is accepted
+     *   too, and wins a same-version conflict whatever the ids: phones that refused the revoked signer's state (the caller
+     *   rejects states signed by a revoked account outright) and phones that took it before they learned of the
+     *   revocation then converge on the next honest state.
      */
     fun evaluate(
         current: Applied?, previous: GroupState?, candidate: GroupState, signer: ByteArray,
         candidateBytes: ByteArray = candidate.toByteArray(), rekeys: Map<ByteString, ByteString> = emptyMap(),
+        currentSignerRevoked: Boolean = false,
     ): Verdict {
         structuralError(candidate)?.let { return Verdict.Reject(it) }
         if (current == null) return againstBase(null, candidate, signer, rekeys)
@@ -40,8 +46,12 @@ object GroupRules {
         }
         return when {
             candidate.version < cur.version -> Verdict.Reject("old")
-            candidate.version > cur.version -> againstBase(cur, candidate, signer, rekeys)
+            candidate.version > cur.version -> againstBase(cur, candidate, signer, rekeys).let { v ->
+                if (v != Verdict.Accept && currentSignerRevoked && previous != null &&
+                    againstBase(previous, candidate, signer, rekeys) == Verdict.Accept) Verdict.Accept else v
+            }
             candidateBytes.contentEquals(current.stateBytes) -> Verdict.Reject("duplicate")
+            currentSignerRevoked && previous != null && againstBase(previous, candidate, signer, rekeys) == Verdict.Accept -> Verdict.Accept
             else -> concurrent(current, previous, candidate, signer, candidateBytes, rekeys)
         }
     }
