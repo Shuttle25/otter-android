@@ -4,6 +4,7 @@ import app.ottermsg.core.crypto.Ed25519
 import app.ottermsg.core.crypto.Ids
 import app.ottermsg.core.crypto.InviteKeys
 import app.ottermsg.core.crypto.RecordCodec
+import app.ottermsg.core.crypto.SigContext
 import app.ottermsg.proto.v1.DirectoryEntry
 import app.ottermsg.proto.v1.Invite
 import app.ottermsg.proto.v1.InviteRights
@@ -37,7 +38,7 @@ object Membership {
      * the invite's lifetime. Whether the inviter was allowed to
      * invite is the caller's check (it needs the revocation and rights records).
      */
-    fun chain(e: DirectoryEntry, networkPub: ByteArray, keyOf: (ByteArray) -> ByteArray?): Redemption? = runCatching {
+    fun chain(e: DirectoryEntry, networkPub: ByteArray, ctx: SigContext, keyOf: (ByteArray) -> ByteArray?): Redemption? = runCatching {
         if (e.inviteRecord.isEmpty || e.inviteProof.size() != 64) return null
         val rec = Record.parseFrom(e.inviteRecord)
         val body = RecordBody.parseFrom(rec.body)
@@ -47,7 +48,7 @@ object Membership {
         val author = body.author.toByteArray()
         val fromNetwork = author.contentEquals(Ids.id16(networkPub))
         val signer = if (fromNetwork) networkPub else keyOf(author) ?: return null
-        if (!RecordCodec.verify(rec, signer)) return null
+        if (!RecordCodec.verify(rec, signer, ctx)) return null
         val msg = InviteKeys.redeemMessage(inv.inviteId.toByteArray(), e.userId.toByteArray(), e.accountPub.toByteArray())
         if (!Ed25519.verify(inv.redeemPub.toByteArray(), msg, e.inviteProof.toByteArray())) return null
         if (!inviteLifetimeOk(body.createdMs, inv.expiresMs)) return null
@@ -61,15 +62,15 @@ object Membership {
         expiresMs > createdMs && expiresMs - createdMs <= MAX_INVITE_TTL_MS
 
     /** A REVOCATION signed by the network key, else null (a node or member cannot remove anyone). */
-    fun revocation(rec: Record, networkPub: ByteArray): RevocationRecord? = runCatching {
-        val body = networkBody(rec, networkPub, RecordType.REVOCATION) ?: return null
+    fun revocation(rec: Record, networkPub: ByteArray, ctx: SigContext): RevocationRecord? = runCatching {
+        val body = networkBody(rec, networkPub, ctx, RecordType.REVOCATION) ?: return null
         val user = Revocation.parseFrom(body.payload).userId.toByteArray().takeIf { it.size == 16 } ?: return null
         RevocationRecord(user, body.createdMs)
     }.getOrNull()
 
     /** An INVITE_RIGHTS signed by the network key, else null. */
-    fun rights(rec: Record, networkPub: ByteArray): RightsRecord? = runCatching {
-        val body = networkBody(rec, networkPub, RecordType.INVITE_RIGHTS) ?: return null
+    fun rights(rec: Record, networkPub: ByteArray, ctx: SigContext): RightsRecord? = runCatching {
+        val body = networkBody(rec, networkPub, ctx, RecordType.INVITE_RIGHTS) ?: return null
         val r = InviteRights.parseFrom(body.payload)
         val user = r.userId.toByteArray().takeIf { it.size == 16 } ?: return null
         RightsRecord(user, r.canInvite, r.version, body.createdMs)
@@ -83,9 +84,9 @@ object Membership {
         records.filter { it.createdMs <= atMs }
             .maxWithOrNull(compareBy<RightsRecord> { it.version }.thenBy { if (it.canInvite) 0 else 1 })?.canInvite ?: true
 
-    private fun networkBody(rec: Record, networkPub: ByteArray, type: RecordType): RecordBody? {
+    private fun networkBody(rec: Record, networkPub: ByteArray, ctx: SigContext, type: RecordType): RecordBody? {
         val body = RecordBody.parseFrom(rec.body)
-        if (body.type != type || !body.author.toByteArray().contentEquals(Ids.id16(networkPub)) || !RecordCodec.verify(rec, networkPub))
+        if (body.type != type || !body.author.toByteArray().contentEquals(Ids.id16(networkPub)) || !RecordCodec.verify(rec, networkPub, ctx))
             return null
         return body
     }

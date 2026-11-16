@@ -9,6 +9,7 @@ import app.ottermsg.core.crypto.InviteLink
 import app.ottermsg.core.crypto.ManifestVerifier
 import app.ottermsg.core.crypto.RecordCodec
 import app.ottermsg.core.crypto.SeedKeys
+import app.ottermsg.core.crypto.SigContext
 import app.ottermsg.core.data.Clock
 import app.ottermsg.core.data.account.AccountRepository
 import app.ottermsg.core.data.account.SeedVault
@@ -75,12 +76,15 @@ class RestoreManager @Inject constructor(
     /** Key derivation; tests swap in cheap parameters (the profile's numbers are ignored then). */
     internal var derive: (String, ByteArray, BackupKeys.Profile) -> BackupKeys.Keys = { pw, salt, p -> BackupKeys.derive(pw, salt, p) }
 
-    private class Network(val manifest: Manifest, val raw: ByteArray, val networkPub: ByteArray)
+    private class Network(val manifest: Manifest, val raw: ByteArray, val networkPub: ByteArray) {
+        /** Records are checked under the link's manifest (D109); a v2 record of this network always passes. */
+        val ctx get() = SigContext.of(networkPub, manifest)
+    }
 
     private fun network(link: String): Network {
         val b = try { InviteLink.decode(link) } catch (e: IllegalArgumentException) { throw RestoreError.BadLink }
         val pub = b.networkPub.toByteArray()
-        val m = try { ManifestVerifier.verify(b.manifest.toByteArray(), pub, 0) } catch (e: Exception) { throw RestoreError.BadLink }
+        val m = try { ManifestVerifier.verify(b.manifest.toByteArray(), pub, 0, 0) } catch (e: Exception) { throw RestoreError.BadLink }
         return Network(m, b.manifest.toByteArray(), pub)
     }
 
@@ -103,8 +107,8 @@ class RestoreManager @Inject constructor(
         val d = connector.withNode(Endpoints.candidates(net.manifest, allowPlaintext)) { api ->
             val name = username.trim().lowercase()
             val auth = api.backupAuth(name)
-            if (auth.candidatesCount == 0) download(api, name, password, auth)
-            else tryCandidates(api, candidatesFor(name, auth.candidatesList), password) // D103: a clashed name
+            if (auth.candidatesCount == 0) download(api, name, password, auth, net.ctx)
+            else tryCandidates(api, candidatesFor(name, auth.candidatesList), password, net.ctx) // D103: a clashed name
         }
         install(net, d.snapshot, d)
     }
@@ -113,9 +117,9 @@ class RestoreManager @Inject constructor(
      * Each candidate with the same password, in the node's order; the first that decrypts wins (the others fail their
      * own verifier). Every wrong one counts as a failed attempt on the node, so the loop stops at the first success.
      */
-    private suspend fun tryCandidates(api: NodeApi, names: List<String>, password: String): Downloaded {
+    private suspend fun tryCandidates(api: NodeApi, names: List<String>, password: String, ctx: SigContext): Downloaded {
         for (n in names) {
-            try { return download(api, n, password, api.backupAuth(n)) }
+            try { return download(api, n, password, api.backupAuth(n), ctx) }
             catch (e: RpcException) { if (e.status != Status.STATUS_UNAUTHORIZED) throw e }
         }
         throw RestoreError.WrongPassword
@@ -125,9 +129,10 @@ class RestoreManager @Inject constructor(
 
     /**
      * Fetches, verifies and decrypts the backup over one connection (the fetch grant is per connection, D51). [auth] is
-     * the node's backup.auth answer for [username]; a candidate must not be ambiguous itself.
+     * the node's backup.auth answer for [username]; a candidate must not be ambiguous itself. [ctx]: the network's
+     * record signature context (D109).
      */
-    private suspend fun download(api: NodeApi, username: String, password: String, auth: BackupAuthResponse): Downloaded {
+    private suspend fun download(api: NodeApi, username: String, password: String, auth: BackupAuthResponse, ctx: SigContext): Downloaded {
         if (auth.candidatesCount > 0) throw RestoreError.WrongPassword
         // C1: the node's numbers only select one of our profiles; anything else ends here, before the password is used
         val profile = BackupKeys.Profile.match(auth.kdfMKib, auth.kdfT, auth.kdfP, auth.salt.size()) ?: throw RestoreError.Corrupt
@@ -158,16 +163,16 @@ class RestoreManager @Inject constructor(
             val account = SeedKeys.accountKeyPair(snapshot.seed.toByteArray())
             val author = Ids.id16(account.publicKey)
             if (snapshot.format != SnapshotCodec.FORMAT ||
-                !signedBy(res.backupMeta, metaBody, RecordType.BACKUP_META, account.publicKey, author) ||
-                !signedBy(res.blobMeta, blobBody, RecordType.BLOB_META, account.publicKey, author) ||
+                !signedBy(res.backupMeta, metaBody, RecordType.BACKUP_META, account.publicKey, author, ctx) ||
+                !signedBy(res.blobMeta, blobBody, RecordType.BLOB_META, account.publicKey, author, ctx) ||
                 meta.salt != auth.salt ||
                 BackupKeys.Profile.match(meta.kdfMKib, meta.kdfT, meta.kdfP, meta.salt.size()) != profile) throw RestoreError.Corrupt
             return Downloaded(snapshot, keys, meta, profile)
         } finally { tmp.delete() }
     }
 
-    private fun signedBy(rec: Record, body: RecordBody, type: RecordType, pub: ByteArray, author: ByteArray) =
-        body.type == type && body.author.toByteArray().contentEquals(author) && RecordCodec.verify(rec, pub)
+    private fun signedBy(rec: Record, body: RecordBody, type: RecordType, pub: ByteArray, author: ByteArray, ctx: SigContext) =
+        body.type == type && body.author.toByteArray().contentEquals(author) && RecordCodec.verify(rec, pub, ctx)
 
     override suspend fun withWords(link: String, words: List<String>): Result<Unit> = guarded {
         check(accounts.account.value == null) { "an account is already installed" }
@@ -182,7 +187,7 @@ class RestoreManager @Inject constructor(
                 throw e
             }
             // C18: only entries that verify like in sync and belong to the key from the words; the newest wins
-            api.directory().mapNotNull { DirectorySync.verifyEntry(it) }
+            api.directory().mapNotNull { DirectorySync.verifyEntry(it, net.ctx) }
                 .filter { it.userId.toByteArray().contentEquals(userId) && it.accountPub.toByteArray().contentEquals(account.publicKey) }
                 .maxByOrNull { it.version }
         } ?: throw RestoreError.UnknownAccount
@@ -194,10 +199,13 @@ class RestoreManager @Inject constructor(
 
     override suspend fun addHistory(password: String): Result<Unit> = guarded {
         val me = accounts.require()
-        val m = ManifestVerifier.verify(checkNotNull(db.manifestDao().latest()) { "no manifest" }.raw, settings.networkPub(), 0)
+        val networkPub = settings.networkPub()
+        val m = ManifestVerifier.verify(checkNotNull(db.manifestDao().latest()) { "no manifest" }.raw, networkPub, 0, 0)
         // D103: always the tagged name, never ambiguous (a plain name that ever clashed is CONFLICT)
         val tagged = me.username.substringBefore('#') + "#" + tag(me.userId)
-        val d = connector.withNode(Endpoints.candidates(m, allowPlaintext)) { api -> download(api, tagged, password, api.backupAuth(tagged)) }
+        val d = connector.withNode(Endpoints.candidates(m, allowPlaintext)) { api ->
+            download(api, tagged, password, api.backupAuth(tagged), SigContext.of(networkPub, m))
+        }
         if (!d.snapshot.seed.toByteArray().contentEquals(me.seed)) throw RestoreError.Corrupt
         SnapshotCodec.import(d.snapshot, db, settings)
         keepBackupOn(d)

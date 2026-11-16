@@ -17,9 +17,10 @@ class AnnouncementVerifierTest {
     private val key = newKey()
     private val other = newKey()
     private val keys = listOf(key.publicKey)
+    private val ctx = SigContext(ByteArray(16) { 5 }, 0)
 
     private fun rec(type: RecordType, payload: ByteArray, k: Ed25519.KeyPair = key, expiresMs: Long = 0): Record =
-        RecordCodec.sign(RecordCodec.body(type, Ids.id16(k.publicKey), payload, expiresMs = expiresMs), k)
+        RecordCodec.sign(RecordCodec.body(type, Ids.id16(k.publicKey), payload, expiresMs = expiresMs), k, ctx)
 
     private fun ann(ru: String = "", en: String = "", update: AppUpdate? = null): ByteArray =
         Announcement.newBuilder().setTextRu(ru).setTextEn(en).apply { update?.let { setUpdate(it) } }.build().toByteArray()
@@ -29,7 +30,7 @@ class AnnouncementVerifierTest {
 
     @Test fun goodAnnouncement() {
         val r = rec(RecordType.ANNOUNCEMENT, ann(ru = "Привет"))
-        val n = AnnouncementVerifier.verify(r, keys) as News.Item
+        val n = AnnouncementVerifier.verify(r, keys, ctx) as News.Item
         assertEquals("Привет", n.announcement.textRu)
         assertEquals(32, n.key.size)
         assertTrue(n.author.contentEquals(Ids.id16(key.publicKey)))
@@ -38,25 +39,33 @@ class AnnouncementVerifierTest {
     @Test fun goodVariants() {
         for (p in listOf(ann(en = "Hello"), ann("Привет", "Hello"), ann("Обновление", update = upd()),
             ann(ru = "я".repeat(4000)), ann(ru = "x", update = upd(name = "1".repeat(32), size = 100L shl 20)))) {
-            assertTrue(AnnouncementVerifier.verify(rec(RecordType.ANNOUNCEMENT, p), keys) is News.Item)
+            assertTrue(AnnouncementVerifier.verify(rec(RecordType.ANNOUNCEMENT, p), keys, ctx) is News.Item)
         }
     }
 
     @Test fun goodDeletion() {
         val r = rec(RecordType.ANNOUNCEMENT_DELETED, AnnouncementDeleted.newBuilder().setTarget(ByteString.copyFrom(ByteArray(32))).build().toByteArray())
-        val d = AnnouncementVerifier.verify(r, keys) as News.Deleted
+        val d = AnnouncementVerifier.verify(r, keys, ctx) as News.Deleted
         assertEquals(32, d.target.size)
     }
 
     @Test fun rejects() {
         val ok = ann(ru = "x")
-        assertNull(AnnouncementVerifier.verify(rec(RecordType.ANNOUNCEMENT, ok, other), keys))
-        assertNull(AnnouncementVerifier.verify(rec(RecordType.ANNOUNCEMENT, ok), emptyList()))
-        assertNull(AnnouncementVerifier.verify(rec(RecordType.ENVELOPE, ok), keys))
-        assertNull(AnnouncementVerifier.verify(rec(RecordType.ANNOUNCEMENT, ann(ru = "  ", en = "\n")), keys))
-        assertNull(AnnouncementVerifier.verify(rec(RecordType.ANNOUNCEMENT, ann()), keys))
+        assertNull(AnnouncementVerifier.verify(rec(RecordType.ANNOUNCEMENT, ok, other), keys, ctx))
+        assertNull(AnnouncementVerifier.verify(rec(RecordType.ANNOUNCEMENT, ok), emptyList(), ctx))
+        assertNull(AnnouncementVerifier.verify(rec(RecordType.ENVELOPE, ok), keys, ctx))
+        assertNull(AnnouncementVerifier.verify(rec(RecordType.ANNOUNCEMENT, ann(ru = "  ", en = "\n")), keys, ctx))
+        assertNull(AnnouncementVerifier.verify(rec(RecordType.ANNOUNCEMENT, ann()), keys, ctx))
         val tampered = rec(RecordType.ANNOUNCEMENT, ok).toBuilder().setSignature(ByteString.copyFrom(ByteArray(64))).build()
-        assertNull(AnnouncementVerifier.verify(tampered, keys))
+        assertNull(AnnouncementVerifier.verify(tampered, keys, ctx))
+    }
+
+    @Test fun v2ForAnotherNetworkIsRefused() {
+        val ok = ann(ru = "x")
+        val foreign = RecordCodec.sign(RecordCodec.body(RecordType.ANNOUNCEMENT, Ids.id16(key.publicKey), ok), key, SigContext(ByteArray(16) { 6 }, 1))
+        assertNull(AnnouncementVerifier.verify(foreign, keys, ctx))
+        val bound = RecordCodec.sign(RecordCodec.body(RecordType.ANNOUNCEMENT, Ids.id16(key.publicKey), ok), key, SigContext(ctx.networkId, 1))
+        assertTrue(AnnouncementVerifier.verify(bound, keys, ctx) is News.Item)
     }
 
     @Test fun rejectsBadPayloads() {
@@ -72,10 +81,10 @@ class AnnouncementVerifierTest {
             invalidUtf8(),
             byteArrayOf(0x0a, 0x7f), // truncated
         )
-        for ((i, p) in bad.withIndex()) assertNull("bad $i", AnnouncementVerifier.verify(rec(RecordType.ANNOUNCEMENT, p), keys))
-        assertNull(AnnouncementVerifier.verify(rec(RecordType.ANNOUNCEMENT, ann(ru = "x"), expiresMs = System.currentTimeMillis() + 3_600_000), keys))
+        for ((i, p) in bad.withIndex()) assertNull("bad $i", AnnouncementVerifier.verify(rec(RecordType.ANNOUNCEMENT, p), keys, ctx))
+        assertNull(AnnouncementVerifier.verify(rec(RecordType.ANNOUNCEMENT, ann(ru = "x"), expiresMs = System.currentTimeMillis() + 3_600_000), keys, ctx))
         val short = AnnouncementDeleted.newBuilder().setTarget(ByteString.copyFrom(ByteArray(31))).build().toByteArray()
-        assertNull(AnnouncementVerifier.verify(rec(RecordType.ANNOUNCEMENT_DELETED, short), keys))
+        assertNull(AnnouncementVerifier.verify(rec(RecordType.ANNOUNCEMENT_DELETED, short), keys, ctx))
     }
 
     /** text_en = 0xff, written by hand so the builder cannot reject it. */

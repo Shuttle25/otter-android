@@ -1,7 +1,9 @@
 package app.ottermsg.core.data.account
 
 import app.ottermsg.core.crypto.SeedKeys
+import app.ottermsg.core.crypto.SigContext
 import app.ottermsg.core.data.settings.Settings
+import app.ottermsg.core.data.sync.SigContexts
 import app.ottermsg.core.database.dao.AccountDao
 import app.ottermsg.core.database.entity.AccountEntity
 import app.ottermsg.core.signal.IdentityKeys
@@ -15,6 +17,7 @@ import javax.inject.Singleton
 @Singleton
 class AccountRepository @Inject constructor(
     private val accountDao: AccountDao, private val settings: Settings, private val vault: SeedVault,
+    private val sig: SigContexts,
 ) {
     private val _account = MutableStateFlow<LocalAccount?>(null)
     val account: StateFlow<LocalAccount?> = _account
@@ -37,8 +40,11 @@ class AccountRepository @Inject constructor(
     private suspend fun build(e: AccountEntity): LocalAccount {
         val seed = vault.unwrap(e.seedEnc)
         return LocalAccount(e.userId, e.username, e.displayName, seed, SeedKeys.accountKeyPair(seed),
-            IdentityKeys.fromSeed(seed), settings.registrationId(), e.createdMs)
+            IdentityKeys.fromSeed(seed), settings.registrationId(), e.createdMs, sig)
     }
+
+    /** The record signature context every verifier of the app uses (D109): network id and the stored cut-over. */
+    suspend fun sigContext(): SigContext = sig.sigContext()
 
     fun require(): LocalAccount = checkNotNull(_account.value) { "no account loaded" }
 }

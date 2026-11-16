@@ -8,6 +8,7 @@ import app.ottermsg.core.crypto.ManifestException
 import app.ottermsg.core.crypto.ManifestVerifier
 import app.ottermsg.core.crypto.RecordCodec
 import app.ottermsg.core.crypto.SeedKeys
+import app.ottermsg.core.crypto.SigContext
 import app.ottermsg.core.data.Clock
 import app.ottermsg.core.data.account.AccountRepository
 import app.ottermsg.core.data.account.DirectoryEntries
@@ -21,6 +22,7 @@ import app.ottermsg.core.database.entity.AccountEntity
 import app.ottermsg.core.database.entity.ContactEntity
 import app.ottermsg.core.database.entity.ManifestEntity
 import app.ottermsg.core.network.Endpoints
+import app.ottermsg.core.network.NodeApi
 import app.ottermsg.core.network.RpcException
 import app.ottermsg.core.signal.IdentityKeys
 import app.ottermsg.core.signal.InMemorySignalKeyValue
@@ -28,6 +30,7 @@ import app.ottermsg.core.signal.OtterProtocolStore
 import app.ottermsg.core.signal.PreKeyFactory
 import app.ottermsg.proto.v1.Invite
 import app.ottermsg.proto.v1.InviteUsed
+import app.ottermsg.proto.v1.Manifest
 import app.ottermsg.proto.v1.PreKeys
 import app.ottermsg.proto.v1.Record
 import app.ottermsg.proto.v1.RecordBody
@@ -82,7 +85,7 @@ class Registration @Inject constructor(
         if (DirectoryEntries.validate(name) != null) throw RegistrationError.BadDisplayName
         val bundle = try { InviteLink.decode(link) } catch (e: IllegalArgumentException) { throw RegistrationError.BadLink }
         val networkPub = bundle.networkPub.toByteArray()
-        val manifest = try { ManifestVerifier.verify(bundle.manifest.toByteArray(), networkPub, 0) } catch (e: ManifestException) { throw RegistrationError.BadLink }
+        val manifest = try { ManifestVerifier.verify(bundle.manifest.toByteArray(), networkPub, 0, 0) } catch (e: ManifestException) { throw RegistrationError.BadLink }
         if (bundle.secret.size() != 32) throw RegistrationError.BadLink
         // D100: a link made before 0.9.1 has no signed INVITE; no node admits it any more.
         if (!bundle.hasInvite()) throw RegistrationError.InviteOutdated
@@ -112,13 +115,17 @@ class Registration @Inject constructor(
         val prekeys = PreKeys.newBuilder().setDeviceId(1).setRegistrationId(registrationId).setInstalledMs(now)
             .setSignedPrekey(signed).setKyberPrekey(kyber).addAllOneTime(oneTime).build()
         val used = InviteUsed.newBuilder().setInviteId(bs(inviteId)).setUserId(bs(userId)).build()
-        fun rec(t: RecordType, p: MessageLite) = RecordCodec.sign(RecordCodec.body(t, userId, p.toByteArray(), createdMs = now), account)
-        val req = RegisterRequest.newBuilder() // no invite_secret (D100)
-            .setDirectoryEntry(rec(RecordType.DIRECTORY_ENTRY, entry)).setPrekeys(rec(RecordType.PREKEYS, prekeys))
-            .setInviteUsed(rec(RecordType.INVITE_USED, used)).build()
-
+        var stored = manifest to bundle.manifest.toByteArray()
         try {
-            connector.withNode(Endpoints.candidates(manifest, allowPlaintext)) { it.register(req) }
+            connector.withNode(Endpoints.candidates(manifest, allowPlaintext)) { api ->
+                // D109: sign as the network does now; a link made before the cut-over carries an older manifest
+                stored = newerManifest(api, networkPub, manifest) ?: stored
+                val ctx = SigContext.of(networkPub, stored.first)
+                fun rec(t: RecordType, p: MessageLite) = RecordCodec.sign(RecordCodec.body(t, userId, p.toByteArray(), createdMs = now), account, ctx)
+                api.register(RegisterRequest.newBuilder() // no invite_secret (D100)
+                    .setDirectoryEntry(rec(RecordType.DIRECTORY_ENTRY, entry)).setPrekeys(rec(RecordType.PREKEYS, prekeys))
+                    .setInviteUsed(rec(RecordType.INVITE_USED, used)).build())
+            }
         } catch (e: RpcException) {
             throw map(e)
         } catch (e: IOException) {
@@ -134,6 +141,7 @@ class Registration @Inject constructor(
             settings.setNetworkPub(networkPub)
             settings.setOwnInvite(inviteRecord, proof)
             db.manifestDao().insert(ManifestEntity(manifest.version, bundle.manifest.toByteArray(), receivedMs = now))
+            if (stored.first.version > manifest.version) db.manifestDao().insert(ManifestEntity(stored.first.version, stored.second, receivedMs = now))
             mem.copyInto(RoomSignalKeyValue(db.signalKvDao()))
             // C23: the link's inviter fields are not signed. Keep them only as a placeholder (name in the chat list):
             // entryVersion 0 = "only from a link", never verified; the directory entry replaces it.
@@ -156,6 +164,19 @@ class Registration @Inject constructor(
             e.status == Status.STATUS_INVALID && "invite chain" in msg -> RegistrationError.InviteOutdated
             else -> RegistrationError.Unknown(e.message.orEmpty())
         }
+    }
+
+    /**
+     * The node's manifest if it is newer than the link's [linkManifest] and verifies (signed by the network key, and v2
+     * once [linkManifest] has a cut-over), else null: the link may predate the v2 cut-over (D109).
+     */
+    private suspend fun newerManifest(api: NodeApi, networkPub: ByteArray, linkManifest: Manifest): Pair<Manifest, ByteArray>? = try {
+        if (api.hello().manifestVersion <= linkManifest.version) null
+        else api.manifest().toByteArray().let { raw -> ManifestVerifier.verify(raw, networkPub, linkManifest.version, linkManifest.sigV1UntilMs) to raw }
+    } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+        throw e
+    } catch (e: ManifestException) {
+        null
     }
 
     /** The link's INVITE belongs to its secret (else no proof could verify: a tampered or swapped link). */

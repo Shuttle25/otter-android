@@ -11,16 +11,27 @@ class ManifestVerifierTest {
     private val other = Ed25519.keyPairFromSeed(ByteArray(32) { 2 })
 
     private fun signed(version: Long, signer: Ed25519.KeyPair = net, author: ByteArray = Ids.id16(net.publicKey),
-                       networkPub: ByteArray = net.publicKey, type: RecordType = RecordType.MANIFEST): ByteArray {
+                       networkPub: ByteArray = net.publicKey, type: RecordType = RecordType.MANIFEST, ctx: SigContext = SigContext(Ids.id16(net.publicKey), 0)): ByteArray {
         val m = Manifest.newBuilder().setVersion(version).setNetworkPub(com.google.protobuf.ByteString.copyFrom(networkPub)).build()
-        return RecordCodec.sign(RecordCodec.body(type, author, m.toByteArray()), signer).toByteArray()
+        return RecordCodec.sign(RecordCodec.body(type, author, m.toByteArray()), signer, ctx).toByteArray()
     }
 
-    @Test fun acceptsNewer() { assertEquals(5L, ManifestVerifier.verify(signed(5), net.publicKey, 4).version) }
-    @Test fun rejectsSameVersion() { assertThrows(ManifestException::class.java) { ManifestVerifier.verify(signed(4), net.publicKey, 4) } }
-    @Test fun rejectsWrongSigner() { assertThrows(ManifestException::class.java) { ManifestVerifier.verify(signed(5, signer = other), net.publicKey, 0) } }
-    @Test fun rejectsWrongAuthor() { assertThrows(ManifestException::class.java) { ManifestVerifier.verify(signed(5, author = ByteArray(16)), net.publicKey, 0) } }
-    @Test fun rejectsForeignNetworkPub() { assertThrows(ManifestException::class.java) { ManifestVerifier.verify(signed(5, networkPub = other.publicKey), net.publicKey, 0) } }
-    @Test fun rejectsWrongType() { assertThrows(ManifestException::class.java) { ManifestVerifier.verify(signed(5, type = RecordType.ACK), net.publicKey, 0) } }
-    @Test fun rejectsGarbage() { assertThrows(ManifestException::class.java) { ManifestVerifier.verify(byteArrayOf(1, 2, 3), net.publicKey, 0) } }
+    @Test fun acceptsNewer() { assertEquals(5L, ManifestVerifier.verify(signed(5), net.publicKey, 4, 0).version) }
+    @Test fun rejectsSameVersion() { assertThrows(ManifestException::class.java) { ManifestVerifier.verify(signed(4), net.publicKey, 4, 0) } }
+    @Test fun rejectsWrongSigner() { assertThrows(ManifestException::class.java) { ManifestVerifier.verify(signed(5, signer = other), net.publicKey, 0, 0) } }
+    @Test fun rejectsWrongAuthor() { assertThrows(ManifestException::class.java) { ManifestVerifier.verify(signed(5, author = ByteArray(16)), net.publicKey, 0, 0) } }
+    @Test fun rejectsForeignNetworkPub() { assertThrows(ManifestException::class.java) { ManifestVerifier.verify(signed(5, networkPub = other.publicKey), net.publicKey, 0, 0) } }
+    @Test fun rejectsWrongType() { assertThrows(ManifestException::class.java) { ManifestVerifier.verify(signed(5, type = RecordType.ACK), net.publicKey, 0, 0) } }
+    @Test fun rejectsGarbage() { assertThrows(ManifestException::class.java) { ManifestVerifier.verify(byteArrayOf(1, 2, 3), net.publicKey, 0, 0) } }
+
+    @Test fun acceptsV2() { assertEquals(5L, ManifestVerifier.verify(signed(5, ctx = SigContext(Ids.id16(net.publicKey), 1)), net.publicKey, 4, 0).version) }
+    @Test fun rejectsV1AfterCutover() {
+        // created now (> 1): a v1 manifest signed after the cut-over is refused
+        assertThrows(ManifestException::class.java) { ManifestVerifier.verify(signed(5), net.publicKey, 4, v1UntilMs = 1) }
+    }
+    @Test fun rejectsV2ForAnotherNetwork() {
+        assertThrows(ManifestException::class.java) {
+            ManifestVerifier.verify(signed(5, ctx = SigContext(ByteArray(16) { 9 }, 1)), net.publicKey, 4, 0)
+        }
+    }
 }

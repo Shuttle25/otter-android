@@ -27,7 +27,7 @@ class InstallGuardTest {
 
     private fun install(rid: Int, installedMs: Long, key: Ed25519.KeyPair = a.me.accountKey, author: ByteArray = a.me.userId): Record =
         RecordCodec.sign(RecordCodec.body(RecordType.INSTALL, author, Install.newBuilder().setRegistrationId(rid)
-            .setInstalledMs(installedMs).build().toByteArray(), createdMs = clock.now()), key)
+            .setInstalledMs(installedMs).build().toByteArray(), createdMs = clock.now()), key, node.ctx)
 
     @Test fun registrationPublishesSignedInstall() = runBlocking<Unit> {
         a.register(node.bootstrapLink(), "Мама", "mama").getOrThrow()

@@ -51,6 +51,7 @@ class MailboxReceiver @Inject constructor(
 
     suspend fun handle(api: NodeApi, records: List<Record>) = mutex.withLock {
         val me = accounts.require()
+        val ctx = accounts.sigContext() // D109: v2 for this network, v1 only before the cut-over
         groups.expirePending()
         val acks = mutableListOf<ByteArray>()
         var directorySynced = false
@@ -68,8 +69,9 @@ class MailboxReceiver @Inject constructor(
                 sender = contacts.get(body.author.toByteArray())?.takeIf { it.entryVersion > 0 }
             }
             if (sender == null) continue // keep it on the node; retry on a later delivery
-            if (!RecordCodec.verify(rec, sender.accountPub)) {
-                // A forged copy: not seen, not acked. An ACK would tombstone the real envelope on every node.
+            if (!RecordCodec.verify(rec, sender.accountPub, ctx)) {
+                // A forged copy (or one signed for another network, or v1 after the cut-over): not seen, not acked.
+                // An ACK would tombstone the real envelope on every node.
                 log.warning("envelope ${key.toHex()} fails its signature: ignored")
                 continue
             }
@@ -132,7 +134,7 @@ class MailboxReceiver @Inject constructor(
         }
         if (acks.isNotEmpty()) {
             val ack = Ack.newBuilder().addAllEnvelopeIds(acks.map(::bs)).setDeviceId(1).build()
-            api.ack(RecordCodec.sign(RecordCodec.body(RecordType.ACK, me.userId, ack.toByteArray(), createdMs = clock.now()), me.accountKey))
+            api.ack(me.sign(RecordCodec.body(RecordType.ACK, me.userId, ack.toByteArray(), createdMs = clock.now())))
         }
         outbox.kick()
         photos.kick()

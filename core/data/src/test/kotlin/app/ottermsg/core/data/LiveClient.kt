@@ -47,7 +47,8 @@ class LiveClient {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val transport = OkHttpTransport()
     val settings = Settings(db.settingsDao())
-    val accounts = AccountRepository(db.accountDao(), settings, SeedVault(XorWrapper))
+    val manifests = ManifestUpdater(db.manifestDao(), settings, clock)
+    val accounts = AccountRepository(db.accountDao(), settings, SeedVault(XorWrapper), manifests)
     val signal = SignalService(accounts, db.signalKvDao(), db.contactDao(), scope)
     val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao(), settings, db.accountDao(), db.manifestDao(), db.messageDao(), clock)
     val profile = ProfileRepository(accounts, db, settings, clock)
@@ -73,9 +74,8 @@ class LiveClient {
     val prekeys = PrekeyRefill(accounts, settings, signal, clock, db.manifestDao())
     val stats = InMemoryEndpointStats()
     val selector = NodeSelector(transport, stats, clock::now)
-    val manifests = ManifestUpdater(db.manifestDao(), settings, clock)
     val engine: SyncEngine = SyncEngine(stats, selector, accounts, settings, manifests, directory, receiver, outbox, prekeys, profile, media, scope, true, clock, guard, backups,
-        app.ottermsg.core.data.news.NewsRepository(db, manifests, clock, app.ottermsg.core.data.push.MessageAlerts.NONE), groupRevocations)
+        app.ottermsg.core.data.news.NewsRepository(db, manifests, clock, app.ottermsg.core.data.push.MessageAlerts.NONE, manifests), groupRevocations)
     val invites = InviteRepository(accounts, settings, db.manifestDao(), engine, clock)
     val registration = Registration(db, TransportConnector(selector), SeedVault(XorWrapper), accounts, settings, clock, allowPlaintext = true)
     val restore = app.ottermsg.core.data.backup.RestoreManager(db, TransportConnector(selector), SeedVault(XorWrapper), accounts, settings, clock,
@@ -85,7 +85,7 @@ class LiveClient {
     suspend fun preferFor(link: String, label: String?) {
         if (label == null) return
         val m = app.ottermsg.core.crypto.ManifestVerifier.verify(app.ottermsg.core.crypto.InviteLink.decode(link).manifest.toByteArray(),
-            app.ottermsg.core.crypto.InviteLink.decode(link).networkPub.toByteArray(), 0)
+            app.ottermsg.core.crypto.InviteLink.decode(link).networkPub.toByteArray(), 0, 0)
         for (c in app.ottermsg.core.network.Endpoints.candidates(m, true)) {
             if (c.label == label) stats.success(c.key, 1, clock.now()) else stats.failure(c.key, clock.now())
         }

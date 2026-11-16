@@ -31,7 +31,7 @@ class FakeNodeBackupTest {
 
     private fun sha(b: ByteArray) = MessageDigest.getInstance("SHA-256").digest(b)
     private fun signed(type: RecordType, payload: ByteArray): Record =
-        RecordCodec.sign(RecordCodec.body(type, a.me.userId, payload, createdMs = clock.now()), a.me.accountKey)
+        RecordCodec.sign(RecordCodec.body(type, a.me.userId, payload, createdMs = clock.now()), a.me.accountKey, node.ctx)
 
     private suspend fun putBlob(s: FakeNode.Session, data: ByteArray): ByteArray {
         val meta = signed(RecordType.BLOB_META, BlobMeta.newBuilder().setSize(data.size.toLong()).setChunkSize(262144)

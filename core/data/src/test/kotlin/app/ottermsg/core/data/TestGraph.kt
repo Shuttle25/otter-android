@@ -66,7 +66,8 @@ class TestGraph(
 ) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val settings = Settings(db.settingsDao())
-    val accounts = AccountRepository(db.accountDao(), settings, SeedVault(XorWrapper))
+    val manifests = app.ottermsg.core.data.sync.ManifestUpdater(db.manifestDao(), settings, clock)
+    val accounts = AccountRepository(db.accountDao(), settings, SeedVault(XorWrapper), manifests)
     val signal = SignalService(accounts, db.signalKvDao(), db.contactDao(), scope)
     val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao(), settings, db.accountDao(), db.manifestDao(), db.messageDao(), clock)
     val profile = ProfileRepository(accounts, db, settings, clock)
@@ -113,9 +114,8 @@ class TestGraph(
         override suspend fun connect(candidate: app.ottermsg.core.network.Candidate) =
             (routes[candidate.host] ?: transport).connect(candidate)
     }
-    val manifests = app.ottermsg.core.data.sync.ManifestUpdater(db.manifestDao(), settings, clock)
     val pushMonitor = app.ottermsg.core.data.push.PushMonitor(settings, clock)
-    val news = app.ottermsg.core.data.news.NewsRepository(db, manifests, clock, alerts)
+    val news = app.ottermsg.core.data.news.NewsRepository(db, manifests, clock, alerts, manifests)
     private val endpointStats = app.ottermsg.core.network.InMemoryEndpointStats()
     val engine = SyncEngine(endpointStats, app.ottermsg.core.network.NodeSelector(router, endpointStats, clock::now),
         accounts, settings, manifests, directory, receiver, outbox, prekeys, profile, media, scope, true, clock, guard, backups,

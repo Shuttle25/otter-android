@@ -49,7 +49,7 @@ class ManifestUpdaterTest {
         val m = Manifest.newBuilder().setVersion(version).setIssuedMs(version).setNetworkPub(bs(node.network.publicKey))
             .addAllNodes(nodes.toList()).build()
         return RecordCodec.sign(RecordCodec.body(RecordType.MANIFEST, Ids.id16(node.network.publicKey), m.toByteArray(),
-            createdMs = version), node.network).toByteArray()
+            createdMs = version), node.network, node.ctx).toByteArray()
     }
 
     private suspend fun hosts() = m.candidates(allowPlaintext = false).map { it.host }

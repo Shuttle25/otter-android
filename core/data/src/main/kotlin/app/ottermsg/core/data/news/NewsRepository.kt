@@ -6,6 +6,7 @@ import app.ottermsg.core.crypto.News
 import app.ottermsg.core.data.Clock
 import app.ottermsg.core.data.push.MessageAlerts
 import app.ottermsg.core.data.sync.NewsKeys
+import app.ottermsg.core.data.sync.SigContexts
 import app.ottermsg.core.database.OtterDatabase
 import app.ottermsg.core.database.entity.MessageEntity
 import app.ottermsg.core.database.model.MessageKind
@@ -27,6 +28,7 @@ import javax.inject.Singleton
 @Singleton
 class NewsRepository @Inject constructor(
     private val db: OtterDatabase, private val keys: NewsKeys, private val clock: Clock, private val alerts: MessageAlerts,
+    private val sigs: SigContexts,
 ) {
     private val mutex = Mutex()
 
@@ -37,6 +39,7 @@ class NewsRepository @Inject constructor(
     suspend fun apply(records: List<Record>) = mutex.withLock {
         if (records.isEmpty()) return@withLock
         val newsKeys = keys.newsKeys()
+        val ctx = sigs.sigContext() // D109
         val now = clock.now()
         val language = Locale.getDefault().language
         var notify: Long? = null
@@ -44,7 +47,7 @@ class NewsRepository @Inject constructor(
         var ignored = 0
         db.withTransaction {
             for (r in records) {
-                when (val n = AnnouncementVerifier.verify(r, newsKeys)) {
+                when (val n = AnnouncementVerifier.verify(r, newsKeys, ctx)) {
                     is News.Item -> {
                         val a = n.announcement
                         val cid = db.conversationDao().getOrCreateNews(n.createdMs) // dated by the news, not by its arrival

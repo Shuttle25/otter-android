@@ -26,13 +26,26 @@ class VectorsTest {
 
     @Test fun verifiesGoRecords() {
         val dir = Record.parseFrom(hex(v.getValue("directory_entry_record_hex")))
-        assertTrue(RecordCodec.verify(dir, hex(v.getValue("account_pub_hex"))))
+        val ctx = SigContext(hex(v.getValue("network_id_hex")), 0)
+        assertTrue(RecordCodec.verify(dir, hex(v.getValue("account_pub_hex")), ctx))
         val bad = Record.parseFrom(hex(v.getValue("bad_signature_record_hex")))
-        assertFalse(RecordCodec.verify(bad, hex(v.getValue("network_pub_hex"))))
+        assertFalse(RecordCodec.verify(bad, hex(v.getValue("network_pub_hex")), ctx))
+    }
+
+    @Test fun verifiesGoV2Records() {
+        val ctx = SigContext(hex(v.getValue("network_id_hex")), v1UntilMs = 1L) // v1 not acceptable at created 1.8e12
+        assertTrue(RecordCodec.verify(Record.parseFrom(hex(v.getValue("directory_entry_v2_record_hex"))), hex(v.getValue("account_pub_hex")), ctx))
+        assertTrue(RecordCodec.verify(Record.parseFrom(hex(v.getValue("manifest_v2_record_hex"))), hex(v.getValue("network_pub_hex")), ctx))
+        assertFalse(RecordCodec.verify(Record.parseFrom(hex(v.getValue("directory_entry_record_hex"))), hex(v.getValue("account_pub_hex")), ctx))
+        // hostile: the same v2 record presented to another network
+        val foreign = SigContext(ByteArray(16) { 0x77 }, 0)
+        assertFalse(RecordCodec.verify(Record.parseFrom(hex(v.getValue("directory_entry_v2_record_hex"))), hex(v.getValue("account_pub_hex")), foreign))
+        // the v2 manifest passes ManifestVerifier under the cut-over
+        ManifestVerifier.verify(hex(v.getValue("manifest_v2_record_hex")), hex(v.getValue("network_pub_hex")), 0, v1UntilMs = 1L)
     }
 
     @Test fun verifiesGoManifest() {
-        val m = ManifestVerifier.verify(hex(v.getValue("manifest_record_hex")), hex(v.getValue("network_pub_hex")), currentVersion = 0)
+        val m = ManifestVerifier.verify(hex(v.getValue("manifest_record_hex")), hex(v.getValue("network_pub_hex")), currentVersion = 0, v1UntilMs = 0)
         assertEquals(v.getValue("manifest_version").toLong(), m.version)
         assertEquals("chat.example.org", m.getNodes(0).getEndpoints(0).host)
     }
@@ -48,7 +61,7 @@ class VectorsTest {
         assertEquals("Мама", b.inviterName)
         assertEquals(32, b.secret.size())
         assertEquals(link, InviteLink.encode(b))
-        val m = ManifestVerifier.verify(b.manifest.toByteArray(), b.networkPub.toByteArray(), 0)
+        val m = ManifestVerifier.verify(b.manifest.toByteArray(), b.networkPub.toByteArray(), 0, 0)
         assertEquals(7L, m.version)
     }
 
@@ -62,8 +75,8 @@ class VectorsTest {
     @Test fun kotlinSignatureVerifiesWithKotlin() {
         val kp = SeedKeys.accountKeyPair(ByteArray(32) { it.toByte() })
         val rec = RecordCodec.sign(RecordCodec.body(
-            type = app.ottermsg.proto.v1.RecordType.ACK, author = Ids.id16(kp.publicKey), payload = byteArrayOf(1)), kp)
-        assertTrue(RecordCodec.verify(rec, kp.publicKey))
+            type = app.ottermsg.proto.v1.RecordType.ACK, author = Ids.id16(kp.publicKey), payload = byteArrayOf(1)), kp, SigContext(ByteArray(16), 0))
+        assertTrue(RecordCodec.verify(rec, kp.publicKey, SigContext(ByteArray(16), 0)))
     }
 
     @Test fun inviteRedeemMatchesGo() {

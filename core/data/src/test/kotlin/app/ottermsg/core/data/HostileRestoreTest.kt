@@ -67,7 +67,7 @@ class HostileRestoreTest {
     private fun resignedMeta(rec: app.ottermsg.proto.v1.Record, key: Ed25519.KeyPair, edit: (BackupMeta.Builder) -> Unit): app.ottermsg.proto.v1.Record {
         val body = RecordBody.parseFrom(rec.body)
         val m = BackupMeta.parseFrom(body.payload).toBuilder().also(edit).build()
-        return RecordCodec.sign(body.toBuilder().setPayload(m.toByteString()).build(), key)
+        return RecordCodec.sign(body.toBuilder().setPayload(m.toByteString()).build(), key, node.ctx)
     }
 
     @Test fun swappedOrForgedMetaIsCorruptAndNothingIsInstalled() = runBlocking<Unit> {
@@ -80,10 +80,10 @@ class HostileRestoreTest {
             // a genuinely signed but different meta (an older password's salt)
             { r -> r.toBuilder().setBackupMeta(resignedMeta(r.backupMeta, anna.me.accountKey) { it.setSalt(otherSalt) }).build() },
             // the blob meta re-signed by another key (same chunk hashes)
-            { r -> r.toBuilder().setBlobMeta(RecordCodec.sign(RecordBody.parseFrom(r.blobMeta.body), mallory)).build() },
+            { r -> r.toBuilder().setBlobMeta(RecordCodec.sign(RecordBody.parseFrom(r.blobMeta.body), mallory, node.ctx)).build() },
             // a blob meta of another blob of the same author
             { r -> r.toBuilder().setBlobMeta(RecordCodec.sign(RecordBody.parseFrom(r.blobMeta.body).toBuilder()
-                .setId(bs(ByteArray(16) { 3 })).build(), anna.me.accountKey)).build() },
+                .setId(bs(ByteArray(16) { 3 })).build(), anna.me.accountKey, node.ctx)).build() },
         )
         for (lie in cases) {
             node.fetchAnswer = lie
@@ -113,7 +113,7 @@ class HostileRestoreTest {
         val genuine = node.directoryRecords().first { RecordBody.parseFrom(it.body).author.toByteArray().contentEquals(anna.me.userId) }
         val body = RecordBody.parseFrom(genuine.body)
         val e = DirectoryEntry.parseFrom(body.payload).toBuilder().setUsername("mallory").setDisplayName("Мэллори").setVersion(99).build()
-        val forged = RecordCodec.sign(body.toBuilder().setPayload(e.toByteString()).build(), mallory)
+        val forged = RecordCodec.sign(body.toBuilder().setPayload(e.toByteString()).build(), mallory, node.ctx)
         val words = Bip39.toMnemonic(anna.seed)
 
         node.directoryAnswer = { listOf(forged) + it } // the forged entry first

@@ -99,8 +99,8 @@ class BackupManager @Inject constructor(
             .setAuthVerifier(bs(ByteArray(32).also(SecureRandom()::nextBytes)))
             .setBlobKey(bs(me.userId + ByteArray(16))).setSize(0).build()
         try {
-            api.backupPublish(RecordCodec.sign(RecordCodec.body(RecordType.BACKUP_META, me.userId, meta.toByteArray(),
-                createdMs = clock.now()), me.accountKey))
+            api.backupPublish(me.sign(RecordCodec.body(RecordType.BACKUP_META, me.userId, meta.toByteArray(),
+                createdMs = clock.now())))
             settings.setBackupDecoyDone(true)
         } catch (e: RpcException) {
             // refused (an older node): next session
@@ -126,8 +126,8 @@ class BackupManager @Inject constructor(
             val hashes = withContext(Dispatchers.IO) { BlobCipher.chunkHashes(file) }
             val meta = BlobMeta.newBuilder().setSize(file.length()).setChunkSize(BlobCipher.CHUNK)
                 .addAllChunkSha256(hashes.map(::bs)).setPersistent(true).build()
-            val metaRec = RecordCodec.sign(RecordCodec.body(RecordType.BLOB_META, me.userId, meta.toByteArray(), id = id,
-                createdMs = clock.now()), me.accountKey)
+            val metaRec = me.sign(RecordCodec.body(RecordType.BLOB_META, me.userId, meta.toByteArray(), id = id,
+                createdMs = clock.now()))
             val status = api.blobCreate(metaRec)
             val missing = status.missingList.toSet()
             file.inputStream().buffered().use { s ->
@@ -142,7 +142,7 @@ class BackupManager @Inject constructor(
             val bm = BackupMeta.newBuilder().setVersion(version).setSalt(bs(checkNotNull(settings.backupSalt())))
                 .setKdfMKib(profile.mKib).setKdfT(profile.t).setKdfP(profile.p)
                 .setAuthVerifier(bs(BackupKeys.Keys(backupKey, authSecret).verifier)).setBlobKey(bs(blobKey)).setSize(file.length()).build()
-            api.backupPublish(RecordCodec.sign(RecordCodec.body(RecordType.BACKUP_META, me.userId, bm.toByteArray(), createdMs = clock.now()), me.accountKey))
+            api.backupPublish(me.sign(RecordCodec.body(RecordType.BACKUP_META, me.userId, bm.toByteArray(), createdMs = clock.now())))
             settings.setBackupVersion(version)
             settings.setBackupLastMs(clock.now())
             settings.setBackupError(0)

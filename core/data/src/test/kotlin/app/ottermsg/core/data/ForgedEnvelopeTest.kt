@@ -52,7 +52,7 @@ class ForgedEnvelopeTest {
 
     @Test fun copySignedByAnotherKey() = runBlocking {
         val real = realEnvelopeWaiting()
-        handOver(RecordCodec.sign(RecordBody.parseFrom(real.body), attacker))
+        handOver(RecordCodec.sign(RecordBody.parseFrom(real.body), attacker, node.ctx))
     }
 
     @Test fun alteredBodyWithTheSameId() = runBlocking {
@@ -61,7 +61,7 @@ class ForgedEnvelopeTest {
         val env = Envelope.parseFrom(body.payload).toBuilder().apply {
             setRecipients(0, getRecipients(0).toBuilder().setContent(ByteString.copyFrom(ByteArray(64) { 1 })))
         }.build()
-        handOver(RecordCodec.sign(body.toBuilder().setPayload(env.toByteString()).build(), attacker))
+        handOver(RecordCodec.sign(body.toBuilder().setPayload(env.toByteString()).build(), attacker, node.ctx))
     }
 
     /** D91: decrypted before a crash cut the commit (seen row lost): acked, nothing shown twice, no «не удалось прочитать». */

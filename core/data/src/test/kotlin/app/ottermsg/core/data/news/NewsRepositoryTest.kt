@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import app.ottermsg.core.crypto.Ed25519
 import app.ottermsg.core.crypto.Ids
 import app.ottermsg.core.crypto.RecordCodec
+import app.ottermsg.core.crypto.SigContext
 import app.ottermsg.core.data.TestClock
 import app.ottermsg.core.data.push.MessageAlerts
 import app.ottermsg.core.data.sync.NewsKeys
@@ -42,20 +43,21 @@ class NewsRepositoryTest {
         override suspend fun onIncoming(conversationId: Long) { incoming += conversationId }
         override fun onRead(conversationId: Long) { cleared += conversationId }
     }
-    private val repo = NewsRepository(db, object : NewsKeys { override suspend fun newsKeys() = allowed }, clock, alerts)
+    private val repo = NewsRepository(db, object : NewsKeys { override suspend fun newsKeys() = allowed }, clock, alerts,
+        object : app.ottermsg.core.data.sync.SigContexts { override suspend fun sigContext() = SigContext(ByteArray(16), 0) })
     private val savedLocale = Locale.getDefault()
 
     @After fun tearDown() { db.close(); Locale.setDefault(savedLocale) }
 
     private fun item(ru: String, en: String = "", k: Ed25519.KeyPair = key, createdMs: Long = clock.now()): Record =
         RecordCodec.sign(RecordCodec.body(RecordType.ANNOUNCEMENT, Ids.id16(k.publicKey),
-            Announcement.newBuilder().setTextRu(ru).setTextEn(en).build().toByteArray(), createdMs = createdMs), k)
+            Announcement.newBuilder().setTextRu(ru).setTextEn(en).build().toByteArray(), createdMs = createdMs), k, SigContext(ByteArray(16), 0))
 
     private fun deletion(target: Record): Record {
         val b = app.ottermsg.proto.v1.RecordBody.parseFrom(target.body)
         val t = b.author.toByteArray() + b.id.toByteArray()
         return RecordCodec.sign(RecordCodec.body(RecordType.ANNOUNCEMENT_DELETED, Ids.id16(key.publicKey),
-            AnnouncementDeleted.newBuilder().setTarget(ByteString.copyFrom(t)).build().toByteArray()), key)
+            AnnouncementDeleted.newBuilder().setTarget(ByteString.copyFrom(t)).build().toByteArray()), key, SigContext(ByteArray(16), 0))
     }
 
     @Test fun newItemBecomesAnUnreadMessageAndNotifiesOnce() = runBlocking {

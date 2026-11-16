@@ -2,6 +2,7 @@ package app.ottermsg.core.data.backup
 
 import app.ottermsg.core.crypto.ManifestVerifier
 import app.ottermsg.core.crypto.RecordCodec
+import app.ottermsg.core.crypto.SigContext
 import app.ottermsg.core.data.Clock
 import app.ottermsg.core.data.account.AccountRepository
 import app.ottermsg.core.data.directory.DirectorySync
@@ -36,7 +37,7 @@ class InstallGuard @Inject constructor(
     suspend fun afterLogin(api: NodeApi, resp: LoginResponse): Boolean {
         if (settings.restorePending()) { finishRestore(api); return true }
         val me = accounts.require()
-        val signed = if (resp.hasInstall()) verified(resp.install, me.userId, me.accountKey.publicKey) else null
+        val signed = if (resp.hasInstall()) verified(resp.install, me.userId, me.accountKey.publicKey, accounts.sigContext()) else null
         if (signed != null && isNewer(signed, settings.installedMs(), me.registrationId)) {
             settings.setSuperseded(true)
             return false
@@ -59,9 +60,9 @@ class InstallGuard @Inject constructor(
     }
 
     /** The INSTALL in [rec] if it is ours and signed by our account key; else null. */
-    private fun verified(rec: Record, userId: ByteArray, accountPub: ByteArray): Install? = runCatching {
+    private fun verified(rec: Record, userId: ByteArray, accountPub: ByteArray, ctx: SigContext): Install? = runCatching {
         val body = RecordBody.parseFrom(rec.body)
-        if (body.type != RecordType.INSTALL || !body.author.toByteArray().contentEquals(userId) || !RecordCodec.verify(rec, accountPub)) null
+        if (body.type != RecordType.INSTALL || !body.author.toByteArray().contentEquals(userId) || !RecordCodec.verify(rec, accountPub, ctx)) null
         else Install.parseFrom(body.payload)
     }.getOrNull()
 
@@ -74,8 +75,8 @@ class InstallGuard @Inject constructor(
         val me = accounts.require()
         val payload = Install.newBuilder().setRegistrationId(me.registrationId).setInstalledMs(settings.installedMs()).build()
         try {
-            api.publishInstall(RecordCodec.sign(RecordCodec.body(RecordType.INSTALL, me.userId, payload.toByteArray(),
-                createdMs = clock.now()), me.accountKey))
+            api.publishInstall(me.sign(RecordCodec.body(RecordType.INSTALL, me.userId, payload.toByteArray(),
+                createdMs = clock.now())))
             settings.setInstallPublished(true)
         } catch (e: RpcException) {
             log.warning("install.publish refused: ${e.status}")
@@ -87,7 +88,7 @@ class InstallGuard @Inject constructor(
     private suspend fun finishRestore(api: NodeApi) {
         publishInstall(api)
         val me = accounts.require()
-        val manifest = ManifestVerifier.verify(checkNotNull(db.manifestDao().latest()) { "no manifest" }.raw, settings.networkPub(), 0)
+        val manifest = ManifestVerifier.verify(checkNotNull(db.manifestDao().latest()) { "no manifest" }.raw, settings.networkPub(), 0, 0)
         val now = clock.now()
         var next = 1
         val payload = signal.withSessions { store, _ ->
@@ -100,7 +101,7 @@ class InstallGuard @Inject constructor(
                 .addAllOneTime(oneTime)
         }.setInstalledMs(settings.installedMs()).build()
         settings.setNextOneTimeId(next)
-        api.uploadPrekeys(RecordCodec.sign(RecordCodec.body(RecordType.PREKEYS, me.userId, payload.toByteArray(), createdMs = now), me.accountKey))
+        api.uploadPrekeys(me.sign(RecordCodec.body(RecordType.PREKEYS, me.userId, payload.toByteArray(), createdMs = now)))
         settings.setRestorePending(false)
         directory.sync(api) // a words-only restore has no contacts yet: everyone must get the reset
         resets.sendToAll()

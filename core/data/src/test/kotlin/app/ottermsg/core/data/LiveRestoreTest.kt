@@ -51,7 +51,7 @@ class LiveRestoreTest {
             // the backup has to reach the restoring node first (until then it answers with a fake salt, D51)
             val salt = anna.settings.backupSalt()!!
             val bundle = app.ottermsg.core.crypto.InviteLink.decode(link)
-            val m = app.ottermsg.core.crypto.ManifestVerifier.verify(bundle.manifest.toByteArray(), bundle.networkPub.toByteArray(), 0)
+            val m = app.ottermsg.core.crypto.ManifestVerifier.verify(bundle.manifest.toByteArray(), bundle.networkPub.toByteArray(), 0, 0)
             eventually(timeoutMs = 120_000, what = "backup on the restoring node") {
                 app.ottermsg.core.data.registration.TransportConnector(restored.selector).withNode(app.ottermsg.core.network.Endpoints.candidates(m, true)) {
                     it.backupAuth("anna_$suffix").salt.toByteArray().contentEquals(salt)

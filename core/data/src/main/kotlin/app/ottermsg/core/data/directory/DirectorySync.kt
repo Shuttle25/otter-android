@@ -3,6 +3,7 @@ package app.ottermsg.core.data.directory
 import app.ottermsg.core.crypto.Ids
 import app.ottermsg.core.crypto.ManifestVerifier
 import app.ottermsg.core.crypto.RecordCodec
+import app.ottermsg.core.crypto.SigContext
 import app.ottermsg.core.data.Clock
 import app.ottermsg.core.data.account.AccountRepository
 import app.ottermsg.core.data.account.LocalAccount
@@ -60,16 +61,17 @@ class DirectorySync @Inject constructor(
     suspend fun apply(records: List<Record>) = mutex.withLock {
         val me = accounts.require()
         val networkPub = settings.networkPub()
-        val founding = manifests.latest()?.let { runCatching { ManifestVerifier.verify(it.raw, networkPub, 0) }.getOrNull() }
+        val ctx = accounts.sigContext() // D109
+        val founding = manifests.latest()?.let { runCatching { ManifestVerifier.verify(it.raw, networkPub, 0, 0) }.getOrNull() }
             ?.foundingMembersList?.map { it.toByteArray().hex() }?.toSet().orEmpty()
         val revokedAt = HashMap<String, Long>() // earliest network-signed revocation per user
         val rights = HashMap<String, MutableList<RightsRecord>>()
         for (rec in records) {
-            Membership.revocation(rec, networkPub)?.let { r -> revokedAt.merge(r.userId.hex(), r.createdMs, ::minOf) }
-            Membership.rights(rec, networkPub)?.let { r -> rights.getOrPut(r.userId.hex()) { mutableListOf() } += r }
+            Membership.revocation(rec, networkPub, ctx)?.let { r -> revokedAt.merge(r.userId.hex(), r.createdMs, ::minOf) }
+            Membership.rights(rec, networkPub, ctx)?.let { r -> rights.getOrPut(r.userId.hex()) { mutableListOf() } += r }
         }
         val known = contacts.all().associateBy { it.userId.hex() }
-        val entries = records.mapNotNull { verifyEntry(it) }
+        val entries = records.mapNotNull { verifyEntry(it, ctx) }
         // Losers of a doubly redeemed invite, and every account invited through one at any depth, are disabled (like
         // the node's disableDuplicates): never inviters, and revoked if already contacts. Finding them can drop entries
         // they invited, which can change other groups, so repeat until stable (both sets only grow, so this ends).
@@ -81,14 +83,14 @@ class DirectorySync @Inject constructor(
         var disabled = disabledBy(losers.keys, inviters)
         var accepted: List<Pair<DirectoryEntry, Redemption?>>
         while (true) {
-            accepted = admit(entries, me, networkPub, founding, known, revokedAt, rights, disabled)
+            accepted = admit(entries, me, networkPub, ctx, founding, known, revokedAt, rights, disabled)
             // inviter edges of accepted entries, whether or not the inviter may still invite
             val keys = HashMap<String, ByteArray>()
             keys[me.userId.hex()] = me.accountKey.publicKey
             known.forEach { (hex, c) -> keys[hex] = c.accountPub }
             accepted.forEach { (e, _) -> keys[e.userId.toByteArray().hex()] = e.accountPub.toByteArray() }
             for ((e, _) in accepted) {
-                val r = Membership.chain(e, networkPub) { a -> keys[a.hex()] } ?: continue
+                val r = Membership.chain(e, networkPub, ctx) { a -> keys[a.hex()] } ?: continue
                 if (!r.fromNetwork) inviters.getOrPut(e.userId.toByteArray().hex()) { mutableSetOf() } += r.inviter.hex()
             }
             val fresh = accepted.mapNotNull { (e, r) -> r?.let { e to it } }.groupBy { it.second.inviteId.hex() }.values
@@ -159,7 +161,7 @@ class DirectorySync @Inject constructor(
      * verifies (fixpoint over the batch: an inviter may come later in it).
      */
     private fun admit(
-        entries: List<DirectoryEntry>, me: LocalAccount, networkPub: ByteArray, founding: Set<String>,
+        entries: List<DirectoryEntry>, me: LocalAccount, networkPub: ByteArray, ctx: SigContext, founding: Set<String>,
         known: Map<String, ContactEntity>, revokedAt: Map<String, Long>, rights: Map<String, List<RightsRecord>>,
         disabled: Set<String>,
     ): List<Pair<DirectoryEntry, Redemption?>> {
@@ -186,7 +188,7 @@ class DirectorySync @Inject constructor(
             while (it.hasNext()) {
                 val e = it.next()
                 val id = e.userId.toByteArray().hex()
-                val red = Membership.chain(e, networkPub) { a -> keys[a.hex()] }?.takeIf(::inviterAllowed)
+                val red = Membership.chain(e, networkPub, ctx) { a -> keys[a.hex()] }?.takeIf(::inviterAllowed)
                 if (red != null || keys.containsKey(id) || id in founding) {
                     accepted += e to red
                     keys[id] = e.accountPub.toByteArray()
@@ -230,8 +232,11 @@ class DirectorySync @Inject constructor(
         private val log = Logger.getLogger("DirectorySync")
         private fun ByteArray.hex() = joinToString("") { "%02x".format(it) }
 
-        /** The entry if [rec] is a self-certifying, correctly bound DIRECTORY_ENTRY (sync and words restore, C18). */
-        fun verifyEntry(rec: Record): DirectoryEntry? = runCatching {
+        /**
+         * The entry if [rec] is a self-certifying, correctly bound DIRECTORY_ENTRY (sync and words restore, C18), signed
+         * for this network under [ctx] (D109).
+         */
+        fun verifyEntry(rec: Record, ctx: SigContext): DirectoryEntry? = runCatching {
             val body = RecordBody.parseFrom(rec.body)
             if (body.type != RecordType.DIRECTORY_ENTRY) return null
             val e = DirectoryEntry.parseFrom(body.payload)
@@ -239,7 +244,7 @@ class DirectorySync @Inject constructor(
             val ok = accountPub.size == 32 &&
                 body.author == e.userId &&
                 e.userId.toByteArray().contentEquals(Ids.id16(accountPub)) &&
-                RecordCodec.verify(rec, accountPub) &&
+                RecordCodec.verify(rec, accountPub, ctx) &&
                 IdentityKeys.verifyBinding(e.identityPub.toByteArray(), accountPub, e.identitySig.toByteArray())
             if (ok) e else null
         }.getOrNull()

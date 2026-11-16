@@ -143,8 +143,8 @@ class Outbox @Inject constructor(
             val env = Envelope.newBuilder().setSenderUser(bs(me.userId)).setSenderDevice(1).setKind(kind).setUrgent(item.urgent)
                 .addRecipients(Recipient.newBuilder().setUser(bs(item.recipientUserId)).setDevice(1).setContent(bs(ct))).build()
             // Persist before the first send so retries resend the identical record (the session already advanced).
-            RecordCodec.sign(RecordCodec.body(RecordType.ENVELOPE, me.userId, env.toByteArray(), expiresMs = item.expiresMs,
-                createdMs = clock.now()), me.accountKey)
+            me.sign(RecordCodec.body(RecordType.ENVELOPE, me.userId, env.toByteArray(), expiresMs = item.expiresMs,
+                createdMs = clock.now()))
                 .also { outbox.setRecord(item.id, it.toByteArray()) }
         }
         api.send(record) // the same record every time: nodes deduplicate by author‖id

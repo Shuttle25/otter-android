@@ -62,4 +62,5 @@ object DataModule {
     @Provides fun callTransport(s: app.ottermsg.core.data.calls.CallSignaling): app.ottermsg.core.data.calls.CallTransport = s
     @Provides fun callLink(l: app.ottermsg.core.data.calls.SyncCallLink): app.ottermsg.core.data.calls.CallLink = l
     @Provides fun newsKeys(m: app.ottermsg.core.data.sync.ManifestUpdater): app.ottermsg.core.data.sync.NewsKeys = m
+    @Provides fun sigContexts(m: app.ottermsg.core.data.sync.ManifestUpdater): app.ottermsg.core.data.sync.SigContexts = m
 }

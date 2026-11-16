@@ -48,7 +48,7 @@ class InviteRepository @Inject constructor(
         // D100: the redeem key's public half is in the signed record; the invitee proves the secret with it.
         val inv = Invite.newBuilder().setInviteId(bs(MessageDigest.getInstance("SHA-256").digest(secret))).setExpiresMs(expires)
             .setRedeemPub(bs(InviteKeys.redeemKey(secret).publicKey)).build()
-        val rec = RecordCodec.sign(RecordCodec.body(RecordType.INVITE, me.userId, inv.toByteArray(), expiresMs = expires, createdMs = now), me.accountKey)
+        val rec = me.sign(RecordCodec.body(RecordType.INVITE, me.userId, inv.toByteArray(), expiresMs = expires, createdMs = now))
         try {
             api.createInvite(rec)
         } catch (e: RpcException) {

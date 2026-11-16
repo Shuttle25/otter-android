@@ -29,13 +29,13 @@ object AnnouncementVerifier {
     const val MAX_APK_SIZE = 100L shl 20
 
     /** Verifies [record] against the news keys of the stored manifest; null if it is not a valid news record. */
-    fun verify(record: Record, newsKeys: List<ByteArray>): News? = try {
+    fun verify(record: Record, newsKeys: List<ByteArray>, ctx: SigContext): News? = try {
         val body = RecordBody.parseFrom(record.body)
         val author = body.author.toByteArray()
         val pub = newsKeys.firstOrNull { it.size == 32 && Ids.id16(it).contentEquals(author) }
         when {
             body.id.size() != 16 || author.size != 16 || body.expiresMs != 0L -> null
-            pub == null || !RecordCodec.verify(record, pub) -> null
+            pub == null || !RecordCodec.verify(record, pub, ctx) -> null
             body.type == RecordType.ANNOUNCEMENT -> {
                 val a = Announcement.parseFrom(body.payload)
                 if (!validAnnouncement(a)) null else News.Item(author + body.id.toByteArray(), author, body.createdMs, a)
