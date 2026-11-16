@@ -18,6 +18,7 @@ import app.ottermsg.core.database.model.MessageStatus
 import app.ottermsg.core.network.NodeApi
 import app.ottermsg.proto.v1.GroupState
 import app.ottermsg.proto.v1.SignedGroupState
+import com.google.protobuf.ByteString
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.security.SecureRandom
@@ -56,13 +57,28 @@ class GroupApplier @Inject constructor(
         val cur = groupId?.let { current(it) }
         val next = build(cur?.state)
         val prev = groups.get(next.groupId.toByteArray())?.prevState?.let { GroupState.parseFrom(it) }
-        val verdict = GroupRules.evaluate(cur, prev, next, me.userId)
+        val verdict = GroupRules.evaluate(cur, prev, next, me.userId, rekeys = rekeys())
         if (verdict != Verdict.Accept) throw GroupChangeRefused(verdict.toString())
         val signed = GroupSigning.sign(next, me.accountKey)
         val r = applyLocked(signed, me.userId, null)
         check(r.verdict == Verdict.Accept) { "local change not accepted: ${r.verdict}" }
         signed to cur?.state
     }
+
+    /** Retries the parked updates of every group (D112: a swap parked as "unknown rekey" once its REKEY is known). */
+    suspend fun retryAllParked(): List<ByteArray> = lock.withLock {
+        val accepted = mutableListOf<ByteArray>()
+        for (gid in groups.groupsWithPendingUpdates()) {
+            val before = groups.get(gid)?.version
+            retryParked(gid)
+            if (groups.get(gid)?.version != before) accepted += gid
+        }
+        accepted
+    }
+
+    /** The winning verified REKEYs (D111), old user id → new user id. */
+    private suspend fun rekeys(): Map<ByteString, ByteString> =
+        db.rekeyDao().all().associate { ByteString.copyFrom(it.oldUserId) to ByteString.copyFrom(it.newUserId) }
 
     class Result(val verdict: Verdict, val groupId: ByteArray?, /** Groups with a newly accepted state (incl. unparked updates). */ val accepted: List<ByteArray>)
 
@@ -108,7 +124,8 @@ class GroupApplier @Inject constructor(
             val row = groups.get(gid)
             val cur = row?.let { applied(it) }
             val prev = row?.prevState?.let { GroupState.parseFrom(it) }
-            val verdict = GroupRules.evaluate(cur, prev, state, signer, signed.state.toByteArray())
+            val rekeys = rekeys()
+            val verdict = GroupRules.evaluate(cur, prev, state, signer, signed.state.toByteArray(), rekeys)
             when (verdict) {
                 is Verdict.Park -> { if (parkIt) park(gid, signed, from); return@withTransaction verdict }
                 is Verdict.Reject -> return@withTransaction verdict
@@ -125,13 +142,20 @@ class GroupApplier @Inject constructor(
             val now = clock.now()
             val cid = conversations.getOrCreateGroupConversation(gid, state.name, now)
             conversations.setGroupTitle(gid, state.name)
-            for (e in GroupEvents.between(old, state, signer, me)) {
+            for (e in GroupEvents.between(old, state, signer, me, rekeys)) {
                 messages.insert(MessageEntity(messageId = ByteArray(16).also(rng::nextBytes), conversationId = cid, senderId = signer,
                     outgoing = false, sentMs = now, receivedMs = now, body = "", status = MessageStatus.DELIVERED,
                     kind = MessageKind.SYSTEM_GROUP, systemData = e.toByteArray()))
             }
+            // D112: a re-keyed member stays in the group under its new account: «Ключ безопасности изменился», not removed/added
+            for (n in GroupEvents.swapped(old, state, rekeys).values) {
+                messages.insert(MessageEntity(messageId = ByteArray(16).also(rng::nextBytes), conversationId = cid, senderId = n.toByteArray(),
+                    outgoing = false, sentMs = now, receivedMs = now, body = "", status = MessageStatus.DELIVERED,
+                    kind = MessageKind.SYSTEM_KEY_CHANGED, readReceiptSent = true))
+            }
             conversations.touch(cid, now)
-            // Rotation: anyone removed (or left) ⇒ our next group message uses a fresh sender key shared with the rest.
+            // Rotation: anyone removed (or left, or swapped for its re-keyed account, D112) ⇒ our next group message uses a
+            // fresh sender key shared with the rest.
             val removedSomeone = old != null && old.membersList.any { it !in state.membersList }
             if (removedSomeone) {
                 groups.deleteMyDistribution(gid)

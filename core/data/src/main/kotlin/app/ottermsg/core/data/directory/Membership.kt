@@ -21,7 +21,7 @@ import java.security.MessageDigest
 class Redemption(val inviteId: ByteArray, val rank: ByteArray, val inviter: ByteArray, val fromNetwork: Boolean, val createdMs: Long)
 
 /** A network-signed REVOCATION (D99). */
-class RevocationRecord(val userId: ByteArray, val createdMs: Long)
+class RevocationRecord(val userId: ByteArray, val createdMs: Long, val reason: String = "")
 
 /** A network-signed INVITE_RIGHTS (D101). */
 class RightsRecord(val userId: ByteArray, val canInvite: Boolean, val version: Long, val createdMs: Long)
@@ -64,8 +64,9 @@ object Membership {
     /** A REVOCATION signed by the network key, else null (a node or member cannot remove anyone). */
     fun revocation(rec: Record, networkPub: ByteArray, ctx: SigContext): RevocationRecord? = runCatching {
         val body = networkBody(rec, networkPub, ctx, RecordType.REVOCATION) ?: return null
-        val user = Revocation.parseFrom(body.payload).userId.toByteArray().takeIf { it.size == 16 } ?: return null
-        RevocationRecord(user, body.createdMs)
+        val r = Revocation.parseFrom(body.payload)
+        val user = r.userId.toByteArray().takeIf { it.size == 16 } ?: return null
+        RevocationRecord(user, body.createdMs, r.reason)
     }.getOrNull()
 
     /** An INVITE_RIGHTS signed by the network key, else null. */

@@ -67,9 +67,13 @@ class DirectorySync @Inject constructor(
         val founding = manifests.latest()?.let { runCatching { ManifestVerifier.verify(it.raw, networkPub, 0, 0) }.getOrNull() }
             ?.foundingMembersList?.map { it.toByteArray().hex() }?.toSet().orEmpty()
         val revokedAt = HashMap<String, Long>() // earliest network-signed revocation per user
+        val forRekey = HashMap<String, Long>() // revoked for a re-key (D111 step 1): groups wait for the REKEY (D112)
         val rights = HashMap<String, MutableList<RightsRecord>>()
         for (rec in records) {
-            Membership.revocation(rec, networkPub, ctx)?.let { r -> revokedAt.merge(r.userId.hex(), r.createdMs, ::minOf) }
+            Membership.revocation(rec, networkPub, ctx)?.let { r ->
+                revokedAt.merge(r.userId.hex(), r.createdMs, ::minOf)
+                if (r.reason == REKEY_REASON) forRekey.merge(r.userId.hex(), r.createdMs, ::minOf)
+            }
             Membership.rights(rec, networkPub, ctx)?.let { r -> rights.getOrPut(r.userId.hex()) { mutableListOf() } += r }
         }
         // D111: every stored REKEY revokes its old account (so it never invites after it); the winner's new account is
@@ -151,6 +155,7 @@ class DirectorySync @Inject constructor(
         }
         // our own network-signed REVOCATION (or our redemption lost a doubly used invite, as on every node): disabled
         if (me.userId.hex() in revokedAt || me.userId.hex() in disabled) settings.setAccountRevoked(true)
+        settings.addRekeyRevocations(forRekey)
         settings.setDuplicateLosers(losers.keys)
         val contactIds = contacts.all().map { it.userId.hex() }.toSet()
         settings.setContactInviters(inviters.filterKeys { it in contactIds })
@@ -244,6 +249,8 @@ class DirectorySync @Inject constructor(
         /** SYSTEM_MEMBER system_data values (D104). */
         const val REVOKED = "revoked"
         const val DUPLICATE = "duplicate_invite"
+        /** REVOCATION reason written by `otter-admin user rekey --old` (otter-server internal/admin). */
+        const val REKEY_REASON = "rekey"
         private val log = Logger.getLogger("DirectorySync")
         private fun ByteArray.hex() = joinToString("") { "%02x".format(it) }
 

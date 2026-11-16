@@ -58,6 +58,23 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
         dao.put(SettingEntity(REVOCATIONS_HANDLED, (revocationsHandled() + keys).joinToString("\n").encodeToByteArray()))
     }
 
+    /**
+     * D111/D112: accounts (hex) with a network-signed REVOCATION whose reason is "rekey" (`otter-admin user rekey --old`),
+     * and its earliest created_ms. Their group removal waits for the REKEY so groups swap them instead. Grows only.
+     */
+    suspend fun rekeyRevocations(): Map<String, Long> =
+        dao.get(REKEY_REVOCATIONS)?.decodeToString()?.split('\n')?.mapNotNull { line ->
+            val k = line.substringBefore(':', "").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            line.substringAfter(':').toLongOrNull()?.let { k to it }
+        }?.toMap() ?: emptyMap()
+    suspend fun addRekeyRevocations(m: Map<String, Long>) {
+        if (m.isEmpty()) return
+        val cur = rekeyRevocations().toMutableMap()
+        var changed = false
+        for ((k, v) in m) if (cur[k]?.let { v < it } != false) { cur[k] = v; changed = true }
+        if (changed) dao.put(SettingEntity(REKEY_REVOCATIONS, cur.entries.joinToString("\n") { (k, v) -> "$k:$v" }.encodeToByteArray()))
+    }
+
     /** Accounts (hex) seen losing a doubly redeemed invite (D102). Grows only: a later batch hiding the winner changes nothing. */
     suspend fun duplicateLosers(): Set<String> =
         dao.get(DUPLICATE_LOSERS)?.decodeToString()?.split('\n')?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
@@ -214,6 +231,7 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
         const val PENDING_REFILLS = "prekeys_pending_owners"
         const val REFILL_TIMES = "prekeys_refill_times"
         const val REVOCATIONS_HANDLED = "revocations_handled"
+        const val REKEY_REVOCATIONS = "rekey_revocations"
         const val DUPLICATE_LOSERS = "duplicate_losers"
         const val CONTACT_INVITERS = "contact_inviters"
     }

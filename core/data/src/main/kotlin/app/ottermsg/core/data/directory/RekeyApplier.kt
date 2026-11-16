@@ -20,14 +20,12 @@ import javax.inject.Singleton
  * network key revokes the old account (like a REVOCATION created at the earliest REKEY of it) and, for the winning
  * REKEY (later created_ms, then lower record key), the old account's direct chat continues with the new account. The
  * re-keyed person's own history is not recovered (owner Q5). [DirectorySync] stores and admits; this class persists
- * the REKEYs and moves the chats. Groups: [onApplied] (Task 55).
+ * the REKEYs and moves the chats. Groups swap the old account for the new one in
+ * [app.ottermsg.core.data.group.GroupRevocations] (D112), after the sync and outside its lock.
  */
 @Singleton
 class RekeyApplier @Inject constructor(private val db: OtterDatabase, private val clock: Clock) {
     private val rng = SecureRandom()
-
-    /** Called after a chat moved from old to new (group work, Task 55); default no-op. */
-    var onApplied: suspend (old: ByteArray, new: ByteArray) -> Unit = { _, _ -> }
 
     /** Stores the verified REKEYs of [records] (forged ones are ignored); returns every stored winner. */
     suspend fun store(records: List<Record>, networkPub: ByteArray, ctx: SigContext): List<RekeyEntity> {
@@ -60,7 +58,6 @@ class RekeyApplier @Inject constructor(private val db: OtterDatabase, private va
             }
             if (db.contactDao().get(p.newUserId) == null) continue // its entry arrives with a later sync
             moveChat(p.oldUserId, p.newUserId)
-            onApplied(p.oldUserId, p.newUserId)
         }
     }
 

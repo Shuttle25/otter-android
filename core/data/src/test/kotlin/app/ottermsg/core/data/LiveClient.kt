@@ -70,7 +70,7 @@ class LiveClient {
     val backups = app.ottermsg.core.data.backup.BackupManager(ApplicationProvider.getApplicationContext(), db, accounts, settings,
         SeedVault(XorWrapper), { engine as app.ottermsg.core.data.invite.OnlineApi }, clock)
     val groups = GroupRepository(db, accounts, applier, outbox, clock)
-    val groupRevocations = app.ottermsg.core.data.group.GroupRevocations(db, accounts, groups, settings)
+    val groupRevocations = app.ottermsg.core.data.group.GroupRevocations(db, accounts, groups, applier, settings, clock)
     val messages = MessageRepository(db, accounts, outbox, clock, files, PhotoPrep(), media)
     val prekeys = PrekeyRefill(accounts, settings, signal, clock, db.manifestDao())
     val stats = InMemoryEndpointStats()
