@@ -45,6 +45,8 @@ data class ChatRow(
     val photo: Boolean = false,
     /** Last item: this contact restored their account (D53). */
     val resetBy: String? = null,
+    /** Last item: this contact's account was re-keyed after a lost phone (D111). */
+    val keyChangedBy: String? = null,
     /** The «Новости Выдры» chat (D64): localized title and the otter avatar in the UI. */
     val news: Boolean = false,
     /** Last item is a call line (D80): CallOutcome.code and duration; the preview is its text. */
@@ -71,7 +73,7 @@ fun chatRows(list: List<ConversationSummary>, nowMs: Long, zone: ZoneId, locale:
         ChatRow(
             id = s.id, title = s.title, seed = s.seed,
             preview = if (s.lastKind == MessageKind.SYSTEM_UNDECRYPTABLE || s.lastKind == MessageKind.SYSTEM_GROUP ||
-                s.lastKind == MessageKind.SYSTEM_RESET) "" else if (s.lastKind == MessageKind.NEWS)
+                s.lastKind == MessageKind.SYSTEM_RESET || s.lastKind == MessageKind.SYSTEM_KEY_CHANGED) "" else if (s.lastKind == MessageKind.NEWS)
                 NewsText.of(s.lastSystemData, locale.language) ?: s.lastBody else s.lastBody,
             previewIsSystem = s.lastKind == MessageKind.SYSTEM_UNDECRYPTABLE,
             outgoing = s.lastOutgoing == true,
@@ -84,6 +86,7 @@ fun chatRows(list: List<ConversationSummary>, nowMs: Long, zone: ZoneId, locale:
             event = if (s.lastKind == MessageKind.SYSTEM_GROUP) parseGroupEvent(s.lastSystemData) else null,
             photo = s.lastKind == MessageKind.PHOTO,
             resetBy = if (s.lastKind == MessageKind.SYSTEM_RESET) s.title else null, // resets live in direct chats
+            keyChangedBy = if (s.lastKind == MessageKind.SYSTEM_KEY_CHANGED) s.title else null, // so do re-keys
             news = s.type == ConversationType.NEWS,
             callOutcome = if (call) s.lastCallOutcome ?: 0 else null, callDurationS = if (call) s.lastCallDurationS ?: 0 else 0,
         )

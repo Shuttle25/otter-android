@@ -32,5 +32,11 @@ import app.ottermsg.core.database.entity.OutboxEntity
     @Query("SELECT DISTINCT message_local_id FROM outbox WHERE sent_ms IS NULL AND message_local_id IS NOT NULL")
     suspend fun unsentMessageIds(): List<Long>
     @Query("DELETE FROM outbox") suspend fun deleteAll()
+    @Query("SELECT * FROM outbox ORDER BY id") suspend fun all(): List<OutboxEntity>
+    /** Messages of items to [user] never sent to a node. */
+    @Query("SELECT DISTINCT message_local_id FROM outbox WHERE recipient_user_id = :user AND sent_ms IS NULL AND message_local_id IS NOT NULL")
+    suspend fun unsentMessageIdsTo(user: ByteArray): List<Long>
+    /** A re-key (D111): nothing unsent goes to the replaced account. */
+    @Query("DELETE FROM outbox WHERE recipient_user_id = :user AND sent_ms IS NULL") suspend fun deleteUnsentTo(user: ByteArray)
     @Query("SELECT * FROM outbox WHERE message_local_id = :localId") suspend fun forMessage(localId: Long): List<OutboxEntity>
 }

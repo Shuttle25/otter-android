@@ -171,6 +171,15 @@ class FakeNode(private val clock: () -> Long, val nodeId: ByteArray = ByteArray(
         membership += RecordCodec.sign(RecordCodec.body(RecordType.REVOCATION, Ids.id16(network.publicKey),
             app.ottermsg.proto.v1.Revocation.newBuilder().setUserId(bs(user)).build().toByteArray(), createdMs = createdMs), signer, ctx)
     }
+    /**
+     * Like `otter-admin user rekey --new` (D111): a network-signed REKEY old → new, served by directory.sync. A [signer]
+     * or [author] other than the network's plays a forger (the old account, a node key).
+     */
+    fun rekey(old: ByteArray, new: ByteArray, signer: Ed25519.KeyPair = network, createdMs: Long = clock(),
+              author: ByteArray = Ids.id16(network.publicKey), sig: SigContext = ctx): Record = synchronized(lock) {
+        RecordCodec.sign(RecordCodec.body(RecordType.REKEY, author, app.ottermsg.proto.v1.Rekey.newBuilder().setOldUserId(bs(old))
+            .setNewUserId(bs(new)).build().toByteArray(), createdMs = createdMs), signer, sig).also { membership += it }
+    }
     /** Like `otter-admin user invite-rights`: a network-signed INVITE_RIGHTS record. */
     fun inviteRights(user: ByteArray, canInvite: Boolean, version: Long, createdMs: Long = clock(), signer: Ed25519.KeyPair = network) =
         synchronized(lock) {

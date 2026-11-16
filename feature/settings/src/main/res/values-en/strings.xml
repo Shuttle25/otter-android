@@ -17,6 +17,9 @@
     <string name="profile_username">Username</string>
     <string name="profile_username_fixed">can\'t be changed</string>
     <string name="profile_pending">Your name will update for others once you\'re online</string>
+    <string name="profile_account_code">Account code</string>
+    <string name="profile_account_code_hint">The admin needs it if a phone is lost</string>
+    <string name="profile_account_code_copy">Copy code</string>
     <string name="edit_name_title">Edit name</string>
     <string name="edit_name_label">Name</string>
     <string name="edit_name_hint">This is how others see you</string>

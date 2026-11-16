@@ -37,7 +37,7 @@ import javax.inject.Singleton
 class DirectorySync @Inject constructor(
     private val accounts: AccountRepository, private val contacts: ContactDao, private val conversations: ConversationDao,
     private val settings: Settings, private val accountDao: AccountDao, private val manifests: ManifestDao,
-    private val messages: MessageDao, private val clock: Clock,
+    private val messages: MessageDao, private val clock: Clock, private val rekeys: RekeyApplier,
 ) {
     private val rng = SecureRandom()
     private val mutex = Mutex()
@@ -56,7 +56,9 @@ class DirectorySync @Inject constructor(
      * or an already accepted member who could invite at the invite's time; network-signed REVOCATIONs mark contacts
      * revoked (sticky); of several redemptions of one invite the lowest SHA-256(invite_proof) stays (D102), and the
      * losers plus every contact whose invite chain passes through one are revoked, even contacts accepted while the
-     * loser still looked like a normal member (as the node's disableDuplicates does).
+     * loser still looked like a normal member (as the node's disableDuplicates does). A network-signed REKEY (D111)
+     * revokes its old account like a REVOCATION; the winning REKEY's new account is admitted without an invite chain,
+     * is never disabled as a duplicate, and the old account's chat moves to it ([RekeyApplier]).
      */
     suspend fun apply(records: List<Record>) = mutex.withLock {
         val me = accounts.require()
@@ -70,6 +72,12 @@ class DirectorySync @Inject constructor(
             Membership.revocation(rec, networkPub, ctx)?.let { r -> revokedAt.merge(r.userId.hex(), r.createdMs, ::minOf) }
             Membership.rights(rec, networkPub, ctx)?.let { r -> rights.getOrPut(r.userId.hex()) { mutableListOf() } += r }
         }
+        // D111: every stored REKEY revokes its old account (so it never invites after it); the winner's new account is
+        // confirmed by the admin: no invite chain needed, never a duplicate loser (as the node's admitIfNew/duplicates)
+        val stored = rekeys.store(records, networkPub, ctx)
+        stored.forEach { k -> revokedAt.merge(k.oldUserId.hex(), k.revokedMs, ::minOf) }
+        val rekeyed = stored.map { it.oldUserId.hex() }.toSet()
+        val successors = stored.map { it.newUserId.hex() }.toSet()
         val known = contacts.all().associateBy { it.userId.hex() }
         val entries = records.mapNotNull { verifyEntry(it, ctx) }
         // Losers of a doubly redeemed invite, and every account invited through one at any depth, are disabled (like
@@ -77,13 +85,16 @@ class DirectorySync @Inject constructor(
         // they invited, which can change other groups, so repeat until stable (both sets only grow, so this ends).
         // Losers and the inviter edges are kept in Settings, so the result does not depend on what a node shows when.
         val losers = HashMap<String, Redemption?>()
-        settings.duplicateLosers().forEach { losers[it] = null }
+        val prevLosers = settings.duplicateLosers()
+        prevLosers.filter { it !in successors }.forEach { losers[it] = null }
         val inviters = HashMap<String, MutableSet<String>>()
         settings.contactInviters().forEach { (u, v) -> inviters[u] = v.toMutableSet() }
-        var disabled = disabledBy(losers.keys, inviters)
+        // a successor revoked here only as a duplicate before its REKEY arrived is re-enabled (as on the nodes)
+        val reenabled = disabledBy(prevLosers, inviters, emptySet()).filter { it in successors && it !in revokedAt }.toSet()
+        var disabled = disabledBy(losers.keys, inviters, successors)
         var accepted: List<Pair<DirectoryEntry, Redemption?>>
         while (true) {
-            accepted = admit(entries, me, networkPub, ctx, founding, known, revokedAt, rights, disabled)
+            accepted = admit(entries, me, networkPub, ctx, founding, known, revokedAt, rights, disabled, successors, reenabled)
             // inviter edges of accepted entries, whether or not the inviter may still invite
             val keys = HashMap<String, ByteArray>()
             keys[me.userId.hex()] = me.accountKey.publicKey
@@ -101,9 +112,9 @@ class DirectorySync @Inject constructor(
                             ?: Membership.compareUnsigned(a.first.userId.toByteArray(), b.first.userId.toByteArray())
                     }.drop(1)
                 }
-                .filter { (e, _) -> e.userId.toByteArray().hex() !in losers }
+                .filter { (e, _) -> e.userId.toByteArray().hex().let { it !in losers && it !in successors } }
             fresh.forEach { (e, r) -> losers[e.userId.toByteArray().hex()] = r }
-            val next = disabledBy(losers.keys, inviters)
+            val next = disabledBy(losers.keys, inviters, successors)
             if (fresh.isEmpty() && next == disabled) break
             disabled = next
         }
@@ -117,7 +128,7 @@ class DirectorySync @Inject constructor(
             val identity = e.identityPub.toByteArray()
             val changed = old != null && !old.identityPub.contentEquals(identity)
             val dup = losers[userId.hex()]
-            val revoked = (old?.revoked ?: false) || userId.hex() in revokedAt || userId.hex() in disabled
+            val revoked = (old?.revoked == true && userId.hex() !in reenabled) || userId.hex() in revokedAt || userId.hex() in disabled
             contacts.upsert(ContactEntity(
                 userId = userId, username = e.username, displayName = e.displayName,
                 accountPub = e.accountPub.toByteArray(), identityPub = identity,
@@ -126,7 +137,7 @@ class DirectorySync @Inject constructor(
                 revoked = revoked, entryVersion = e.version, resetMs = old?.resetMs ?: 0,
             ))
             if (old == null || old.displayName != e.displayName) conversations.setTitle(userId, e.displayName)
-            if (revoked && old?.revoked != true) {
+            if (revoked && old?.revoked != true && userId.hex() !in rekeyed) { // a re-key shows its own line
                 // the inviter of a doubly used link learns which account was disabled; a removal shows in an open chat
                 if (dup != null) { if (dup.inviter.contentEquals(me.userId)) memberLine(userId, e.displayName, DUPLICATE, create = true) }
                 else memberLine(userId, e.displayName, REVOKED, create = false)
@@ -136,34 +147,38 @@ class DirectorySync @Inject constructor(
         for (c in contacts.all()) {
             if (c.revoked || (c.userId.hex() !in revokedAt && c.userId.hex() !in disabled)) continue
             contacts.upsert(c.copy(revoked = true))
-            memberLine(c.userId, c.displayName, REVOKED, create = false)
+            if (c.userId.hex() !in rekeyed) memberLine(c.userId, c.displayName, REVOKED, create = false)
         }
         // our own network-signed REVOCATION (or our redemption lost a doubly used invite, as on every node): disabled
         if (me.userId.hex() in revokedAt || me.userId.hex() in disabled) settings.setAccountRevoked(true)
         settings.setDuplicateLosers(losers.keys)
         val contactIds = contacts.all().map { it.userId.hex() }.toSet()
         settings.setContactInviters(inviters.filterKeys { it in contactIds })
+        rekeys.applyPending(me.userId) // D111: chats move once the new account's entry is known
     }
 
-    /** [losers] and every account whose inviter chain passes through one, at any depth (the node's disableDuplicates). */
-    private fun disabledBy(losers: Set<String>, inviters: Map<String, Set<String>>): Set<String> {
-        val out = losers.toMutableSet()
+    /**
+     * [losers] and every account whose inviter chain passes through one, at any depth (the node's disableDuplicates),
+     * except [exempt] (the new accounts of winning REKEYs, D111), which are never disabled and never pass it on.
+     */
+    private fun disabledBy(losers: Set<String>, inviters: Map<String, Set<String>>, exempt: Set<String>): Set<String> {
+        val out = losers.filterTo(mutableSetOf()) { it !in exempt }
         var grew = true
         while (grew) {
             grew = false
-            for ((u, by) in inviters) if (u !in out && by.any { it in out }) { out += u; grew = true }
+            for ((u, by) in inviters) if (u !in out && u !in exempt && by.any { it in out }) { out += u; grew = true }
         }
         return out
     }
 
     /**
-     * The entries this phone accepts: known contacts and ourselves, founding members, and entries whose invite chain
-     * verifies (fixpoint over the batch: an inviter may come later in it).
+     * The entries this phone accepts: known contacts and ourselves, founding members, the new accounts of winning REKEYs
+     * ([successors], D111), and entries whose invite chain verifies (fixpoint over the batch: an inviter may come later).
      */
     private fun admit(
         entries: List<DirectoryEntry>, me: LocalAccount, networkPub: ByteArray, ctx: SigContext, founding: Set<String>,
         known: Map<String, ContactEntity>, revokedAt: Map<String, Long>, rights: Map<String, List<RightsRecord>>,
-        disabled: Set<String>,
+        disabled: Set<String>, successors: Set<String>, reenabled: Set<String>,
     ): List<Pair<DirectoryEntry, Redemption?>> {
         val keys = HashMap<String, ByteArray>()
         keys[me.userId.hex()] = me.accountKey.publicKey
@@ -176,7 +191,7 @@ class DirectorySync @Inject constructor(
             val at = revokedAt[a]
             if (at != null && at <= r.createdMs) return false
             // revoked here but no dated revocation in this batch (a duplicate loser, or a hidden record): not an inviter
-            if (at == null && known[a]?.revoked == true) return false
+            if (at == null && known[a]?.revoked == true && a !in reenabled) return false
             return Membership.canInviteAt(rights[a].orEmpty(), r.createdMs)
         }
         val pending = entries.toMutableList()
@@ -189,7 +204,7 @@ class DirectorySync @Inject constructor(
                 val e = it.next()
                 val id = e.userId.toByteArray().hex()
                 val red = Membership.chain(e, networkPub, ctx) { a -> keys[a.hex()] }?.takeIf(::inviterAllowed)
-                if (red != null || keys.containsKey(id) || id in founding) {
+                if (red != null || keys.containsKey(id) || id in founding || id in successors) {
                     accepted += e to red
                     keys[id] = e.accountPub.toByteArray()
                     it.remove(); progress = true

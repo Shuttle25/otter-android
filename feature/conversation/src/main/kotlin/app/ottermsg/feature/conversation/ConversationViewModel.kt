@@ -108,11 +108,12 @@ fun conversationUi(
             resetName = if (it.kind == MessageKind.SYSTEM_RESET) (names[it.senderId.hex()] ?: title) else null,
             news = if (it.kind == MessageKind.NEWS) it.systemData?.let { d -> runCatching { Announcement.parseFrom(d) }.getOrNull() } else null,
             call = if (it.kind == MessageKind.CALL) CallLineUi(it.callOutcome, it.callDurationS) else null,
-            memberNote = if (it.kind == MessageKind.SYSTEM_MEMBER) it.systemData?.decodeToString() ?: "" else null)
+            memberNote = if (it.kind == MessageKind.SYSTEM_MEMBER) it.systemData?.decodeToString() ?: "" else null,
+            keyChangedName = if (it.kind == MessageKind.SYSTEM_KEY_CHANGED) (names[it.senderId.hex()] ?: title) else null)
     }
     return ConversationUi(true, title, conv?.peerUserId ?: conv?.groupId ?: ByteArray(0), groupMessages(list, zone),
         msgs.lastOrNull { !it.outgoing && it.kind != MessageKind.SYSTEM_GROUP && it.kind != MessageKind.SYSTEM_RESET &&
-            it.kind != MessageKind.SYSTEM_MEMBER }?.localId,
+            it.kind != MessageKind.SYSTEM_MEMBER && it.kind != MessageKind.SYSTEM_KEY_CHANGED }?.localId,
         isGroup = isGroup, family = group?.group?.family == true, groupIdHex = conv?.groupId?.hex().orEmpty(),
         memberCount = group?.members?.size ?: 0,
         canWrite = !isNews && !peerRemoved && (!isGroup || group?.group?.iAmMember == true),

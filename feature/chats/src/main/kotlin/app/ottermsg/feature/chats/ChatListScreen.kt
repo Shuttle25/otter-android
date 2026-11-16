@@ -96,6 +96,7 @@ internal fun ChatRowItem(row: ChatRow, me: ByteArray, names: Names, onClick: () 
     val preview = when {
         row.callOutcome != null -> callLineText(res, row.callOutcome, row.callDurationS)
         row.resetBy != null -> stringResource(R.string.chats_system_reset, row.resetBy)
+        row.keyChangedBy != null -> stringResource(R.string.chats_system_key_changed, row.keyChangedBy)
         row.event != null -> groupEventText(row.event, me, names::of)
         row.previewIsSystem -> stringResource(R.string.chats_undecryptable)
         body == null -> ""
@@ -123,7 +124,8 @@ internal fun ChatRowItem(row: ChatRow, me: ByteArray, names: Names, onClick: () 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (row.status != null) { DeliveryStatusIcon(row.status); Spacer(Modifier.width(Dimens.s4)) }
                 Text(preview, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontStyle = if (row.previewIsSystem || row.event != null || row.resetBy != null) FontStyle.Italic else FontStyle.Normal,
+                    fontStyle = if (row.previewIsSystem || row.event != null || row.resetBy != null ||
+                        row.keyChangedBy != null) FontStyle.Italic else FontStyle.Normal,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 if (row.unread > 0) {
                     Box(Modifier.padding(start = Dimens.s8).background(MaterialTheme.colorScheme.primary, CircleShape)

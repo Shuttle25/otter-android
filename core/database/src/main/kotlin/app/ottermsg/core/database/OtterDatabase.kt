@@ -14,6 +14,7 @@ import app.ottermsg.core.database.dao.ManifestDao
 import app.ottermsg.core.database.dao.NetLogDao
 import app.ottermsg.core.database.dao.MessageDao
 import app.ottermsg.core.database.dao.OutboxDao
+import app.ottermsg.core.database.dao.RekeyDao
 import app.ottermsg.core.database.dao.SeenEnvelopeDao
 import app.ottermsg.core.database.dao.SettingsDao
 import app.ottermsg.core.database.dao.SignalKvDao
@@ -33,6 +34,7 @@ import app.ottermsg.core.database.entity.AttachmentEntity
 import app.ottermsg.core.database.entity.MessageEntity
 import app.ottermsg.core.database.entity.NetLogEntity
 import app.ottermsg.core.database.entity.OutboxEntity
+import app.ottermsg.core.database.entity.RekeyEntity
 import app.ottermsg.core.database.entity.SeenEnvelopeEntity
 import app.ottermsg.core.database.entity.SettingEntity
 import app.ottermsg.core.database.entity.SignalKvEntity
@@ -42,11 +44,11 @@ import app.ottermsg.core.database.entity.SignalKvEntity
         MessageEntity::class, OutboxEntity::class, SeenEnvelopeEntity::class, SignalKvEntity::class, SettingEntity::class, EndpointStatEntity::class,
         GroupEntity::class, GroupMemberEntity::class, PendingGroupUpdateEntity::class, PendingGroupEnvelopeEntity::class,
         SenderKeySharedEntity::class, MyDistributionEntity::class, MessageRecipientEntity::class, AttachmentEntity::class,
-        NetLogEntity::class],
-    version = 8,
+        NetLogEntity::class, RekeyEntity::class],
+    version = 9,
     exportSchema = true,
     autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6),
-        AutoMigration(from = 6, to = 7), AutoMigration(from = 7, to = 8)],
+        AutoMigration(from = 6, to = 7), AutoMigration(from = 7, to = 8), AutoMigration(from = 8, to = 9)],
 )
 abstract class OtterDatabase : RoomDatabase() {
     abstract fun accountDao(): AccountDao
@@ -63,4 +65,5 @@ abstract class OtterDatabase : RoomDatabase() {
     abstract fun messageRecipientDao(): MessageRecipientDao
     abstract fun attachmentDao(): AttachmentDao
     abstract fun netLogDao(): NetLogDao
+    abstract fun rekeyDao(): RekeyDao
 }

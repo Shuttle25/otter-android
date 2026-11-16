@@ -25,8 +25,10 @@ data class MessageUi(
     val call: CallLineUi? = null,
     /** kind = SYSTEM_MEMBER (D104): "revoked" | "duplicate_invite", rendered as a centered chip. */
     val memberNote: String? = null,
+    /** SYSTEM_KEY_CHANGED (D111): this contact's account was re-keyed after a lost phone; a chip with their name. */
+    val keyChangedName: String? = null,
 ) {
-    val isEvent: Boolean get() = event != null || resetName != null || call != null || memberNote != null
+    val isEvent: Boolean get() = event != null || resetName != null || call != null || memberNote != null || keyChangedName != null
 }
 
 /** [outcome] is CallOutcome.code. */

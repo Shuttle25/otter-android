@@ -69,7 +69,8 @@ class TestGraph(
     val manifests = app.ottermsg.core.data.sync.ManifestUpdater(db.manifestDao(), settings, clock)
     val accounts = AccountRepository(db.accountDao(), settings, SeedVault(XorWrapper), manifests)
     val signal = SignalService(accounts, db.signalKvDao(), db.contactDao(), scope)
-    val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao(), settings, db.accountDao(), db.manifestDao(), db.messageDao(), clock)
+    val rekeys = app.ottermsg.core.data.directory.RekeyApplier(db, clock)
+    val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao(), settings, db.accountDao(), db.manifestDao(), db.messageDao(), clock, rekeys)
     val profile = ProfileRepository(accounts, db, settings, clock)
     val outbox = Outbox(db, accounts, signal, clock, GroupSender(db, signal, clock))
     val files = object : MediaFiles(ApplicationProvider.getApplicationContext()) {

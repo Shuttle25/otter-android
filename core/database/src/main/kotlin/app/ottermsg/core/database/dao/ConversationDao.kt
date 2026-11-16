@@ -32,6 +32,9 @@ import kotlinx.coroutines.flow.Flow
     @Query("UPDATE conversations SET unread = unread + 1 WHERE id = :id") suspend fun incrementUnread(id: Long)
     @Query("UPDATE conversations SET unread = 0 WHERE id = :id") suspend fun clearUnread(id: Long)
     @Query("UPDATE conversations SET draft = :draft WHERE id = :id") suspend fun setDraft(id: Long, draft: String)
+    /** A re-key (D111): the direct chat of [old] continues with [new]. */
+    @Query("UPDATE conversations SET peer_user_id = :new WHERE peer_user_id = :old") suspend fun movePeer(old: ByteArray, new: ByteArray)
+    @Query("DELETE FROM conversations WHERE id = :id") suspend fun delete(id: Long)
     @Query("UPDATE conversations SET title = :title WHERE peer_user_id = :peer") suspend fun setTitle(peer: ByteArray, title: String)
     /** The chat list. The news chat only while it has a message: deleted or revoked news leave nothing to show (D65). */
     @Query("""
