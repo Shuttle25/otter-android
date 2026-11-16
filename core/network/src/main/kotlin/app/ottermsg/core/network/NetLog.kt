@@ -10,4 +10,5 @@ interface NetLog {
 }
 
 /** "wss://host:27443" without the secret path, for the log. */
-fun Candidate.logName(): String = url.substringBefore("://") + "://" + url.substringAfter("://").substringBefore('/')
+fun Candidate.logName(): String = url.substringBefore("://") + "://" + url.substringAfter("://").substringBefore('/') +
+    (via?.let { " via " + it.logName() } ?: "")

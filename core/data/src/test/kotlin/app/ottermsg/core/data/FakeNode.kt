@@ -63,18 +63,22 @@ class FakeNode(private val clock: () -> Long, val nodeId: ByteArray = ByteArray(
     val ctx: SigContext get() = SigContext(Ids.id16(network.publicKey), sigV1UntilMs)
     /**
      * Signs a manifest; [withSelf] lists this node, [extraHosts] adds other (fake) nodes. A manifest with a cut-over
-     * ([sigV1UntilMs] != 0) is v2-signed, like `otter-admin manifest sign --sig-v1-until`.
+     * ([sigV1UntilMs] != 0) is v2-signed, like `otter-admin manifest sign --sig-v1-until`. Extra hosts in
+     * [noBackupsHosts] are marked no_backups (D113); [selfPin] adds a pinned WSS endpoint for this node (a tunnel target, D114).
      */
     fun signManifest(version: Long, withSelf: Boolean = true, extraHosts: List<String> = emptyList(),
                      newsKeys: List<ByteArray> = emptyList(), foundingMembers: List<ByteArray> = emptyList(),
-                     sigV1UntilMs: Long = 0): Record {
+                     sigV1UntilMs: Long = 0, noBackupsHosts: Set<String> = emptySet(), selfPin: ByteArray? = null): Record {
         val b = Manifest.newBuilder().setVersion(version).setIssuedMs(version).setNetworkPub(bs(network.publicKey))
             .setSigV1UntilMs(sigV1UntilMs)
         newsKeys.forEach { b.addNewsKeys(bs(it)) }
         foundingMembers.forEach { b.addFoundingMembers(bs(it)) }
         if (withSelf) b.addNodes(NodeInfo.newBuilder().setNodeId(bs(nodeId)).setLabel("fake")
-            .addEndpoints(Endpoint.newBuilder().setKind(Endpoint.Kind.WS_PLAIN).setHost("fake").setPort(1).setPath("/fakepath")))
+            .addEndpoints(Endpoint.newBuilder().setKind(Endpoint.Kind.WS_PLAIN).setHost("fake").setPort(1).setPath("/fakepath"))
+            .apply { if (selfPin != null) addEndpoints(Endpoint.newBuilder().setKind(Endpoint.Kind.WSS).setHost("fake").setPort(2)
+                .setPath("/fakepath").addTlsSpkiPins(bs(selfPin))) })
         extraHosts.forEachIndexed { i, h -> b.addNodes(NodeInfo.newBuilder().setNodeId(bs(ByteArray(16) { (i + 1).toByte() })).setLabel(h)
+            .setNoBackups(h in noBackupsHosts)
             .addEndpoints(Endpoint.newBuilder().setKind(Endpoint.Kind.WS_PLAIN).setHost(h).setPort(1).setPath("/p"))) }
         return RecordCodec.sign(RecordCodec.body(RecordType.MANIFEST, Ids.id16(network.publicKey), b.build().toByteArray(), createdMs = version), network,
             SigContext(Ids.id16(network.publicKey), sigV1UntilMs))

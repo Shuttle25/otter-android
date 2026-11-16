@@ -98,13 +98,29 @@ class RestoreManager @Inject constructor(
         e.status == Status.STATUS_UNAUTHORIZED -> RestoreError.WrongPassword
         e.status == Status.STATUS_RETRY_LATER && "too many" in e.message.orEmpty() -> RestoreError.TooManyAttempts
         e.status == Status.STATUS_RETRY_LATER -> RestoreError.NotReplicated
-        else -> RestoreError.Network
+        else -> RestoreError.Network // also UNAVAILABLE: a node that keeps no backups (D113) or has them off
+    }
+
+    /**
+     * Password restore and «Добавить историю» (D113/D114): nodes that keep backups, directly or through a no_backups
+     * node's tunnel (TLS pinned to the node that keeps them). A direct connection abroad that freezes from inside a
+     * censored network (D132) or a node answering UNAVAILABLE is retried once over the tunnels only. Wrong passwords and
+     * bad backups end here at once (no second try costs another attempt).
+     */
+    private suspend fun <T> withBackupNode(m: Manifest, block: suspend (NodeApi) -> T): T {
+        val all = Endpoints.restoreCandidates(m, allowPlaintext)
+        val tunnels = all.filter { it.via != null }
+        return try { connector.withNode(all, block) } catch (e: Exception) {
+            val retry = e is IOException || e is RpcException && e.status == Status.STATUS_UNAVAILABLE
+            if (!retry || tunnels.isEmpty()) throw e
+            connector.withNode(tunnels, block)
+        }
     }
 
     override suspend fun withPassword(link: String, username: String, password: String): Result<Unit> = guarded {
         check(accounts.account.value == null) { "an account is already installed" }
         val net = network(link)
-        val d = connector.withNode(Endpoints.candidates(net.manifest, allowPlaintext)) { api ->
+        val d = withBackupNode(net.manifest) { api ->
             val name = username.trim().lowercase()
             val auth = api.backupAuth(name)
             if (auth.candidatesCount == 0) download(api, name, password, auth, net.ctx)
@@ -203,7 +219,7 @@ class RestoreManager @Inject constructor(
         val m = ManifestVerifier.verify(checkNotNull(db.manifestDao().latest()) { "no manifest" }.raw, networkPub, 0, 0)
         // D103: always the tagged name, never ambiguous (a plain name that ever clashed is CONFLICT)
         val tagged = me.username.substringBefore('#') + "#" + tag(me.userId)
-        val d = connector.withNode(Endpoints.candidates(m, allowPlaintext)) { api ->
+        val d = withBackupNode(m) { api ->
             download(api, tagged, password, api.backupAuth(tagged), SigContext.of(networkPub, m))
         }
         if (!d.snapshot.seed.toByteArray().contentEquals(me.seed)) throw RestoreError.Corrupt
