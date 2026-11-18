@@ -117,7 +117,7 @@ fun MessageBubble(
                                 if (text.isEmpty()) Box(Modifier.fillMaxSize().padding(Dimens.s8), contentAlignment = Alignment.BottomEnd) {
                                     Box(Modifier.background(Color.Black.copy(alpha = .45f), RoundedCornerShape(Dimens.s8))
                                         .padding(horizontal = Dimens.s8, vertical = 2.dp)) {
-                                        MessageMeta(time, status, color = Color.White)
+                                        MessageMeta(time, status, color = Color.White, onPhoto = true)
                                     }
                                 }
                             })
