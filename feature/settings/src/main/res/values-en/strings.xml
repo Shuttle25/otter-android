@@ -109,4 +109,30 @@
     <string name="app_lock_use_pin">PIN</string>
     <string name="app_lock_use_biometric">Unlock with fingerprint</string>
     <string name="app_lock_no_device_lock">This phone has no screen lock</string>
+    <!-- «Состояние сети» (D123) -->
+    <string name="network_title">Network status</string>
+    <string name="network_now">Now</string>
+    <string name="network_online">Connected to %1$s · %2$s</string>
+    <string name="network_online_since">Connected to %1$s · %2$s · since %3$s</string>
+    <string name="network_waiting">No connection, retry at %1$s</string>
+    <string name="network_phone">Phone network</string>
+    <string name="network_wifi">Wi-Fi</string>
+    <string name="network_mobile">Mobile</string>
+    <string name="network_other">Other network</string>
+    <string name="network_none">No network</string>
+    <string name="network_nodes">Nodes</string>
+    <string name="network_never">not connected yet</string>
+    <string name="network_last_ok">ok %1$s</string>
+    <string name="network_last_fail">failed %1$s</string>
+    <string name="network_rtt">%1$d ms</string>
+    <string name="network_failures">failures in a row: %1$d</string>
+    <string name="network_demoted">demoted until %1$s</string>
+    <string name="network_last_wake">Last wake-up: %1$s</string>
+    <string name="network_no_wake">No wake-ups through Google yet</string>
+    <string name="network_battery">Battery</string>
+    <string name="network_battery_restricted">Android may delay Otter notifications</string>
+    <string name="network_battery_fix">Don\'t restrict Otter</string>
+    <string name="network_battery_ok">No restrictions</string>
+    <string name="network_autostart">Autostart and background</string>
+    <string name="network_autostart_hint">For phones that close apps in the background on their own</string>
 </resources>

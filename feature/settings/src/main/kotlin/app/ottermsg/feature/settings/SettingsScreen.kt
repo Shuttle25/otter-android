@@ -35,7 +35,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.outlined.ListAlt
 import androidx.compose.material3.Icon
 import androidx.compose.ui.Alignment
 import app.ottermsg.core.ui.components.OtterAvatar
@@ -98,7 +97,7 @@ fun connectionLabel(state: ConnectionState): Int = when (state) {
 /** Settings: profile, family invite, connection. Other sections of guide §10 arrive with their features. */
 @Composable
 fun SettingsRoute(onBack: () -> Unit, onInvite: () -> Unit, onProfile: () -> Unit, onPhotos: () -> Unit = {}, onBackup: () -> Unit = {},
-                  onNotifications: () -> Unit = {}, onNetLog: () -> Unit = {}, onAppLock: () -> Unit = {}, versionText: String = "", vm: SettingsViewModel = hiltViewModel()) {
+                  onNotifications: () -> Unit = {}, onNetwork: () -> Unit = {}, onAppLock: () -> Unit = {}, versionText: String = "", vm: SettingsViewModel = hiltViewModel()) {
     val account by vm.account.collectAsStateWithLifecycle()
     val connection by vm.connection.collectAsStateWithLifecycle()
     val relayOnly by vm.callsRelayOnly.collectAsStateWithLifecycle()
@@ -126,15 +125,15 @@ fun SettingsRoute(onBack: () -> Unit, onInvite: () -> Unit, onProfile: () -> Uni
             OtterSettingsRow(stringResource(R.string.settings_backup), icon = Icons.Outlined.CloudDone, onClick = onBackup)
             Section(stringResource(R.string.settings_connection))
             val online = connection as? ConnectionState.Online
-            OtterSettingsRow(stringResource(connectionLabel(connection)), subtitle = online?.let { "${it.nodeLabel} · ${it.url}" },
-                icon = Icons.Outlined.Wifi)
+            // label and transport only (never the address); the row opens «Состояние сети» (D123)
+            OtterSettingsRow(stringResource(connectionLabel(connection)), subtitle = online?.let { "${it.nodeLabel} · ${transportOf(it.url)}" },
+                icon = Icons.Outlined.Wifi, onClick = onNetwork)
             CallSettingsRows(relayOnly, vm::setCallsRelayOnly, fsiBlocked, onFsiFix = {
                 if (Build.VERSION.SDK_INT >= 34) runCatching {
                     context.startActivity(Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:" + context.packageName))
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 }
             })
-            OtterSettingsRow(stringResource(R.string.settings_netlog), icon = Icons.AutoMirrored.Outlined.ListAlt, onClick = onNetLog)
             if (versionText.isNotEmpty()) VersionFooter(versionText)
         }
     }
@@ -186,7 +185,7 @@ private fun ProfileRow(name: String, username: String, userId: ByteArray, onClic
 }
 
 @Composable
-private fun Section(title: String) {
+internal fun Section(title: String) {
     Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(start = Dimens.screenGutter, end = Dimens.screenGutter, top = Dimens.s24, bottom = Dimens.s8)
             .semantics { heading() })

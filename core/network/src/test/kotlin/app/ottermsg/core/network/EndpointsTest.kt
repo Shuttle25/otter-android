@@ -67,6 +67,7 @@ class EndpointsTest {
     @Test fun normalCandidatesStillListNoBackupsNodes() {
         assertEquals(listOf("wss://ru:443/rp", "wss://f1:8443/p1", "wss://f2:443/p2"), Endpoints.candidates(nb, allowPlaintext = false).map { it.url })
         assertEquals(true, Endpoints.candidates(nb, allowPlaintext = false).all { it.via == null })
+        assertEquals(listOf(false, false, true), Endpoints.candidates(nb, allowPlaintext = false).map { it.viaCdn }) // «Состояние сети» marks CDN endpoints
     }
 
     @Test fun tunnelTargetsAreOnlyPinnedNonCdnWssOfNodesWithBackups() {

@@ -109,4 +109,30 @@
     <string name="app_lock_use_pin">PIN</string>
     <string name="app_lock_use_biometric">Разблокировать отпечатком</string>
     <string name="app_lock_no_device_lock">На телефоне не включена блокировка экрана</string>
+    <!-- «Состояние сети» (D123) -->
+    <string name="network_title">Состояние сети</string>
+    <string name="network_now">Сейчас</string>
+    <string name="network_online">Подключено к %1$s · %2$s</string>
+    <string name="network_online_since">Подключено к %1$s · %2$s · с %3$s</string>
+    <string name="network_waiting">Нет подключения, повтор в %1$s</string>
+    <string name="network_phone">Сеть телефона</string>
+    <string name="network_wifi">Wi-Fi</string>
+    <string name="network_mobile">Мобильная</string>
+    <string name="network_other">Другая сеть</string>
+    <string name="network_none">Нет сети</string>
+    <string name="network_nodes">Узлы</string>
+    <string name="network_never">ещё не подключались</string>
+    <string name="network_last_ok">удачно %1$s</string>
+    <string name="network_last_fail">сбой %1$s</string>
+    <string name="network_rtt">%1$d мс</string>
+    <string name="network_failures">сбоев подряд: %1$d</string>
+    <string name="network_demoted">понижен до %1$s</string>
+    <string name="network_last_wake">Последнее пробуждение: %1$s</string>
+    <string name="network_no_wake">Пробуждений через Google ещё не было</string>
+    <string name="network_battery">Батарея</string>
+    <string name="network_battery_restricted">Android может задерживать уведомления Otter</string>
+    <string name="network_battery_fix">Не ограничивать Otter</string>
+    <string name="network_battery_ok">Ограничений нет</string>
+    <string name="network_autostart">Автозапуск и фон</string>
+    <string name="network_autostart_hint">Для телефонов, которые сами закрывают приложения в фоне</string>
 </resources>
