@@ -16,6 +16,7 @@ import app.ottermsg.R
 import app.ottermsg.core.data.push.ActiveConversation
 import app.ottermsg.core.data.push.AppVisibility
 import app.ottermsg.core.data.push.MessageAlerts
+import app.ottermsg.core.data.security.AppLock
 import app.ottermsg.core.data.settings.Settings
 import app.ottermsg.core.database.OtterDatabase
 import app.ottermsg.core.data.news.NewsRepository
@@ -28,17 +29,19 @@ import javax.inject.Singleton
 /**
  * One MessagingStyle notification per conversation (id = conversation id) with its unread messages, grouped under one
  * summary; private on the lock screen; «Ответить» and «Прочитано» actions; tap opens the chat (D62).
+ * While the app lock is on (D121): only «Otter / Новое сообщение», no names, no text, no actions.
  */
 @Singleton
 class MessageNotifier @Inject constructor(
     @ApplicationContext private val context: Context, private val db: OtterDatabase, private val settings: Settings,
-    private val active: ActiveConversation, private val visibility: AppVisibility,
+    private val active: ActiveConversation, private val visibility: AppVisibility, private val appLock: AppLock,
 ) : MessageAlerts {
     private val nm = NotificationManagerCompat.from(context)
     private val groupKey get() = context.packageName + GROUP
 
     override suspend fun onIncoming(conversationId: Long) {
         if (!settings.notificationsEnabled() || !permitted()) return
+        appLock.init() // a process started by a push has not read the lock state yet (idempotent)
         if (visibility.visible && active.id == conversationId) return
         val conv = db.conversationDao().get(conversationId) ?: return
         if (conv.type == ConversationType.NEWS) return postNews(conv)
@@ -72,19 +75,23 @@ class MessageNotifier @Inject constructor(
         if (!others) nm.cancel(SUMMARY_ID)
     }
 
+    /** The app lock was just turned on (D121): notifications already shown may carry text and «Ответить». */
+    fun hideAll() {
+        nm.activeNotifications.filter { it.notification.group == groupKey }.forEach { nm.cancel(it.id) }
+        nm.cancel(SUMMARY_ID)
+    }
+
     private fun permitted() = Build.VERSION.SDK_INT < 33 ||
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
     private fun post(cid: Long, c: NotificationContent) {
+        if (appLock.enabled.value && !c.news) return postLocked(cid, c) // news are public within the network
         val me = Person.Builder().setName(context.getString(R.string.notif_me)).build()
         val style = NotificationCompat.MessagingStyle(me).setConversationTitle(if (c.group || c.news) c.title else null)
             .setGroupConversation(c.group)
         c.lines.forEach { style.addMessage(it.text, it.timeMs, Person.Builder().setName(it.sender).build()) }
         val channel = when { c.news -> Channels.NEWS; c.group -> Channels.GROUPS; else -> Channels.MESSAGES }
-        val open = PendingIntent.getActivity(context, cid.toInt(),
-            Intent(context, MainActivity::class.java).setAction(ACTION_OPEN).putExtra(EXTRA_CONVERSATION, cid)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val open = openIntent(cid)
         val reply = NotificationCompat.Action.Builder(0, context.getString(R.string.notif_reply),
             actionIntent(cid, NotificationActionReceiver.ACTION_REPLY, mutable = true))
             .addRemoteInput(RemoteInput.Builder(NotificationActionReceiver.KEY_TEXT).setLabel(context.getString(R.string.notif_reply_hint)).build())
@@ -109,6 +116,21 @@ class MessageNotifier @Inject constructor(
             nm.notify(SUMMARY_ID, summary)
         } catch (e: SecurityException) { /* permission revoked meanwhile */ }
     }
+
+    /** D121: the app lock is on: «Otter / Новое сообщение» and nothing else; the tap opens the app behind its lock. */
+    private fun postLocked(cid: Long, c: NotificationContent) {
+        val n = NotificationCompat.Builder(context, if (c.group) Channels.GROUPS else Channels.MESSAGES)
+            .setSmallIcon(R.drawable.ic_stat_otter).setContentTitle(context.getString(R.string.notif_public_title))
+            .setContentText(context.getString(R.string.notif_public_text)).setContentIntent(openIntent(cid))
+            .setAutoCancel(true).setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setPriority(NotificationCompat.PRIORITY_HIGH).setGroup(groupKey).build()
+        try { nm.notify(cid.toInt(), n) } catch (e: SecurityException) { /* permission revoked meanwhile */ }
+    }
+
+    private fun openIntent(cid: Long): PendingIntent = PendingIntent.getActivity(context, cid.toInt(),
+        Intent(context, MainActivity::class.java).setAction(ACTION_OPEN).putExtra(EXTRA_CONVERSATION, cid)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
     private fun actionIntent(cid: Long, action: String, mutable: Boolean): PendingIntent =
         PendingIntent.getBroadcast(context, (cid * 4 + if (mutable) 1 else 2).toInt(),

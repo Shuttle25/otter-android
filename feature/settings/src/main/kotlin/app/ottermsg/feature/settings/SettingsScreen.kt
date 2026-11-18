@@ -17,6 +17,7 @@ import androidx.lifecycle.viewModelScope
 import app.ottermsg.core.data.account.LocalAccount
 import app.ottermsg.core.data.settings.Settings as AppSettings
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -69,14 +70,23 @@ import javax.inject.Inject
 class SettingsViewModel internal constructor(
     val account: StateFlow<LocalAccount?>, val connection: StateFlow<ConnectionState>,
     relayOnly: Flow<Boolean>, private val saveRelayOnly: suspend (Boolean) -> Unit,
+    appLockOn: Flow<Boolean> = emptyFlow(), screenSecure: Flow<Boolean> = emptyFlow(),
+    private val saveScreenSecure: suspend (Boolean) -> Unit = {},
 ) : ViewModel() {
     @Inject constructor(accounts: AccountRepository, sync: SyncEngine, settings: AppSettings) :
-        this(accounts.account, sync.connection, settings.observeCallsRelayOnly(), { settings.setCallsRelayOnly(it) })
+        this(accounts.account, sync.connection, settings.observeCallsRelayOnly(), { settings.setCallsRelayOnly(it) },
+            settings.observeAppLockOn(), settings.observeScreenSecure(), { settings.setScreenSecure(it) })
 
     /** «Звонки только через сервер» (D79), on by default. */
     val callsRelayOnly: StateFlow<Boolean> = relayOnly.stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
     fun setCallsRelayOnly(v: Boolean) { viewModelScope.launch { saveRelayOnly(v) } }
+
+    /** «Блокировка приложения» subtitle (D121). */
+    val appLockOn: StateFlow<Boolean> = appLockOn.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    /** «Запрет скриншотов» (D121): MainActivity applies it at once. */
+    val screenSecure: StateFlow<Boolean> = screenSecure.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    fun setScreenSecure(v: Boolean) { viewModelScope.launch { saveScreenSecure(v) } }
 }
 
 fun connectionLabel(state: ConnectionState): Int = when (state) {
@@ -88,10 +98,12 @@ fun connectionLabel(state: ConnectionState): Int = when (state) {
 /** Settings: profile, family invite, connection. Other sections of guide §10 arrive with their features. */
 @Composable
 fun SettingsRoute(onBack: () -> Unit, onInvite: () -> Unit, onProfile: () -> Unit, onPhotos: () -> Unit = {}, onBackup: () -> Unit = {},
-                  onNotifications: () -> Unit = {}, onNetLog: () -> Unit = {}, versionText: String = "", vm: SettingsViewModel = hiltViewModel()) {
+                  onNotifications: () -> Unit = {}, onNetLog: () -> Unit = {}, onAppLock: () -> Unit = {}, versionText: String = "", vm: SettingsViewModel = hiltViewModel()) {
     val account by vm.account.collectAsStateWithLifecycle()
     val connection by vm.connection.collectAsStateWithLifecycle()
     val relayOnly by vm.callsRelayOnly.collectAsStateWithLifecycle()
+    val appLockOn by vm.appLockOn.collectAsStateWithLifecycle()
+    val screenSecure by vm.screenSecure.collectAsStateWithLifecycle()
     val context = LocalContext.current
     // Re-read on every resume: the member may come back from Android's settings with full-screen ringing allowed.
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
@@ -110,6 +122,7 @@ fun SettingsRoute(onBack: () -> Unit, onInvite: () -> Unit, onProfile: () -> Uni
             Section(stringResource(R.string.settings_notifications_section))
             OtterSettingsRow(stringResource(R.string.settings_notifications), icon = Icons.Outlined.Notifications, onClick = onNotifications)
             Section(stringResource(R.string.settings_security))
+            SecurityRows(appLockOn, onAppLock, screenSecure, vm::setScreenSecure)
             OtterSettingsRow(stringResource(R.string.settings_backup), icon = Icons.Outlined.CloudDone, onClick = onBackup)
             Section(stringResource(R.string.settings_connection))
             val online = connection as? ConnectionState.Online

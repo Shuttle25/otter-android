@@ -1,5 +1,8 @@
 package app.ottermsg.push
 
+import app.ottermsg.core.data.security.AppLock
+import app.ottermsg.core.data.security.FakeLockStore
+import app.ottermsg.core.data.security.PlainHasher
 import android.Manifest
 import android.app.Application
 import android.app.NotificationManager
@@ -50,7 +53,8 @@ class WakeFlowTest {
     private val node = FakeNode(clock::now)
     private val alice = TestGraph(node, clock)
     private val bobDb = Room.inMemoryDatabaseBuilder(app, OtterDatabase::class.java).build()
-    private val notifier = MessageNotifier(app, bobDb, Settings(bobDb.settingsDao()), ActiveConversation(), AppVisibility())
+    private val notifier = MessageNotifier(app, bobDb, Settings(bobDb.settingsDao()), ActiveConversation(), AppVisibility(),
+        AppLock(FakeLockStore(), { 0L }, PlainHasher))
     private val bob = TestGraph(node, clock, db = bobDb, alerts = notifier)
     /** TestClock only ticks per call; the worker's 10 s idle wait needs it to run (10x faster than real time). */
     private val ticker = CoroutineScope(SupervisorJob() + Dispatchers.Default).apply {

@@ -1,5 +1,8 @@
 package app.ottermsg.notify
 
+import app.ottermsg.core.data.security.AppLock
+import app.ottermsg.core.data.security.FakeLockStore
+import app.ottermsg.core.data.security.PlainHasher
 import android.Manifest
 import android.app.Application
 import android.app.Notification
@@ -37,7 +40,8 @@ class MessageNotifierTest {
     private val settings = Settings(db.settingsDao())
     private val active = ActiveConversation()
     private val visibility = AppVisibility()
-    private val notifier = MessageNotifier(app, db, settings, active, visibility)
+    private val notifier = MessageNotifier(app, db, settings, active, visibility,
+        AppLock(FakeLockStore(), { 0L }, PlainHasher))
     private val shadowNm get() = shadowOf(app.getSystemService(NotificationManager::class.java))
     private val mama = ByteArray(16) { 1 }
     private var cid = 0L

@@ -2,5 +2,7 @@
 <resources>
     <style name="Theme.Otter" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/otter_window_dark</item>
+        <!-- Android 8.x: BiometricPrompt (app lock, D121) draws its fingerprint dialog with AppCompat -->
+        <item name="alertDialogTheme">@style/Theme.AppCompat.Dialog.Alert</item>
     </style>
 </resources>
