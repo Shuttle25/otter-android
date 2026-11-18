@@ -51,6 +51,14 @@ class SettingsOrderTest {
         assertTrue("rows in order, each below the last: $ys", ys.zipWithNext().all { (a, b) -> a < b })
     }
 
+    @Test fun allRowTitlesLineUp() {
+        compose.setContent { OtterTheme { SettingsRoute(onBack = {}, onInvite = {}, onProfile = {}, vm = vm()) } }
+        fun x(t: String) = compose.onNodeWithText(t, useUnmergedTree = true).fetchSemanticsNode().positionInRoot.x
+        val left = x("Уведомления")
+        for (t in listOf("Пригласить в семью", "Блокировка приложения", "Запрет скриншотов", "Резервная копия",
+            "Звонки только через сервер")) assertEquals(t, left, x(t), 0.5f)
+    }
+
     @Test fun newRowsOpenTheirScreens() {
         var appearance = 0; var phrase = 0
         compose.setContent { OtterTheme {

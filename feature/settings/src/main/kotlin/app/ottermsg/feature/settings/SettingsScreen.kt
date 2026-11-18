@@ -39,6 +39,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.ui.Alignment
 import app.ottermsg.core.ui.components.OtterAvatar
 import androidx.compose.material.icons.outlined.CloudDone
+import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material.icons.outlined.Key
@@ -152,6 +153,8 @@ internal fun CallSettingsRows(relayOnly: Boolean, onRelayOnly: (Boolean) -> Unit
     Row(Modifier.fillMaxWidth().heightIn(min = Dimens.settingsRowWithCaptionMin)
         .toggleable(value = relayOnly, onValueChange = onRelayOnly, role = Role.Switch)
         .padding(horizontal = Dimens.screenGutter, vertical = Dimens.s8), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Outlined.Dns, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(Dimens.s16))
         Column(Modifier.weight(1f)) {
             Text(stringResource(R.string.settings_calls_relay_only), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.settings_calls_relay_only_sub), style = MaterialTheme.typography.bodyMedium,

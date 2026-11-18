@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import app.ottermsg.core.ui.theme.Dimens
+import app.ottermsg.core.ui.theme.PHOTO_SCRIM_ALPHA
 
 /** Height of a photo shown [width] wide: aspect kept, at most 320 dp (center-crop beyond that). */
 internal fun photoHeight(p: PhotoUi, width: Dp): Dp {
@@ -71,7 +72,7 @@ fun PhotoContent(localId: Long, p: PhotoUi, width: Dp, onDownload: () -> Unit, m
         }
         when (p.state) {
             PhotoState.Uploading, PhotoState.Downloading -> Box(Modifier.size(48.dp).clip(RoundedCornerShape(24.dp))
-                .background(Color.Black.copy(alpha = .45f)), contentAlignment = Alignment.Center) {
+                .background(Color.Black.copy(alpha = PHOTO_SCRIM_ALPHA)), contentAlignment = Alignment.Center) {
                 val progress = p.progress
                 if (progress != null && progress > 0f) CircularProgressIndicator(progress = { progress }, color = Color.White, modifier = Modifier.size(32.dp))
                 else CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp))
@@ -99,5 +100,5 @@ private fun photoButtonColors() = ButtonDefaults.filledTonalButtonColors(
 @Composable
 private fun Label(text: String) {
     Text(text, style = MaterialTheme.typography.bodyMedium, color = Color.White,
-        modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = .45f)).padding(horizontal = Dimens.s12, vertical = Dimens.s4))
+        modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = PHOTO_SCRIM_ALPHA)).padding(horizontal = Dimens.s12, vertical = Dimens.s4))
 }
