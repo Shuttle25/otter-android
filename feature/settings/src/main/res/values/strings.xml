@@ -37,7 +37,6 @@
     <string name="photos_cache_clear">Очистить</string>
     <string name="photos_cache_note">Фото в чатах не удаляются</string>
     <string name="photos_stored">Фото на телефоне</string>
-    <string name="settings_media">Медиа</string>
     <string name="settings_security">Безопасность</string>
     <string name="settings_backup">Резервная копия</string>
     <string name="backup_title">Резервная копия</string>
@@ -135,4 +134,19 @@
     <string name="network_battery_ok">Ограничений нет</string>
     <string name="network_autostart">Автозапуск и фон</string>
     <string name="network_autostart_hint">Для телефонов, которые сами закрывают приложения в фоне</string>
+    <!-- D124: Оформление, Фото и память, Фраза восстановления -->
+    <string name="settings_appearance">Оформление</string>
+    <string name="appearance_system">Как на устройстве</string>
+    <string name="appearance_light">Светлая</string>
+    <string name="appearance_dark">Тёмная</string>
+    <string name="settings_photos_section">Фото и память</string>
+    <string name="settings_phrase">Фраза восстановления</string>
+    <string name="phrase_warning">Никому не показывайте эти слова. Кто их знает — тот владеет аккаунтом.</string>
+    <string name="phrase_need_lock">Сначала включите блокировку экрана телефона или блокировку Otter</string>
+    <string name="phrase_auth_title">Подтвердите, что это вы</string>
+    <string name="phrase_show">Показать слова</string>
+    <string name="phrase_enter_pin">Введите PIN Otter</string>
+    <string name="app_lock_no_screen_lock">На телефоне не включена блокировка экрана. Если забудете PIN, Otter придётся переустановить и восстановить из резервной копии.</string>
+    <string name="app_lock_enable_anyway">Всё равно включить</string>
+    <string name="app_lock_cancel">Отмена</string>
 </resources>

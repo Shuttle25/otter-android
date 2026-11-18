@@ -52,6 +52,36 @@ class AppLockScreenTest {
         assertEquals(listOf("1234" to false), enabled)
     }
 
+    /** Owner default: no phone screen lock → a warning first (a forgotten PIN means reinstall + restore); not required. */
+    @Test fun enablingWithoutAPhoneScreenLockWarnsFirst() {
+        val enabled = mutableListOf<Pair<String, Boolean>>()
+        compose.setContent { OtterTheme {
+            AppLockSetupContent(AppLockUi(enabled = false, deviceSecure = false), onEnable = { p, b -> enabled += p to b },
+                onBiometric = {}, onTimeout = {}, check = { PinResult.Ok }, onChangePin = { _, _ -> }, onDisable = {})
+        } }
+        val warning = "На телефоне не включена блокировка экрана. Если забудете PIN, Otter придётся переустановить и восстановить из резервной копии."
+        compose.onNodeWithText("Включить").performClick()
+        compose.onNodeWithText(warning).assertExists()
+        compose.onNodeWithText("Отмена").performClick()
+        compose.onNodeWithText(warning).assertDoesNotExist()
+        compose.onNodeWithText("Придумайте PIN").assertDoesNotExist()
+        compose.onNodeWithText("Включить").performClick()
+        compose.onNodeWithText("Всё равно включить").performClick()
+        compose.onNodeWithText("Придумайте PIN").assertExists()
+        type("1234"); type("1234")
+        assertEquals(listOf("1234" to false), enabled)
+    }
+
+    @Test fun enablingWithAPhoneScreenLockHasNoWarning() {
+        compose.setContent { OtterTheme {
+            AppLockSetupContent(AppLockUi(enabled = false, deviceSecure = true), onEnable = { _, _ -> },
+                onBiometric = {}, onTimeout = {}, check = { PinResult.Ok }, onChangePin = { _, _ -> }, onDisable = {})
+        } }
+        compose.onNodeWithText("Включить").performClick()
+        compose.onNodeWithText("Всё равно включить").assertDoesNotExist()
+        compose.onNodeWithText("Придумайте PIN").assertExists()
+    }
+
     @Test fun padIsAccessible() {
         compose.setContent { OtterTheme {
             AppLockSetupContent(AppLockUi(enabled = false), onEnable = { _, _ -> }, onBiometric = {}, onTimeout = {},

@@ -41,6 +41,8 @@ import app.ottermsg.core.ui.components.OtterAvatar
 import androidx.compose.material.icons.outlined.CloudDone
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material3.MaterialTheme
@@ -70,11 +72,11 @@ class SettingsViewModel internal constructor(
     val account: StateFlow<LocalAccount?>, val connection: StateFlow<ConnectionState>,
     relayOnly: Flow<Boolean>, private val saveRelayOnly: suspend (Boolean) -> Unit,
     appLockOn: Flow<Boolean> = emptyFlow(), screenSecure: Flow<Boolean> = emptyFlow(),
-    private val saveScreenSecure: suspend (Boolean) -> Unit = {},
+    private val saveScreenSecure: suspend (Boolean) -> Unit = {}, themeMode: Flow<Int> = emptyFlow(),
 ) : ViewModel() {
     @Inject constructor(accounts: AccountRepository, sync: SyncEngine, settings: AppSettings) :
         this(accounts.account, sync.connection, settings.observeCallsRelayOnly(), { settings.setCallsRelayOnly(it) },
-            settings.observeAppLockOn(), settings.observeScreenSecure(), { settings.setScreenSecure(it) })
+            settings.observeAppLockOn(), settings.observeScreenSecure(), { settings.setScreenSecure(it) }, settings.observeThemeMode())
 
     /** «Звонки только через сервер» (D79), on by default. */
     val callsRelayOnly: StateFlow<Boolean> = relayOnly.stateIn(viewModelScope, SharingStarted.Eagerly, true)
@@ -86,6 +88,8 @@ class SettingsViewModel internal constructor(
     /** «Запрет скриншотов» (D121): MainActivity applies it at once. */
     val screenSecure: StateFlow<Boolean> = screenSecure.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     fun setScreenSecure(v: Boolean) { viewModelScope.launch { saveScreenSecure(v) } }
+    /** «Оформление» subtitle (D124). */
+    val themeMode: StateFlow<Int> = themeMode.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 }
 
 fun connectionLabel(state: ConnectionState): Int = when (state) {
@@ -94,15 +98,20 @@ fun connectionLabel(state: ConnectionState): Int = when (state) {
     else -> R.string.settings_offline
 }
 
-/** Settings: profile, family invite, connection. Other sections of guide §10 arrive with their features. */
+/**
+ * Settings in the guide's order (§10, D124): Профиль, Семья, Уведомления, Оформление, Фото и память, Безопасность,
+ * Подключение, then the version footer.
+ */
 @Composable
 fun SettingsRoute(onBack: () -> Unit, onInvite: () -> Unit, onProfile: () -> Unit, onPhotos: () -> Unit = {}, onBackup: () -> Unit = {},
-                  onNotifications: () -> Unit = {}, onNetwork: () -> Unit = {}, onAppLock: () -> Unit = {}, versionText: String = "", vm: SettingsViewModel = hiltViewModel()) {
+                  onNotifications: () -> Unit = {}, onNetwork: () -> Unit = {}, onAppLock: () -> Unit = {},
+                  onAppearance: () -> Unit = {}, onPhrase: () -> Unit = {}, versionText: String = "", vm: SettingsViewModel = hiltViewModel()) {
     val account by vm.account.collectAsStateWithLifecycle()
     val connection by vm.connection.collectAsStateWithLifecycle()
     val relayOnly by vm.callsRelayOnly.collectAsStateWithLifecycle()
     val appLockOn by vm.appLockOn.collectAsStateWithLifecycle()
     val screenSecure by vm.screenSecure.collectAsStateWithLifecycle()
+    val themeMode by vm.themeMode.collectAsStateWithLifecycle()
     val context = LocalContext.current
     // Re-read on every resume: the member may come back from Android's settings with full-screen ringing allowed.
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
@@ -116,13 +125,17 @@ fun SettingsRoute(onBack: () -> Unit, onInvite: () -> Unit, onProfile: () -> Uni
             account?.let { ProfileRow(it.displayName, it.username, it.userId, onProfile) }
             Section(stringResource(R.string.settings_family))
             OtterSettingsRow(stringResource(R.string.settings_invite), icon = Icons.Outlined.PersonAdd, onClick = onInvite)
-            Section(stringResource(R.string.settings_media))
-            OtterSettingsRow(stringResource(R.string.settings_photos), icon = Icons.Outlined.PhotoLibrary, onClick = onPhotos)
             Section(stringResource(R.string.settings_notifications_section))
             OtterSettingsRow(stringResource(R.string.settings_notifications), icon = Icons.Outlined.Notifications, onClick = onNotifications)
+            Section(stringResource(R.string.settings_appearance))
+            OtterSettingsRow(stringResource(R.string.settings_appearance), subtitle = stringResource(appearanceLabel(themeMode)),
+                icon = Icons.Outlined.Palette, onClick = onAppearance)
+            Section(stringResource(R.string.settings_photos_section))
+            OtterSettingsRow(stringResource(R.string.settings_photos), icon = Icons.Outlined.PhotoLibrary, onClick = onPhotos)
             Section(stringResource(R.string.settings_security))
             SecurityRows(appLockOn, onAppLock, screenSecure, vm::setScreenSecure)
             OtterSettingsRow(stringResource(R.string.settings_backup), icon = Icons.Outlined.CloudDone, onClick = onBackup)
+            OtterSettingsRow(stringResource(R.string.settings_phrase), icon = Icons.Outlined.Key, onClick = onPhrase)
             Section(stringResource(R.string.settings_connection))
             val online = connection as? ConnectionState.Online
             // label and transport only (never the address); the row opens «Состояние сети» (D123)

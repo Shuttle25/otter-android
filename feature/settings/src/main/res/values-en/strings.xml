@@ -37,7 +37,6 @@
     <string name="photos_cache_clear">Clear</string>
     <string name="photos_cache_note">Photos in chats are kept</string>
     <string name="photos_stored">Photos on this phone</string>
-    <string name="settings_media">Media</string>
     <string name="settings_security">Security</string>
     <string name="settings_backup">Backup</string>
     <string name="backup_title">Backup</string>
@@ -135,4 +134,19 @@
     <string name="network_battery_ok">No restrictions</string>
     <string name="network_autostart">Autostart and background</string>
     <string name="network_autostart_hint">For phones that close apps in the background on their own</string>
+    <!-- D124 -->
+    <string name="settings_appearance">Appearance</string>
+    <string name="appearance_system">Same as the device</string>
+    <string name="appearance_light">Light</string>
+    <string name="appearance_dark">Dark</string>
+    <string name="settings_photos_section">Photos &amp; storage</string>
+    <string name="settings_phrase">Recovery phrase</string>
+    <string name="phrase_warning">Never show these words to anyone. Whoever knows them owns the account.</string>
+    <string name="phrase_need_lock">First turn on the phone\'s screen lock or the Otter lock</string>
+    <string name="phrase_auth_title">Confirm it\'s you</string>
+    <string name="phrase_show">Show the words</string>
+    <string name="phrase_enter_pin">Enter the Otter PIN</string>
+    <string name="app_lock_no_screen_lock">The phone has no screen lock. If you forget the PIN, Otter will have to be reinstalled and restored from the backup.</string>
+    <string name="app_lock_enable_anyway">Turn on anyway</string>
+    <string name="app_lock_cancel">Cancel</string>
 </resources>

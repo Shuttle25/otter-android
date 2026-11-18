@@ -27,6 +27,8 @@ import app.ottermsg.feature.onboarding.OnboardingRoute
 import app.ottermsg.feature.conversation.PhotoViewerRoute
 import app.ottermsg.feature.conversation.PhotoViewerViewModel
 import app.ottermsg.feature.settings.AppLockRoute
+import app.ottermsg.feature.settings.AppearanceRoute
+import app.ottermsg.feature.settings.RecoveryPhraseRoute
 import app.ottermsg.feature.settings.EditNameRoute
 import app.ottermsg.feature.settings.BackupRoute
 import app.ottermsg.feature.settings.NetLogRoute
@@ -54,6 +56,8 @@ object Routes {
     const val NETLOG = "settings/netlog"
     const val APP_LOCK = "settings/lock"
     const val NETWORK = "settings/network"
+    const val APPEARANCE = "settings/appearance"
+    const val PHRASE = "settings/phrase"
     const val PHOTO = "photo/{${PhotoViewerViewModel.ARG_LOCAL_ID}}"
     fun photo(localId: Long) = "photo/$localId"
     const val NEW_GROUP = "newGroup"
@@ -124,6 +128,7 @@ fun AppNavHost(hasAccount: Boolean, account: StateFlow<LocalAccount?>,
                 onProfile = { nav.navigate(Routes.PROFILE) }, onPhotos = { nav.navigate(Routes.PHOTOS) },
                 onBackup = { nav.navigate(Routes.BACKUP) }, onNotifications = { nav.navigate(Routes.NOTIFICATIONS) },
                 onNetwork = { nav.navigate(Routes.NETWORK) }, onAppLock = { nav.navigate(Routes.APP_LOCK) },
+                onAppearance = { nav.navigate(Routes.APPEARANCE) }, onPhrase = { nav.navigate(Routes.PHRASE) },
                 versionText = AppVersion.current)
         }
         composable(Routes.PROFILE) {
@@ -134,6 +139,8 @@ fun AppNavHost(hasAccount: Boolean, account: StateFlow<LocalAccount?>,
         composable(Routes.BACKUP) { BackupRoute(onBack = { nav.popBackStack() }) }
         composable(Routes.NOTIFICATIONS) { NotificationsRoute(onBack = { nav.popBackStack() }) }
         composable(Routes.APP_LOCK) { AppLockRoute(onBack = { nav.popBackStack() }) }
+        composable(Routes.APPEARANCE) { AppearanceRoute(onBack = { nav.popBackStack() }) }
+        composable(Routes.PHRASE) { RecoveryPhraseRoute(onBack = { nav.popBackStack() }) }
         composable(Routes.NETWORK) { NetworkStatusRoute(onBack = { nav.popBackStack() }, onNetLog = { nav.navigate(Routes.NETLOG) }) }
         composable(Routes.NETLOG) { NetLogRoute(onBack = { nav.popBackStack() }, versionText = AppVersion.current) }
         composable(Routes.PHOTO, arguments = listOf(navArgument(PhotoViewerViewModel.ARG_LOCAL_ID) { type = NavType.LongType })) {

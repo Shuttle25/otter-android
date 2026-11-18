@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -47,7 +48,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.currentStateAsState
 import androidx.lifecycle.viewModelScope
 import app.ottermsg.core.data.security.AppLock
 import app.ottermsg.core.data.security.PinResult
@@ -66,10 +69,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
-/** Settings → Безопасность → «Блокировка приложения» (D121). [biometricAvailable] is filled in by the screen. */
+/**
+ * Settings → Безопасность → «Блокировка приложения» (D121). [biometricAvailable] and [deviceSecure] (the phone has a
+ * screen lock, so «Забыли PIN?» works) are filled in by the screen.
+ */
 data class AppLockUi(
     val enabled: Boolean = false, val biometric: Boolean = false, val timeoutMs: Long = AppLock.DEFAULT_TIMEOUT_MS,
-    val biometricAvailable: Boolean = false,
+    val biometricAvailable: Boolean = false, val deviceSecure: Boolean = true,
 )
 
 @HiltViewModel
@@ -106,11 +112,14 @@ fun AppLockRoute(onBack: () -> Unit, vm: AppLockViewModel = hiltViewModel()) {
     val context = LocalContext.current
     val ui by vm.ui.collectAsStateWithLifecycle()
     val bioAvailable = remember { DeviceAuth.biometricAvailable(context) }
+    // Re-read on resume: the member may come back from Android's settings with a screen lock set.
+    val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    val deviceSecure = remember(lifecycle) { DeviceAuth.deviceSecure(context) }
     val changed = stringResource(R.string.app_lock_changed)
     Scaffold(containerColor = MaterialTheme.colorScheme.background,
         topBar = { OtterTopBar(stringResource(R.string.settings_app_lock), onBack = onBack) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())) {
-            AppLockSetupContent(ui.copy(biometricAvailable = bioAvailable), onEnable = { pin, _ -> vm.enable(pin) },
+            AppLockSetupContent(ui.copy(biometricAvailable = bioAvailable, deviceSecure = deviceSecure), onEnable = { pin, _ -> vm.enable(pin) },
                 onBiometric = vm::setBiometric, onTimeout = vm::setTimeout, check = vm::check,
                 onChangePin = { old, new -> vm.change(old, new) { Toast.makeText(context, changed, Toast.LENGTH_SHORT).show() } },
                 onDisable = vm::disable)
@@ -120,7 +129,10 @@ fun AppLockRoute(onBack: () -> Unit, vm: AppLockViewModel = hiltViewModel()) {
 
 private enum class Step { MAIN, NEW_PIN, CHECK_FOR_DISABLE, CHECK_FOR_CHANGE, CHANGED_PIN }
 
-/** Off: explanation + «Включить» → PIN twice. On: fingerprint, «Блокировать», «Сменить PIN», «Выключить» (asks the PIN). */
+/**
+ * Off: explanation + «Включить» → PIN twice; without a phone screen lock a warning comes first (a forgotten PIN then
+ * means reinstalling and restoring from the backup), but the lock is not required. On: fingerprint, «Блокировать», «Сменить PIN», «Выключить» (asks the PIN).
+ */
 @Composable
 fun AppLockSetupContent(
     state: AppLockUi, onEnable: (String, Boolean) -> Unit, onBiometric: (Boolean) -> Unit, onTimeout: (Long) -> Unit,
@@ -128,6 +140,12 @@ fun AppLockSetupContent(
 ) {
     var step by remember { mutableStateOf(Step.MAIN) }
     var old by remember { mutableStateOf("") }
+    var warnNoScreenLock by remember { mutableStateOf(false) }
+    if (warnNoScreenLock) AlertDialog(onDismissRequest = { warnNoScreenLock = false },
+        text = { Text(stringResource(R.string.app_lock_no_screen_lock)) },
+        confirmButton = { TextButton(onClick = { warnNoScreenLock = false; step = Step.NEW_PIN }) {
+            Text(stringResource(R.string.app_lock_enable_anyway)) } },
+        dismissButton = { TextButton(onClick = { warnNoScreenLock = false }) { Text(stringResource(R.string.app_lock_cancel)) } })
     BackHandler(enabled = step != Step.MAIN) { step = Step.MAIN; old = "" }
     val padMod = Modifier.fillMaxWidth().padding(vertical = Dimens.s24)
     when (step) {
@@ -146,7 +164,7 @@ fun AppLockSetupContent(
         Step.MAIN -> if (!state.enabled) Column(Modifier.fillMaxWidth().padding(Dimens.screenGutter)) {
             Text(stringResource(R.string.app_lock_explain), style = MaterialTheme.typography.bodyLarge)
             Spacer(Modifier.height(Dimens.s24))
-            Button(onClick = { step = Step.NEW_PIN }, modifier = Modifier.fillMaxWidth().heightIn(min = Dimens.minTouch)) {
+            Button(onClick = { if (state.deviceSecure) step = Step.NEW_PIN else warnNoScreenLock = true }, modifier = Modifier.fillMaxWidth().heightIn(min = Dimens.minTouch)) {
                 Text(stringResource(R.string.app_lock_enable))
             }
         } else Column(Modifier.fillMaxWidth()) {

@@ -4,7 +4,6 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -71,10 +70,12 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        applySystemBars(vm.themeMode.value)
         handle(intent)
         setContent {
             val theme by vm.themeMode.collectAsStateWithLifecycle()
+            // Bar icons follow a forced light/dark theme too (D124), and change with it at once.
+            LaunchedEffect(theme) { applySystemBars(theme) }
             OtterTheme(ThemeMode.entries.getOrElse(theme) { ThemeMode.SYSTEM }) {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     val hasAccount by vm.hasAccount.collectAsStateWithLifecycle()
