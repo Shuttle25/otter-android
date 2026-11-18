@@ -43,14 +43,11 @@ import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextLinkStyles
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.min
-import androidx.compose.ui.unit.sp
 import app.ottermsg.core.data.news.NewsText
 import app.ottermsg.core.ui.theme.Dimens
 
@@ -67,12 +64,11 @@ internal fun findLinks(text: String): List<IntRange> = urlRegex.findAll(text).ma
 internal fun newsText(m: MessageUi, language: String): String =
     m.news?.let { NewsText.pick(it.textRu, it.textEn, language) } ?: m.text
 
-private val AuthorStyle = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold)
-
 /**
  * A message from «Выдра» / "Otter" in the news chat (D64): an incoming bubble whose http/https links open only after
  * «Открыть ссылку?» shows the full address (D69). [slot] holds the «Обновить» row of an announcement with an update.
- * TalkBack: the bubble reads sender, text and time; each link is its own button «Ссылка: <url>».
+ * No visible sender line (the chat is «Новости Otter»; owner 2026-11-15). TalkBack: the bubble still reads sender,
+ * text and time; each link is its own button «Ссылка: <url>».
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -117,8 +113,6 @@ fun NewsBubble(
                         .semantics { customActions = actions },
                 ) {
                     Column(Modifier.padding(horizontal = Dimens.s12, vertical = Dimens.s8)) {
-                        if (firstInGroup) Text(sender, style = AuthorStyle, color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.clearAndSetSemantics {})
                         Box {
                             Text(annotated, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface,
                                 onTextLayout = { layout = it },
