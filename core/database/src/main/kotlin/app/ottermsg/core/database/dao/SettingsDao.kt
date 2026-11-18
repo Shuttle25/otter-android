@@ -9,5 +9,6 @@ import app.ottermsg.core.database.entity.SettingEntity
 @Dao interface SettingsDao {
     @Query("SELECT value FROM settings WHERE `key` = :key") suspend fun get(key: String): ByteArray?
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun put(s: SettingEntity)
+    @Query("DELETE FROM settings WHERE `key` = :key") suspend fun delete(key: String)
     @Query("SELECT value FROM settings WHERE `key` = :key") fun observe(key: String): kotlinx.coroutines.flow.Flow<ByteArray?>
 }

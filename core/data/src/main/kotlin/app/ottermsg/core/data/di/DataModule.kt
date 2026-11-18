@@ -1,6 +1,10 @@
 package app.ottermsg.core.data.di
 
 import app.ottermsg.core.data.Clock
+import app.ottermsg.core.data.security.AppLockStore
+import app.ottermsg.core.data.security.Argon2PinHasher
+import app.ottermsg.core.data.security.PinHasher
+import app.ottermsg.core.data.security.SettingsAppLockStore
 import app.ottermsg.core.data.account.SeedVault
 import app.ottermsg.core.data.invite.OnlineApi
 import app.ottermsg.core.data.group.GroupRepository
@@ -47,6 +51,8 @@ object DataModule {
     @Provides @Singleton fun connector(selector: NodeSelector): NodeConnector = TransportConnector(selector)
     @Provides @Singleton fun seedVault(): SeedVault = SeedVault(KeystoreKeyWrapper("otter_seed_kek"))
     @Provides @Singleton @ApplicationScope fun appScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    @Provides fun appLockStore(s: SettingsAppLockStore): AppLockStore = s
+    @Provides fun pinHasher(): PinHasher = Argon2PinHasher
     @Provides fun onlineApi(engine: SyncEngine): OnlineApi = engine
     @Provides fun registrar(r: Registration): Registrar = r
     @Provides fun restorer(r: app.ottermsg.core.data.backup.RestoreManager): app.ottermsg.core.data.backup.Restorer = r
