@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="settings_title">Settings</string>
-    <string name="settings_profile">Profile</string>
-    <string name="settings_family">Family</string>
     <string name="settings_invite">Invite to the family</string>
     <string name="settings_connection">Connection</string>
     <string name="settings_online">Connected</string>
@@ -37,7 +35,6 @@
     <string name="photos_cache_clear">Clear</string>
     <string name="photos_cache_note">Photos in chats are kept</string>
     <string name="photos_stored">Photos on this phone</string>
-    <string name="settings_security">Security</string>
     <string name="settings_backup">Backup</string>
     <string name="backup_title">Backup</string>
     <string name="backup_off_text">An encrypted copy of your chats is kept on your servers. With your username and this password you get your chats back on a new phone.</string>
@@ -139,7 +136,6 @@
     <string name="appearance_system">Same as the device</string>
     <string name="appearance_light">Light</string>
     <string name="appearance_dark">Dark</string>
-    <string name="settings_photos_section">Photos &amp; storage</string>
     <string name="settings_phrase">Recovery phrase</string>
     <string name="phrase_warning">Never show these words to anyone. Whoever knows them owns the account.</string>
     <string name="phrase_need_lock">First turn on the phone\'s screen lock or the Otter lock</string>
