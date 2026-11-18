@@ -2,6 +2,8 @@ package app.ottermsg
 
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.Configuration
 import android.media.AudioManager
@@ -10,9 +12,11 @@ import app.ottermsg.core.data.calls.CallState
 import app.ottermsg.core.data.account.AccountRepository
 import app.ottermsg.core.data.di.ApplicationScope
 import app.ottermsg.core.data.push.PushMonitor
+import app.ottermsg.core.data.security.AppLock
 import app.ottermsg.core.data.settings.Settings
 import app.ottermsg.core.data.sync.ForegroundSync
 import app.ottermsg.notify.Channels
+import app.ottermsg.notify.MessageNotifier
 import app.ottermsg.push.PushAvailability
 import app.ottermsg.push.WakeScheduler
 import com.google.firebase.messaging.FirebaseMessaging
@@ -35,6 +39,8 @@ class OtterApp : Application(), Configuration.Provider {
     @Inject lateinit var monitor: PushMonitor
     @Inject lateinit var wake: WakeScheduler
     @Inject lateinit var calls: dagger.Lazy<CallManager>
+    @Inject lateinit var appLock: AppLock
+    @Inject lateinit var notifier: dagger.Lazy<MessageNotifier>
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
@@ -42,6 +48,17 @@ class OtterApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         Channels.create(this)
+        // App lock (D121): read its state at once (MainActivity shows nothing until then), lock on leaving the screen.
+        appScope.launch {
+            appLock.init()
+            var was = appLock.enabled.value
+            // Turned on just now: notifications already shown may carry text and «Ответить».
+            appLock.enabled.collect { on -> if (on && !was) notifier.get().hideAll(); was = on }
+        }
+        ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onStop(owner: LifecycleOwner) = appLock.onBackground()
+            override fun onStart(owner: LifecycleOwner) = appLock.onForeground() // synchronous: no chat frame before the lock
+        })
         // Sync while visible, once an account exists (loaded at start, or right after registration).
         appScope.launch(Dispatchers.Main) {
             accounts.account.filterNotNull().first()

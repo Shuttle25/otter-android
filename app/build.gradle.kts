@@ -34,7 +34,7 @@ android {
     defaultConfig {
         applicationId = "app.ottermsg"
         minSdk = 26; targetSdk = 36
-        versionCode = 13; versionName = "0.10.0"
+        versionCode = 14; versionName = "0.10.1"
         buildConfigField("String", "GIT_HASH", "\"${gitHash.get()}\"")
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") } // phones (D80); x86_64 only for emulator builds
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -114,6 +114,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose); implementation(libs.hilt.navigation.compose)
     implementation(libs.androidx.core.telecom)
     implementation(libs.androidx.lifecycle.process)
+    implementation(libs.androidx.biometric); implementation(libs.androidx.fragment) // app lock (D121): MainActivity is a FragmentActivity
     implementation(libs.room.runtime) // MessageNotifier reads OtterDatabase (a RoomDatabase)
     implementation(libs.hilt.android); ksp(libs.hilt.compiler)
     implementation(platform(libs.firebase.bom)); implementation(libs.firebase.messaging); implementation(libs.play.services.base)

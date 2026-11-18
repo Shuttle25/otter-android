@@ -16,6 +16,8 @@ class Candidate(
      * (TLS runs end to end inside the tunnel); `via.url` is the relay's tunnel URL and `via.pins` its own pins.
      */
     val via: Candidate? = null,
+    /** The endpoint sits behind a CDN (manifest `via_cdn`); shown in «Состояние сети» only. */
+    val viaCdn: Boolean = false,
 ) {
     /** Identifies the pin set (one OkHttp client per pin set). Empty when unpinned. */
     val pinsKey: String = if (pins.isEmpty()) "" else

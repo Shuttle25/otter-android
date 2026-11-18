@@ -81,6 +81,10 @@ private fun isIpv6(t: String): Boolean {
     return if (compressed) groups.size < needed else groups.size == needed && hex.count { it == ':' } == (if (v4) 6 else 7)
 }
 
+/** Every IPv4/IPv6 address in [text] replaced by `<ip>` (shared netlog, «Состояние сети»). */
+internal fun maskIps(text: String): String =
+    IPV4.replace(IPV6.replace(text) { m -> if (isIpv6(m.value)) "<ip>" else m.value }, "<ip>")
+
 /** Host and port of a log endpoint `scheme://host[:port]` (IPv6 in brackets); port is empty when absent. */
 private fun hostAndPort(hostPort: String): Pair<String, String> = when {
     hostPort.startsWith("[") -> hostPort.substringAfter('[').substringBefore(']') to
@@ -98,9 +102,7 @@ internal fun shareLine(e: NetLogEntity, zone: ZoneId, mobileLabel: String): Stri
     val scheme = e.endpoint.substringBefore("://")
     val (host, port) = hostAndPort(e.endpoint.substringAfter("://", ""))
     val endpoint = if (port.isEmpty()) scheme else "$scheme:$port"
-    var detail = if (host.isNotEmpty()) e.detail.replace(host, e.nodeLabel, ignoreCase = true) else e.detail
-    detail = IPV6.replace(detail) { m -> if (isIpv6(m.value)) "<ip>" else m.value }
-    detail = IPV4.replace(detail, "<ip>")
+    val detail = maskIps(if (host.isNotEmpty()) e.detail.replace(host, e.nodeLabel, ignoreCase = true) else e.detail)
     return formatLine(e.copy(endpoint = endpoint, operator = "", detail = detail), zone, mobileLabel)
 }
 

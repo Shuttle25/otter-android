@@ -42,4 +42,19 @@ class SecureScreensTest {
         second.value = false
         compose.waitForIdle(); assertEquals(0, secure())
     }
+
+    /** D121: the app-wide «Запрет скриншотов» is one more holder; leaving a secret screen keeps it, turning it off keeps the screen's. */
+    @Test fun appWideSettingAndSecretScreenOverlap() {
+        val appWide = mutableStateOf(true); val phrase = mutableStateOf(true)
+        compose.setContent { SecureWindow(enabled = appWide.value); if (phrase.value) SecureWindow() }
+        compose.waitForIdle(); assertNotEquals(0, secure())
+        phrase.value = false
+        compose.waitForIdle(); assertNotEquals(0, secure()) // leaving the phrase screen does not clear the setting
+        phrase.value = true; appWide.value = false
+        compose.waitForIdle(); assertNotEquals(0, secure()) // switching the setting off keeps the phrase screen secure
+        phrase.value = false
+        compose.waitForIdle(); assertEquals(0, secure())
+        appWide.value = true
+        compose.waitForIdle(); assertNotEquals(0, secure())
+    }
 }

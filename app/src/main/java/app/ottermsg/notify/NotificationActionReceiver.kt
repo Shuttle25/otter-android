@@ -7,6 +7,7 @@ import androidx.core.app.RemoteInput
 import app.ottermsg.core.data.account.AccountRepository
 import app.ottermsg.core.data.di.ApplicationScope
 import app.ottermsg.core.data.messaging.MessageRepository
+import app.ottermsg.core.data.security.AppLock
 import app.ottermsg.push.WakeScheduler
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -19,6 +20,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
     @Inject lateinit var accounts: AccountRepository
     @Inject lateinit var messages: MessageRepository
     @Inject lateinit var wake: WakeScheduler
+    @Inject lateinit var appLock: AppLock
     @Inject @ApplicationScope lateinit var scope: CoroutineScope
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -28,6 +30,9 @@ class NotificationActionReceiver : BroadcastReceiver() {
         scope.launch {
             try {
                 accounts.load() ?: return@launch // the process may have started just for this action
+                appLock.init()
+                // D121: no «Ответить» while the app lock is on, also from a notification posted before it was turned on.
+                if (intent.action == ACTION_REPLY && appLock.enabled.value) return@launch
                 if (intent.action == ACTION_REPLY) {
                     val text = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(KEY_TEXT)?.toString().orEmpty()
                     if (text.isNotBlank()) messages.sendText(cid, text)

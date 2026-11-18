@@ -208,7 +208,38 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
     suspend fun fullScreenIntentAsked(): Boolean = (int(FSI_ASKED) ?: 0) != 0
     suspend fun setFullScreenIntentAsked() = putInt(FSI_ASKED, 1)
 
+    // ---- app lock (D121), screenshots, appearance (D124) ----
+    /** salt ‖ Argon2id(PIN) (PinHash); null = app lock off. */
+    suspend fun appLockHash(): ByteArray? = dao.get(APP_LOCK_HASH)
+    suspend fun setAppLockHash(v: ByteArray?) = if (v == null) dao.delete(APP_LOCK_HASH) else dao.put(SettingEntity(APP_LOCK_HASH, v))
+    fun observeAppLockOn(): Flow<Boolean> = dao.observe(APP_LOCK_HASH).map { it != null }
+    suspend fun appLockBiometric(): Boolean = (int(APP_LOCK_BIO) ?: 0) != 0
+    suspend fun setAppLockBiometric(v: Boolean) = putInt(APP_LOCK_BIO, if (v) 1 else 0)
+    fun observeAppLockBiometric(): Flow<Boolean> = observeInt(APP_LOCK_BIO, 0).map { it != 0 }
+    suspend fun appLockTimeoutMs(): Long = long(APP_LOCK_TIMEOUT) ?: AppLockDefaults.TIMEOUT_MS
+    suspend fun setAppLockTimeoutMs(v: Long) = putLong(APP_LOCK_TIMEOUT, v)
+    fun observeAppLockTimeoutMs(): Flow<Long> = observeLong(APP_LOCK_TIMEOUT, AppLockDefaults.TIMEOUT_MS)
+    /** Wrong PINs in a row (persisted, D121 backoff). */
+    suspend fun appLockFailures(): Int = int(APP_LOCK_FAILS) ?: 0
+    suspend fun setAppLockFailures(v: Int) = putInt(APP_LOCK_FAILS, v)
+    /** No PIN is checked before this time (wall clock ms); 0 = no wait. */
+    suspend fun appLockUntilMs(): Long = long(APP_LOCK_UNTIL) ?: 0
+    suspend fun setAppLockUntilMs(v: Long) = putLong(APP_LOCK_UNTIL, v)
+    /** «Запрет скриншотов»: FLAG_SECURE on the whole app (default off). */
+    fun observeScreenSecure(): Flow<Boolean> = observeInt(SCREEN_SECURE, 0).map { it != 0 }
+    suspend fun setScreenSecure(v: Boolean) = putInt(SCREEN_SECURE, if (v) 1 else 0)
+    /** 0 = as the system, 1 = light, 2 = dark (ThemeMode.ordinal). */
+    fun observeThemeMode(): Flow<Int> = observeInt(THEME_MODE, 0)
+    suspend fun setThemeMode(v: Int) = putInt(THEME_MODE, v)
+
     companion object {
+        const val APP_LOCK_HASH = "app_lock_hash"
+        const val APP_LOCK_BIO = "app_lock_biometric"
+        const val APP_LOCK_TIMEOUT = "app_lock_timeout_ms"
+        const val APP_LOCK_FAILS = "app_lock_failures"
+        const val APP_LOCK_UNTIL = "app_lock_until_ms"
+        const val SCREEN_SECURE = "screen_secure"
+        const val THEME_MODE = "theme_mode"
         const val PUSH_TOKEN = "push_token"
         const val PUSH_TOKEN_SENT = "push_token_sent"
         const val PUSH_AVAILABLE = "push_available"
@@ -254,3 +285,6 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
         const val CONTACT_INVITERS = "contact_inviters"
     }
 }
+
+/** Settings must not depend on `security`; AppLock.DEFAULT_TIMEOUT_MS is the same value (D121: 1 min). */
+private object AppLockDefaults { const val TIMEOUT_MS = 60_000L }

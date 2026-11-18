@@ -18,7 +18,7 @@ object Endpoints {
                 Candidate(
                     nodeId = node.nodeId.toByteArray(), label = node.label, url = "$scheme://$host:${e.port}${e.path}", host = e.host,
                     pins = if (e.kind == Endpoint.Kind.WSS) e.tlsSpkiPinsList.map { it.toByteArray() } else emptyList(),
-                    priority = priorityOffset + e.priority * 1000 + order++,
+                    priority = priorityOffset + e.priority * 1000 + order++, viaCdn = e.viaCdn,
                 )
             }
         }

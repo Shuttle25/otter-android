@@ -26,9 +26,13 @@ import app.ottermsg.feature.groups.NewGroupRoute
 import app.ottermsg.feature.onboarding.OnboardingRoute
 import app.ottermsg.feature.conversation.PhotoViewerRoute
 import app.ottermsg.feature.conversation.PhotoViewerViewModel
+import app.ottermsg.feature.settings.AppLockRoute
+import app.ottermsg.feature.settings.AppearanceRoute
+import app.ottermsg.feature.settings.RecoveryPhraseRoute
 import app.ottermsg.feature.settings.EditNameRoute
 import app.ottermsg.feature.settings.BackupRoute
 import app.ottermsg.feature.settings.NetLogRoute
+import app.ottermsg.feature.settings.NetworkStatusRoute
 import app.ottermsg.feature.settings.NotificationsRoute
 import app.ottermsg.feature.settings.PhotoStorageRoute
 import app.ottermsg.feature.settings.ProfileRoute
@@ -50,6 +54,10 @@ object Routes {
     const val BACKUP = "settings/backup"
     const val NOTIFICATIONS = "settings/notifications"
     const val NETLOG = "settings/netlog"
+    const val APP_LOCK = "settings/lock"
+    const val NETWORK = "settings/network"
+    const val APPEARANCE = "settings/appearance"
+    const val PHRASE = "settings/phrase"
     const val PHOTO = "photo/{${PhotoViewerViewModel.ARG_LOCAL_ID}}"
     fun photo(localId: Long) = "photo/$localId"
     const val NEW_GROUP = "newGroup"
@@ -119,7 +127,9 @@ fun AppNavHost(hasAccount: Boolean, account: StateFlow<LocalAccount?>,
             SettingsRoute(onBack = { nav.popBackStack() }, onInvite = { nav.navigate(Routes.INVITE) },
                 onProfile = { nav.navigate(Routes.PROFILE) }, onPhotos = { nav.navigate(Routes.PHOTOS) },
                 onBackup = { nav.navigate(Routes.BACKUP) }, onNotifications = { nav.navigate(Routes.NOTIFICATIONS) },
-                onNetLog = { nav.navigate(Routes.NETLOG) }, versionText = AppVersion.current)
+                onNetwork = { nav.navigate(Routes.NETWORK) }, onAppLock = { nav.navigate(Routes.APP_LOCK) },
+                onAppearance = { nav.navigate(Routes.APPEARANCE) }, onPhrase = { nav.navigate(Routes.PHRASE) },
+                versionText = AppVersion.current)
         }
         composable(Routes.PROFILE) {
             ProfileRoute(onBack = { nav.popBackStack() }, onEditName = { nav.navigate(Routes.EDIT_NAME) })
@@ -128,6 +138,10 @@ fun AppNavHost(hasAccount: Boolean, account: StateFlow<LocalAccount?>,
         composable(Routes.PHOTOS) { PhotoStorageRoute(onBack = { nav.popBackStack() }) }
         composable(Routes.BACKUP) { BackupRoute(onBack = { nav.popBackStack() }) }
         composable(Routes.NOTIFICATIONS) { NotificationsRoute(onBack = { nav.popBackStack() }) }
+        composable(Routes.APP_LOCK) { AppLockRoute(onBack = { nav.popBackStack() }) }
+        composable(Routes.APPEARANCE) { AppearanceRoute(onBack = { nav.popBackStack() }) }
+        composable(Routes.PHRASE) { RecoveryPhraseRoute(onBack = { nav.popBackStack() }) }
+        composable(Routes.NETWORK) { NetworkStatusRoute(onBack = { nav.popBackStack() }, onNetLog = { nav.navigate(Routes.NETLOG) }) }
         composable(Routes.NETLOG) { NetLogRoute(onBack = { nav.popBackStack() }, versionText = AppVersion.current) }
         composable(Routes.PHOTO, arguments = listOf(navArgument(PhotoViewerViewModel.ARG_LOCAL_ID) { type = NavType.LongType })) {
             PhotoViewerRoute(onBack = { nav.popBackStack() })
