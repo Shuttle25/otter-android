@@ -224,8 +224,10 @@ private fun NewPinFlow(onDone: (String) -> Unit) {
  */
 @Composable
 fun PinCheck(title: String, check: suspend (CharArray) -> PinResult, onOk: (String) -> Unit,
-             now: () -> Long = System::currentTimeMillis) {
+             now: () -> Long = System::currentTimeMillis, pending: (suspend () -> PinResult.Wait?)? = null) {
     var result by remember { mutableStateOf<PinResult?>(null) }
+    // A wait that started before this screen (e.g. before a force-stop): show its countdown right away.
+    if (pending != null) LaunchedEffect(Unit) { pending()?.let { if (result == null) result = it } }
     var busy by remember { mutableStateOf(false) }
     var tick by remember { mutableLongStateOf(now()) }
     val scope = rememberCoroutineScope()
@@ -265,12 +267,13 @@ fun waitText(ms: Long): String {
  * «Забыли PIN?». The activity wiring (BiometricPrompt, device credential) is the caller's.
  */
 @Composable
-fun AppUnlockContent(check: suspend (CharArray) -> PinResult, biometric: Boolean, onBiometric: () -> Unit, onForgot: () -> Unit) {
+fun AppUnlockContent(check: suspend (CharArray) -> PinResult, biometric: Boolean, onBiometric: () -> Unit, onForgot: () -> Unit,
+                     pending: (suspend () -> PinResult.Wait?)? = null) {
     Column(Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(vertical = Dimens.s24),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         OtterIllustration(app.ottermsg.core.ui.R.drawable.otter_welcome, maxSize = 96.dp)
         Spacer(Modifier.height(Dimens.s16))
-        PinCheck(stringResource(R.string.app_lock_title), check, onOk = {})
+        PinCheck(stringResource(R.string.app_lock_title), check, onOk = {}, pending = pending)
         Spacer(Modifier.height(Dimens.s16))
         if (biometric) OutlinedButton(onClick = onBiometric, modifier = Modifier.heightIn(min = Dimens.minTouch)) {
             Icon(Icons.Outlined.Fingerprint, contentDescription = null)

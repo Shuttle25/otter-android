@@ -46,6 +46,7 @@ fun LockScreen(lock: AppLock, activity: FragmentActivity) {
     }
     AppUnlockContent(
         check = { pin -> withContext(Dispatchers.Default) { lock.tryPin(pin) } },
+        pending = { lock.currentWait() },
         biometric = bio, onBiometric = promptBiometric,
         onForgot = {
             DeviceAuth.deviceCredential(activity, confirm,

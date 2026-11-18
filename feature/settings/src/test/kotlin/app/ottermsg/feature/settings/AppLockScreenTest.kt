@@ -139,6 +139,15 @@ class AppLockScreenTest {
         assertEquals(listOf("1234" to "567890"), changes)
     }
 
+    @Test fun lockScreenShowsARunningWaitBeforeAnyTry() {
+        var checks = 0
+        compose.setContent { OtterTheme { AppUnlockContent(check = { checks++; PinResult.Ok }, biometric = false, onBiometric = {},
+            onForgot = {}, pending = { PinResult.Wait(System.currentTimeMillis() + 20_000) }) } }
+        compose.onNodeWithText("Повторите через", substring = true).assertExists()
+        compose.onNodeWithText("OK").assertIsNotEnabled()
+        assertEquals(0, checks)
+    }
+
     @Test fun waitMessage() {
         assertEquals("Повторите через 1:05", pinMessageText(PinResult.Wait(65_000), now = 0, wrong = { "x$it" }, wait = { "Повторите через $it" }))
         assertEquals("0:30", waitText(29_001))

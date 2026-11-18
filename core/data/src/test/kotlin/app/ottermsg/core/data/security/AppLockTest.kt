@@ -170,4 +170,30 @@ class AppLockTest {
         assertEquals(PinResult.Ok, l.tryPin("5678".toCharArray()))
         assertEquals(PinResult.Wrong(4), l.tryPin("1234".toCharArray()))
     }
+
+    @Test fun currentWaitSurvivesARestartWithoutATry() = runTest {
+        val l = lock(); l.init()
+        assertEquals("lock off: no wait", null, l.currentWait())
+        l.enable("1234".toCharArray(), biometric = false)
+        assertEquals("no wrong PINs: no wait", null, l.currentWait())
+        repeat(AppLock.FREE_TRIES - 1) { l.tryPin("0000".toCharArray()) }
+        assertEquals(PinResult.Wait(now + 30_000), l.tryPin("0000".toCharArray()))
+        val started = now
+        now += 10_000
+        // Force-stop: a fresh AppLock reports the running wait before anyone types (the screen shows 0:20 at once).
+        val after = lock(); after.init()
+        assertEquals(PinResult.Wait(started + 30_000), after.currentWait())
+        assertEquals("asking does not count as a try", AppLock.FREE_TRIES, store.fails)
+        now = started + 30_000
+        assertEquals("the wait is over", null, after.currentWait())
+        assertEquals(PinResult.Ok, after.tryPin("1234".toCharArray()))
+    }
+
+    @Test fun currentWaitCapsAClockSetBack() = runTest {
+        val l = lock(); l.init()
+        l.enable("1234".toCharArray(), biometric = false)
+        store.until = now + 10 * AppLock.MAX_WAIT_MS
+        assertEquals(PinResult.Wait(now + AppLock.MAX_WAIT_MS), l.currentWait())
+        assertEquals(now + AppLock.MAX_WAIT_MS, store.until)
+    }
 }

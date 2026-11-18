@@ -115,6 +115,21 @@ class AppLock @Inject constructor(private val store: AppLockStore, private val c
         } else if (waitUntil > 0) PinResult.Wait(waitUntil) else PinResult.Wrong(FREE_TRIES - n)
     }
 
+    /**
+     * The wait still running, e.g. after the app was force-stopped during it, so the lock screen shows its countdown at
+     * once instead of only after the next try. Null when there is none (or the lock is off).
+     */
+    suspend fun currentWait(): PinResult.Wait? = mutex.withLock {
+        if (store.pinHash() == null) return@withLock null
+        val now = clock.now()
+        val until = store.lockedUntilMs()
+        when {
+            until <= now -> null
+            until - now > MAX_WAIT_MS -> PinResult.Wait((now + MAX_WAIT_MS).also { store.setLockedUntilMs(it) })
+            else -> PinResult.Wait(until)
+        }
+    }
+
     /** Only after a successful BiometricPrompt (BIOMETRIC_STRONG). Does not reset the PIN backoff. */
     fun unlockedByDevice() { _locked.value = false }
 
