@@ -1,13 +1,16 @@
 package app.ottermsg.feature.conversation
 
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import app.ottermsg.core.ui.components.DeliveryStatus
+import app.ottermsg.core.ui.components.READ_BADGE_TAG
 import app.ottermsg.core.ui.theme.OtterTheme
 import org.junit.Rule
 import org.junit.Test
@@ -50,5 +53,18 @@ class MessageBubbleTest {
     @Test fun sendEnabledWithText() {
         compose.setContent { OtterTheme { MessageComposer(text = "hi", sending = false, onText = {}, onSend = {}) } }
         compose.onNodeWithContentDescription("Отправить сообщение").assertIsEnabled()
+    }
+
+    @Test fun readIsABadgeDeliveredIsNot() {
+        val read = MessageUi(1, outgoing = true, text = "Привет", sentMs = 0, status = DeliveryStatus.READ, system = false, authorName = "")
+        compose.setContent { OtterTheme { MessageBubble(read, firstInGroup = true) } }
+        compose.onNodeWithTag(READ_BADGE_TAG, useUnmergedTree = true).assertExists()
+            .assertContentDescriptionEquals("Прочитано")
+    }
+
+    @Test fun deliveredHasNoBadge() {
+        val m = MessageUi(2, outgoing = true, text = "Привет", sentMs = 0, status = DeliveryStatus.DELIVERED, system = false, authorName = "")
+        compose.setContent { OtterTheme { MessageBubble(m, firstInGroup = true) } }
+        compose.onNodeWithTag(READ_BADGE_TAG, useUnmergedTree = true).assertDoesNotExist()
     }
 }

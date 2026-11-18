@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="settings_title">Настройки</string>
-    <string name="settings_profile">Профиль</string>
-    <string name="settings_family">Семья</string>
     <string name="settings_invite">Пригласить в семью</string>
     <string name="settings_connection">Подключение</string>
     <string name="settings_online">Подключено</string>
@@ -37,7 +35,6 @@
     <string name="photos_cache_clear">Очистить</string>
     <string name="photos_cache_note">Фото в чатах не удаляются</string>
     <string name="photos_stored">Фото на телефоне</string>
-    <string name="settings_security">Безопасность</string>
     <string name="settings_backup">Резервная копия</string>
     <string name="backup_title">Резервная копия</string>
     <string name="backup_off_text">Копия чатов хранится на ваших серверах в зашифрованном виде. С именем пользователя и паролем вы вернёте переписку на новом телефоне.</string>
@@ -139,7 +136,6 @@
     <string name="appearance_system">Как на устройстве</string>
     <string name="appearance_light">Светлая</string>
     <string name="appearance_dark">Тёмная</string>
-    <string name="settings_photos_section">Фото и память</string>
     <string name="settings_phrase">Фраза восстановления</string>
     <string name="phrase_warning">Никому не показывайте эти слова. Кто их знает — тот владеет аккаунтом.</string>
     <string name="phrase_need_lock">Сначала включите блокировку экрана телефона или блокировку Otter</string>

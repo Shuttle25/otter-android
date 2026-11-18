@@ -7,12 +7,17 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
+import app.ottermsg.core.ui.theme.Dimens
+import androidx.compose.ui.unit.dp
 import app.ottermsg.core.database.entity.ConversationEntity
 import app.ottermsg.core.database.entity.ConversationType
 import app.ottermsg.core.database.entity.MessageEntity
@@ -96,5 +101,21 @@ class NewsBubbleTest {
         state = UpdateUi.Error(R.string.news_update_corrupt)
         compose.onNodeWithText("Файл повреждён").assertExists()
         compose.onNodeWithText("Обновить до 0.6.0").assertExists()
+    }
+
+    @Test fun noSenderLineButTalkBackKeepsIt() {
+        val m = MessageUi(1, outgoing = false, text = "Otter 0.9.1: новые галочки", sentMs = 0, status = MessageStatus.DELIVERED,
+            system = false, authorName = "Выдра")
+        compose.setContent { OtterTheme { NewsBubble(m, m.text, firstInGroup = true) } }
+        compose.onAllNodesWithText("Выдра", useUnmergedTree = true).assertCountEquals(0)
+        val text = compose.onNode(SemanticsMatcher("description keeps the sender") { n ->
+            n.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString().orEmpty().startsWith("Выдра, Otter 0.9.1")
+        }, useUnmergedTree = true).assertExists().fetchSemanticsNode()
+        // The old sender line had no semantics, so check the layout: the text starts right under the bubble's top padding.
+        val bubble = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.OnLongClick), useUnmergedTree = true)
+            .fetchSemanticsNode()
+        val gap = text.boundsInRoot.top - bubble.boundsInRoot.top
+        val max = with(compose.density) { (Dimens.s8 + 1.dp).toPx() }
+        assertTrue("text starts ${gap}px below the bubble top (max $max)", gap <= max)
     }
 }

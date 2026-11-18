@@ -18,9 +18,11 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -293,14 +295,16 @@ internal fun SecurityRows(appLockOn: Boolean, onAppLock: () -> Unit, noScreensho
         subtitle = stringResource(if (appLockOn) R.string.settings_app_lock_on else R.string.settings_app_lock_off),
         icon = Icons.Outlined.Lock, onClick = onAppLock)
     SwitchRow(stringResource(R.string.settings_no_screenshots), stringResource(R.string.settings_no_screenshots_sub),
-        noScreenshots, onNoScreenshots)
+        noScreenshots, onNoScreenshots, icon = Icons.Outlined.VisibilityOff)
 }
 
 @Composable
-private fun SwitchRow(title: String, subtitle: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun SwitchRow(title: String, subtitle: String?, checked: Boolean, onChange: (Boolean) -> Unit, icon: ImageVector? = null) {
     Row(Modifier.fillMaxWidth().heightIn(min = if (subtitle == null) Dimens.settingsRowMin else Dimens.settingsRowWithCaptionMin)
         .toggleable(value = checked, onValueChange = onChange, role = Role.Switch)
         .padding(horizontal = Dimens.screenGutter, vertical = Dimens.s8), verticalAlignment = Alignment.CenterVertically) {
+        // In the main Settings list every row has an icon, so the titles line up (owner 2026-11-18).
+        if (icon != null) { Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.width(Dimens.s16)) }
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

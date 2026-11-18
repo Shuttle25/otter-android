@@ -122,7 +122,7 @@ internal fun ChatRowItem(row: ChatRow, me: ByteArray, names: Names, onClick: () 
                 Text(row.time, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (row.status != null) { DeliveryStatusIcon(row.status); Spacer(Modifier.width(Dimens.s4)) }
+                if (row.status != null) { DeliveryStatusIcon(row.status, ink = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.width(Dimens.s4)) }
                 Text(preview, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontStyle = if (row.previewIsSystem || row.event != null || row.resetBy != null ||
                         row.keyChangedBy != null) FontStyle.Italic else FontStyle.Normal,

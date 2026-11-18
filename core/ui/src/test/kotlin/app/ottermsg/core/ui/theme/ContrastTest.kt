@@ -25,4 +25,23 @@ class ContrastTest {
             for ((name, p) in pairs) { val r = ratio(p.first, p.second); assertTrue("$name = $r", r >= 4.5) }
         }
     }
+
+    @Test fun ticksAndReadBadgeAreVisible() {
+        for (t in listOf(OtterPalette.Light, OtterPalette.Dark)) {
+            assertTrue("ink/outgoing", ratio(t.onOutgoingContainer, t.outgoingContainer) >= 4.5)
+            assertTrue("ink/surface", ratio(t.onSurface, t.surface) >= 4.5)
+            assertTrue("badge/outgoing", ratio(t.primary, t.outgoingContainer) >= 3.0)
+            assertTrue("badge/surface", ratio(t.primary, t.surface) >= 3.0)
+            assertTrue("badge ticks", ratio(t.onPrimary, t.primary) >= 3.0)
+        }
+        // the photo badge uses the dark pair on a ~45 % black scrim in both themes
+        assertTrue("photo badge ticks", ratio(OtterPalette.Dark.onPrimary, OtterPalette.Dark.primary) >= 3.0)
+    }
+
+    @Test fun whiteOnPhotoScrimEvenOverAWhitePhoto() {
+        // black at PHOTO_SCRIM_ALPHA over pure white: the worst case for the white time and ticks on a photo
+        val v = (255 * (1 - PHOTO_SCRIM_ALPHA)).toLong()
+        val scrim = 0xFF000000L or (v shl 16) or (v shl 8) or v
+        assertTrue("white on scrim over white", ratio(0xFFFFFFFFL, scrim) >= 4.5)
+    }
 }

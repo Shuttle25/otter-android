@@ -39,6 +39,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.ui.Alignment
 import app.ottermsg.core.ui.components.OtterAvatar
 import androidx.compose.material.icons.outlined.CloudDone
+import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material.icons.outlined.Key
@@ -98,10 +99,7 @@ fun connectionLabel(state: ConnectionState): Int = when (state) {
     else -> R.string.settings_offline
 }
 
-/**
- * Settings in the guide's order (§10, D124): Профиль, Семья, Уведомления, Оформление, Фото и память, Безопасность,
- * Подключение, then the version footer.
- */
+/** Settings: one plain list of rows, no section headers (owner 2026-11-16). */
 @Composable
 fun SettingsRoute(onBack: () -> Unit, onInvite: () -> Unit, onProfile: () -> Unit, onPhotos: () -> Unit = {}, onBackup: () -> Unit = {},
                   onNotifications: () -> Unit = {}, onNetwork: () -> Unit = {}, onAppLock: () -> Unit = {},
@@ -121,22 +119,16 @@ fun SettingsRoute(onBack: () -> Unit, onInvite: () -> Unit, onProfile: () -> Uni
     Scaffold(containerColor = MaterialTheme.colorScheme.background,
         topBar = { OtterTopBar(stringResource(R.string.settings_title), onBack = onBack) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())) {
-            Section(stringResource(R.string.settings_profile))
+            Spacer(Modifier.heightIn(min = Dimens.s8))
             account?.let { ProfileRow(it.displayName, it.username, it.userId, onProfile) }
-            Section(stringResource(R.string.settings_family))
             OtterSettingsRow(stringResource(R.string.settings_invite), icon = Icons.Outlined.PersonAdd, onClick = onInvite)
-            Section(stringResource(R.string.settings_notifications_section))
             OtterSettingsRow(stringResource(R.string.settings_notifications), icon = Icons.Outlined.Notifications, onClick = onNotifications)
-            Section(stringResource(R.string.settings_appearance))
             OtterSettingsRow(stringResource(R.string.settings_appearance), subtitle = stringResource(appearanceLabel(themeMode)),
                 icon = Icons.Outlined.Palette, onClick = onAppearance)
-            Section(stringResource(R.string.settings_photos_section))
             OtterSettingsRow(stringResource(R.string.settings_photos), icon = Icons.Outlined.PhotoLibrary, onClick = onPhotos)
-            Section(stringResource(R.string.settings_security))
             SecurityRows(appLockOn, onAppLock, screenSecure, vm::setScreenSecure)
             OtterSettingsRow(stringResource(R.string.settings_backup), icon = Icons.Outlined.CloudDone, onClick = onBackup)
             OtterSettingsRow(stringResource(R.string.settings_phrase), icon = Icons.Outlined.Key, onClick = onPhrase)
-            Section(stringResource(R.string.settings_connection))
             val online = connection as? ConnectionState.Online
             // label and transport only (never the address); the row opens «Состояние сети» (D123)
             OtterSettingsRow(stringResource(connectionLabel(connection)), subtitle = online?.let { "${it.nodeLabel} · ${transportOf(it.url)}" },
@@ -153,14 +145,16 @@ fun SettingsRoute(onBack: () -> Unit, onInvite: () -> Unit, onProfile: () -> Uni
 }
 
 /**
- * «Подключение» rows for calls: the relay-only switch and, when Android 14+ forbids full-screen ringing on the lock
- * screen, a one-tap fix that opens the system page.
+ * Call rows: the relay-only switch and, when Android 14+ forbids full-screen ringing on the lock screen, a one-tap fix
+ * that opens the system page.
  */
 @Composable
 internal fun CallSettingsRows(relayOnly: Boolean, onRelayOnly: (Boolean) -> Unit, fsiBlocked: Boolean, onFsiFix: () -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = Dimens.settingsRowWithCaptionMin)
         .toggleable(value = relayOnly, onValueChange = onRelayOnly, role = Role.Switch)
         .padding(horizontal = Dimens.screenGutter, vertical = Dimens.s8), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Outlined.Dns, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(Dimens.s16))
         Column(Modifier.weight(1f)) {
             Text(stringResource(R.string.settings_calls_relay_only), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.settings_calls_relay_only_sub), style = MaterialTheme.typography.bodyMedium,
@@ -197,6 +191,7 @@ private fun ProfileRow(name: String, username: String, userId: ByteArray, onClic
     }
 }
 
+/** A section heading inside sub-screens (e.g. «Состояние сети»); the main Settings list has none (owner 2026-11-16). */
 @Composable
 internal fun Section(title: String) {
     Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary,

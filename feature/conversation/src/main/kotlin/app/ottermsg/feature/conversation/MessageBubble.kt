@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.min
 import app.ottermsg.core.ui.components.DeliveryStatus
 import app.ottermsg.core.ui.components.deliveryStatusLabel
 import app.ottermsg.core.ui.theme.Dimens
+import app.ottermsg.core.ui.theme.PHOTO_SCRIM_ALPHA
 import app.ottermsg.core.ui.theme.OtterTheme
 import java.time.Instant
 import java.time.ZoneId
@@ -115,9 +116,9 @@ fun MessageBubble(
                         PhotoContent(m.localId, photo, maxW - PHOTO_INSET * 2, onDownload = onPhotoDownload,
                             modifierInset = PHOTO_INSET, overlay = {
                                 if (text.isEmpty()) Box(Modifier.fillMaxSize().padding(Dimens.s8), contentAlignment = Alignment.BottomEnd) {
-                                    Box(Modifier.background(Color.Black.copy(alpha = .45f), RoundedCornerShape(Dimens.s8))
+                                    Box(Modifier.background(Color.Black.copy(alpha = PHOTO_SCRIM_ALPHA), RoundedCornerShape(Dimens.s8))
                                         .padding(horizontal = Dimens.s8, vertical = 2.dp)) {
-                                        MessageMeta(time, status, color = Color.White)
+                                        MessageMeta(time, status, color = Color.White, onPhoto = true)
                                     }
                                 }
                             })

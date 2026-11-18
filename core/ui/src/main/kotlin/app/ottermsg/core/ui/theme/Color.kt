@@ -21,3 +21,6 @@ data class OtterPalette(
         )
     }
 }
+
+/** Opacity of the black backdrop under white text and ticks on photos: white stays ≥ 4.5 : 1 even over a white photo (owner 2026-11-18). */
+const val PHOTO_SCRIM_ALPHA = 0.6f
