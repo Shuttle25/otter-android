@@ -115,6 +115,11 @@ class FakeNodeTransport(private val node: FakeNode) : Transport {
             }
             "manifest.get" -> ManifestResponse.newBuilder().setManifest(s.manifest()).build()
             "directory.sync" -> RecordBatch.newBuilder().addAllRecords(s.directory()).build()
+            "directory.list" -> RecordBatch.newBuilder().addAllRecords(s.directoryList()).build()
+            "directory.get" -> RecordBatch.newBuilder().addAllRecords(s.directoryGet(
+                app.ottermsg.proto.v1.DirectoryGetRequest.parseFrom(b).userIdsList.map { it.toByteArray() })).build()
+            "directory.lookup" -> s.directoryLookup(app.ottermsg.proto.v1.DirectoryLookupRequest.parseFrom(b).username)
+                ?.let { RecordBatch.newBuilder().addAllRecords(it).build() } ?: throw RpcException(Status.STATUS_NOT_FOUND, "user")
             "prekeys.upload" -> { s.uploadPrekeys(rec(b)); null }
             "prekeys.fetch" -> PreKeyFetchRequest.parseFrom(b).let { s.fetchPrekeys(it.userId.toByteArray(), it.deviceId) }
             "msg.send" -> { s.send(rec(b)); null }

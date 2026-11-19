@@ -12,6 +12,8 @@ import app.ottermsg.proto.v1.BlobChunk
 import app.ottermsg.proto.v1.BlobGetRequest
 import app.ottermsg.proto.v1.BlobPutRequest
 import app.ottermsg.proto.v1.BlobStatus
+import app.ottermsg.proto.v1.DirectoryGetRequest
+import app.ottermsg.proto.v1.DirectoryLookupRequest
 import app.ottermsg.proto.v1.Empty
 import app.ottermsg.proto.v1.Event
 import app.ottermsg.proto.v1.Hello
@@ -42,7 +44,14 @@ interface NodeApi {
     /** auth.login; the answer names the newest install the node knows (D52). */
     suspend fun login(userId: ByteArray, account: Ed25519.KeyPair): LoginResponse
     suspend fun manifest(): Record
+    /** directory.sync: on a node from 0.11.0 the caller's visible set (D135), on an older one every entry. */
     suspend fun directory(): List<Record>
+    /** M9.5 (D135): the caller's visible set plus invite ancestry; an old node's full `directory.sync` is the fallback. */
+    suspend fun directoryList(): List<Record> = directory()
+    /** M9.5 (D137): entries for known ids (any count, sent in parts of 256) plus their invite ancestry. */
+    suspend fun directoryGet(ids: List<ByteArray>): List<Record> = if (ids.isEmpty()) emptyList() else directory()
+    /** M9.5 (D137): one exact username plus ancestry; null = not found. [LookupLimitException], [OldNodeException]. */
+    suspend fun directoryLookup(username: String): List<Record>? = throw OldNodeException()
     suspend fun uploadPrekeys(record: Record)
     suspend fun fetchPrekeys(userId: ByteArray, device: Int = 1): PreKeyBundle
     suspend fun send(envelope: Record)
@@ -83,6 +92,18 @@ interface NodeApi {
     suspend fun awaitRevokedAnswer() { awaitCancellation() }
 }
 
+/** The node runs a release without this method (M9.5 rollout: nodes first, then the app). */
+class OldNodeException : Exception("node too old")
+
+/** directory.lookup refused: 30 an hour / 200 a day (D137). */
+class LookupLimitException : Exception("lookup limit")
+
+/** The answer of a node that does not know the method (gateway: STATUS_INVALID `unknown method "x"`). */
+internal fun RpcException.isUnknownMethod() = status == Status.STATUS_INVALID && message.orEmpty().contains("unknown method")
+
+/** directory.get takes at most this many ids per request (D137). */
+const val DIRECTORY_GET_MAX = 256
+
 class RemoteNodeApi(
     private val rpc: RpcClient, private val clock: () -> Long = System::currentTimeMillis,
     override val endpointNodeId: ByteArray? = null,
@@ -105,6 +126,44 @@ class RemoteNodeApi(
 
     override suspend fun manifest(): Record = ManifestResponse.parseFrom(rpc.call("manifest.get", Empty.getDefaultInstance())).manifest
     override suspend fun directory(): List<Record> = RecordBatch.parseFrom(rpc.call("directory.sync", Empty.getDefaultInstance())).recordsList
+
+    /** The node answered "unknown method" to directory.list/get: it is older than 0.11.0; use directory.sync from now on. */
+    @Volatile private var legacyDirectory = false
+
+    override suspend fun directoryList(): List<Record> {
+        if (!legacyDirectory) try {
+            return RecordBatch.parseFrom(rpc.call("directory.list", Empty.getDefaultInstance())).recordsList
+        } catch (e: RpcException) {
+            if (!e.isUnknownMethod()) throw e
+            legacyDirectory = true
+        }
+        return directory()
+    }
+
+    override suspend fun directoryGet(ids: List<ByteArray>): List<Record> {
+        if (ids.isEmpty()) return emptyList()
+        if (!legacyDirectory) try {
+            return ids.chunked(DIRECTORY_GET_MAX).flatMap { part ->
+                RecordBatch.parseFrom(rpc.call("directory.get", DirectoryGetRequest.newBuilder()
+                    .addAllUserIds(part.map { ByteString.copyFrom(it) }).build())).recordsList
+            }
+        } catch (e: RpcException) {
+            if (!e.isUnknownMethod()) throw e
+            legacyDirectory = true
+        }
+        return directory()
+    }
+
+    override suspend fun directoryLookup(username: String): List<Record>? = try {
+        RecordBatch.parseFrom(rpc.call("directory.lookup", DirectoryLookupRequest.newBuilder().setUsername(username).build())).recordsList
+    } catch (e: RpcException) {
+        when {
+            e.status == Status.STATUS_NOT_FOUND -> null
+            e.status == Status.STATUS_QUOTA -> throw LookupLimitException()
+            e.isUnknownMethod() -> throw OldNodeException()
+            else -> throw e
+        }
+    }
     override suspend fun uploadPrekeys(record: Record) { rpc.call("prekeys.upload", req(record)) }
     override suspend fun fetchPrekeys(userId: ByteArray, device: Int): PreKeyBundle =
         PreKeyBundle.parseFrom(rpc.call("prekeys.fetch", PreKeyFetchRequest.newBuilder().setUserId(ByteString.copyFrom(userId)).setDeviceId(device).build()))
