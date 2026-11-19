@@ -292,7 +292,7 @@ class DirectorySync @Inject constructor(
 
     /**
      * Our own entry: follow its version (profile updates continue from it); when no local edit is pending, adopt
-     * its name (an edit made by another install of the account, or a restore).
+     * its name and its `listed` (an edit made by another install of the account, or a restore).
      */
     private suspend fun applyOwn(e: DirectoryEntry) {
         // a restored phone learns its invite chain from its own entry (signed by our key), D100
@@ -304,6 +304,9 @@ class DirectorySync @Inject constructor(
             accountDao.setDisplayName(e.displayName)
             accounts.reload()
         }
+        // D136: a restored phone keeps «Показывать меня в каталоге сети» in its next versions
+        if (!settings.profilePending() && e.version.toInt() >= settings.entryVersion() && e.listed != settings.catalogListed())
+            settings.setCatalogListed(e.listed)
     }
 
     companion object {

@@ -80,6 +80,8 @@
     <string name="settings_app_lock_off">Off</string>
     <string name="settings_no_screenshots">Block screenshots</string>
     <string name="settings_no_screenshots_sub">Otter\'s screen won\'t appear in screenshots or recent apps</string>
+    <string name="settings_catalog_listed">Show me in the network directory</string>
+    <string name="settings_catalog_listed_sub">Nodes and the admin still see every member</string>
     <string name="app_lock_explain">Otter will ask for a PIN when opened. Calls can be answered without the PIN.</string>
     <string name="app_lock_enable">Turn on</string>
     <string name="app_lock_new_pin">Choose a PIN</string>

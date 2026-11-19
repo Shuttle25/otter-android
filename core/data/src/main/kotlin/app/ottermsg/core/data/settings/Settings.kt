@@ -112,6 +112,10 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
     /** A display-name change is saved locally but not yet accepted by a node. */
     suspend fun profilePending(): Boolean = (int(PROFILE_PENDING) ?: 0) != 0
     suspend fun setProfilePending(v: Boolean) = putInt(PROFILE_PENDING, if (v) 1 else 0)
+    /** «Показывать меня в каталоге сети» (D136): the signed `listed` of every new version of our entry; default off. */
+    suspend fun catalogListed(): Boolean = (int(CATALOG_LISTED) ?: 0) != 0
+    suspend fun setCatalogListed(v: Boolean) = putInt(CATALOG_LISTED, if (v) 1 else 0)
+    fun observeCatalogListed(): Flow<Boolean> = observeInt(CATALOG_LISTED, 0).map { it != 0 }
 
     /** Photo auto-download (D47): [AUTO_WIFI] (default), [AUTO_ANY], [AUTO_MANUAL]. */
     suspend fun photoAutoDownload(): Int = int(PHOTO_AUTO) ?: AUTO_WIFI
@@ -270,6 +274,7 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
         const val AUTO_MANUAL = 2
         const val ENTRY_VERSION = "profile_entry_version"
         const val PROFILE_PENDING = "profile_pending"
+        const val CATALOG_LISTED = "catalog_listed"
         const val REGISTRATION_ID = "registration_id"
         const val NEXT_ONE_TIME_ID = "next_one_time_id"
         const val NETWORK_PUB = "network_pub"

@@ -54,9 +54,23 @@ class ProfileRepository @Inject constructor(
             settings.setProfilePending(true)
         }
         accounts.reload()
+        markPending()
+        return Result.success(Unit)
+    }
+
+    /** «Показывать меня в каталоге сети» (D136): saved at once, published as a new version of our entry when online. */
+    suspend fun setListed(v: Boolean) {
+        if (v == settings.catalogListed() && !settings.profilePending()) return
+        db.withTransaction {
+            settings.setCatalogListed(v)
+            settings.setProfilePending(true)
+        }
+        markPending()
+    }
+
+    private fun markPending() {
         _pending.value = true
         kicks.trySend(Unit)
-        return Result.success(Unit)
     }
 
     /** Runs for one connected session: publishes a pending change now and after every later edit. */
@@ -79,12 +93,14 @@ class ProfileRepository @Inject constructor(
             if (!settings.profilePending()) { _pending.value = false; return@withLock }
             val me = accounts.require()
             val version = settings.entryVersion() + 1
+            val listed = settings.catalogListed()
             try {
-                api.updateDirectory(DirectoryEntries.record(me, me.displayName, version, clock.now(), ownInvite(api, me.userId)))
+                api.updateDirectory(DirectoryEntries.record(me, me.displayName, version, clock.now(), ownInvite(api, me.userId), listed))
                 db.withTransaction {
                     settings.setEntryVersion(version)
                     // an edit made during the call keeps the flag: compare with what we sent
-                    if (db.accountDao().get()?.displayName == me.displayName) settings.setProfilePending(false)
+                    if (db.accountDao().get()?.displayName == me.displayName && settings.catalogListed() == listed)
+                        settings.setProfilePending(false)
                 }
                 _pending.value = settings.profilePending()
                 if (!_pending.value) return@withLock

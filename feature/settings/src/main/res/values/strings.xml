@@ -80,6 +80,8 @@
     <string name="settings_app_lock_off">Выключена</string>
     <string name="settings_no_screenshots">Запрет скриншотов</string>
     <string name="settings_no_screenshots_sub">Экран Otter не попадёт на снимки и в список недавних приложений</string>
+    <string name="settings_catalog_listed">Показывать меня в каталоге сети</string>
+    <string name="settings_catalog_listed_sub">Узлы и администратор всё равно видят всех участников</string>
     <string name="app_lock_explain">Otter будет спрашивать PIN при открытии. Звонки можно принять без PIN.</string>
     <string name="app_lock_enable">Включить</string>
     <string name="app_lock_new_pin">Придумайте PIN</string>
