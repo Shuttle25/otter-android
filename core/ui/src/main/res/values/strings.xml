@@ -35,4 +35,10 @@
     <string name="ui_pin_entered">Введено %1$d из %2$d</string>
     <string name="ui_pin_erase">Стереть</string>
     <string name="ui_pin_ok">OK</string>
+    <string name="ui_person_write">Написать</string>
+    <string name="ui_person_open_chat">Открыть чат</string>
+    <string name="ui_lookup_not_found">Пользователь не найден</string>
+    <string name="ui_lookup_limited">Слишком много поисков, попробуйте позже</string>
+    <string name="ui_lookup_old_node">Сервер устарел, попробуйте позже</string>
+    <string name="ui_lookup_offline">Нет подключения</string>
 </resources>

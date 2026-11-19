@@ -14,6 +14,7 @@
     <string name="profile_name">Имя</string>
     <string name="profile_username">Имя пользователя</string>
     <string name="profile_username_fixed">нельзя изменить</string>
+    <string name="profile_share_username">Поделиться именем пользователя</string>
     <string name="profile_pending">Имя обновится у близких, когда появится подключение</string>
     <string name="profile_account_code">Код аккаунта</string>
     <string name="profile_account_code_hint">Нужен администратору, если телефон потерян</string>

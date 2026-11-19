@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import app.ottermsg.core.data.directory.UsernameLookup
 import app.ottermsg.core.database.entity.ContactEntity
+import app.ottermsg.core.ui.components.PersonCard
 import app.ottermsg.core.ui.theme.OtterTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

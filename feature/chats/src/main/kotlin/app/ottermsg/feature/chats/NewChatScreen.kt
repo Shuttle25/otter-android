@@ -41,6 +41,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.ottermsg.core.data.directory.UsernameLookup
 import app.ottermsg.core.database.entity.ContactEntity
 import app.ottermsg.core.ui.components.OtterAvatar
+import app.ottermsg.core.ui.components.PersonCard
 import app.ottermsg.core.ui.components.OtterSettingsRow
 import app.ottermsg.core.ui.components.OtterTopBar
 import app.ottermsg.core.ui.theme.Dimens

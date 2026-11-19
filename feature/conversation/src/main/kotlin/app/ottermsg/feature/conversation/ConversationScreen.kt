@@ -10,6 +10,8 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.material3.SnackbarHost
+import app.ottermsg.core.ui.components.PersonCard
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalConfiguration
@@ -92,12 +94,15 @@ class PhotoActions(
     val onDownload: (Long) -> Unit = {}, val onSave: (Long) -> Unit = {},
 )
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun ConversationRoute(
     onBack: () -> Unit, onOpenGroupInfo: (String) -> Unit = {}, onMessageInfo: (Long) -> Unit = {},
     onOpenPhoto: (Long) -> Unit = {},
     /** A call was dialed (or one is in progress): open the call screen. */
     onCallStarted: () -> Unit = {},
+    /** «Написать» on the card of a mentioned `@username`: open that direct conversation. */
+    onOpenConversation: (Long) -> Unit = {},
     vm: ConversationViewModel = hiltViewModel(),
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
@@ -152,6 +157,11 @@ fun ConversationRoute(
         else micPermission.launch(Manifest.permission.RECORD_AUDIO)
     }
     LaunchedEffect(Unit) { vm.callStarted.collect { onCallStarted() } }
+    // `@username` mentions (M9.5): a hit opens the person card, anything else says why in a snackbar
+    val person by vm.person.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) {
+        vm.lookupFailed.collect { r -> lookupMessage(r)?.let { snackbar.showSnackbar(context.getString(it)) } }
+    }
     val unavailable = stringResource(R.string.conv_call_unavailable)
     LaunchedEffect(Unit) { vm.callNotices.collect { if (it == CallNotice.NotAvailable) snackbar.showSnackbar(unavailable) } }
     val micText = stringResource(R.string.conv_call_mic)
@@ -182,7 +192,13 @@ fun ConversationRoute(
             onOpenGroupInfo = { if (ui.isGroup) onOpenGroupInfo(ui.groupIdHex) }, onMessageInfo = onMessageInfo,
             photoActions = actions, snackbar = snackbar,
             update = NewsUpdate(vm.installedCode, updateState, vm::startUpdate),
-            onCall = startCall, onCallBack = { if (ui.canCall) startCall() })
+            onCall = startCall, onCallBack = { if (ui.canCall) startCall() }, onUsername = vm::openUsername)
+    }
+    person?.let { p ->
+        ModalBottomSheet(onDismissRequest = vm::dismissPerson) {
+            PersonCard(p.contact.displayName, p.contact.username, p.contact.userId, p.hasChat,
+                onWrite = { vm.writeTo(p.contact.userId, onOpenConversation) })
+        }
     }
     if (callWarning) {
         AlertDialog(
@@ -221,6 +237,8 @@ fun ConversationScreen(
     onCallBack: () -> Unit = {},
     /** Top-bar call button (1:1 chats only, [ConversationUi.canCall]). */
     onCall: () -> Unit = {},
+    /** A tap on an `@username` mention in a message. */
+    onUsername: (String) -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -325,6 +343,7 @@ fun ConversationScreen(
                                     }
                                 },
                                 onPhotoDownload = { photoActions.onDownload(m.localId) },
+                                onUsername = onUsername,
                                 actions = buildList {
                                     if (failed) add(CustomAccessibilityAction(retryLabel) { onRetry(m.localId); true })
                                     if (photoReady) add(CustomAccessibilityAction(saveLabel) { photoActions.onSave(m.localId); true })

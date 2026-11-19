@@ -10,6 +10,9 @@ import app.ottermsg.core.data.calls.CallNotice
 import app.ottermsg.core.data.calls.CallStarter
 import app.ottermsg.core.data.calls.CallState
 import app.ottermsg.core.data.calls.Peer
+import app.ottermsg.core.data.directory.FoundPerson
+import app.ottermsg.core.data.directory.PersonFinder
+import app.ottermsg.core.data.directory.UsernameLookup
 import app.ottermsg.core.data.media.PhotoStore
 import app.ottermsg.core.data.messaging.ConversationStore
 import app.ottermsg.core.data.messaging.GroupView
@@ -140,6 +143,7 @@ class ConversationViewModel @Inject constructor(
     installedVersion: InstalledVersion = InstalledVersion { Int.MAX_VALUE },
     private val installer: UpdateInstaller = UpdateInstaller {},
     private val calls: CallStarter = CallStarter.NONE,
+    private val people: PersonFinder = PersonFinder.NONE,
 ) : ViewModel() {
     val conversationId: Long = checkNotNull(savedState.get<Long>(ARG_ID)) { "conversation id missing" }
     var zone: ZoneId = ZoneId.systemDefault()
@@ -311,6 +315,35 @@ class ConversationViewModel @Inject constructor(
         val u = ui.value
         calls.dial(Peer.of(u.peerId, u.title))
         _callStarted.tryEmit(Unit)
+    }
+
+    // ---- `@username` mentions (M9.5, D137) ----
+    private val _person = MutableStateFlow<FoundPerson?>(null)
+    /** The person card of a tapped mention. */
+    val person: StateFlow<FoundPerson?> = _person
+    private val _lookupFailed = MutableSharedFlow<UsernameLookup.Result>(extraBufferCapacity = 1)
+    /** A tapped mention found nobody (or the node refused): a snackbar says why. */
+    val lookupFailed: SharedFlow<UsernameLookup.Result> = _lookupFailed
+    private var looking = false
+
+    /** A tap on `@name` in a message: the exact lookup, then the card. */
+    fun openUsername(mention: String) {
+        if (looking) return
+        looking = true
+        viewModelScope.launch {
+            try {
+                val (found, r) = people.find(mention)
+                if (found != null) _person.value = found else _lookupFailed.tryEmit(r)
+            } finally { looking = false }
+        }
+    }
+
+    fun dismissPerson() { _person.value = null }
+
+    /** «Написать» / «Открыть чат» on the card: [onOpen] gets the direct conversation, unless it is this one. */
+    fun writeTo(userId: ByteArray, onOpen: (Long) -> Unit) {
+        _person.value = null
+        viewModelScope.launch { people.chatWith(userId).takeIf { it != conversationId }?.let(onOpen) }
     }
 
     fun retry(localId: Long) = viewModelScope.launch { store.retry(localId) }

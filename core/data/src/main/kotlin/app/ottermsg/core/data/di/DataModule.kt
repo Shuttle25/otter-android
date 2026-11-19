@@ -57,6 +57,7 @@ object DataModule {
     @Provides fun registrar(r: Registration): Registrar = r
     @Provides fun restorer(r: app.ottermsg.core.data.backup.RestoreManager): app.ottermsg.core.data.backup.Restorer = r
     @Provides fun conversationStore(r: MessageRepository): ConversationStore = r
+    @Provides fun personFinder(f: app.ottermsg.core.data.directory.RealPersonFinder): app.ottermsg.core.data.directory.PersonFinder = f
     @Provides fun groupStore(r: GroupRepository): GroupStore = r
     @Provides fun networkInfo(n: AndroidNetworkInfo): NetworkInfo = n
     @Provides fun photoStore(r: MediaRepository): PhotoStore = r

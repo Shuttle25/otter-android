@@ -20,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -68,6 +69,8 @@ fun MessageBubble(
     actions: List<CustomAccessibilityAction> = emptyList(),
     menu: @Composable () -> Unit = {},
     onPhotoDownload: () -> Unit = {},
+    /** A tap on an `@username` mention (M9.5): the mention as written, e.g. "@Vera". */
+    onUsername: (String) -> Unit = {},
 ) {
     val extra = OtterTheme.extraColors
     val container = if (m.system) MaterialTheme.colorScheme.surfaceVariant else if (m.outgoing) extra.outgoingContainer else MaterialTheme.colorScheme.surface
@@ -90,6 +93,10 @@ fun MessageBubble(
     val description = listOfNotNull(author.ifEmpty { null }, photoLabel, text.ifEmpty { null }, time, statusLabel, failedHint).joinToString(", ")
     val large = LocalDensity.current.fontScale >= 1.3f
     val showAuthor = m.inGroup && firstInGroup && !m.system
+    // `@username` mentions are links (M9.5); system lines stay plain text
+    val mentions = remember(text, m.system) { if (m.system) emptyList() else findUsernames(text) }
+    val spots = remember { UsernameSpots() }
+    val linkColor = if (m.outgoing) onContainer else MaterialTheme.colorScheme.primary
 
     BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = Dimens.messageListGutter)
         .padding(top = if (firstInGroup) Dimens.groupGap else Dimens.sameAuthorGap)) {
@@ -123,18 +130,23 @@ fun MessageBubble(
                                 }
                             })
                         if (text.isNotEmpty()) Column(Modifier.fillMaxWidth().padding(horizontal = Dimens.s12, vertical = Dimens.s8)) {
-                            Text(text, style = MaterialTheme.typography.bodyLarge, color = onContainer)
+                            if (mentions.isEmpty()) Text(text, style = MaterialTheme.typography.bodyLarge, color = onContainer)
+                            else UsernameText(text, mentions, MaterialTheme.typography.bodyLarge, onContainer, FontStyle.Normal, linkColor,
+                                spots, onUsername)
                             MessageMeta(time, status, color = metaColor, modifier = Modifier.align(Alignment.End))
                         }
                     } else Column(Modifier.padding(horizontal = Dimens.s12, vertical = Dimens.s8)) {
                         // Group: the author's name at the start of a series only (guide §7); same colour for everyone.
                         if (showAuthor) Text(m.authorName, style = AuthorStyle, color = onContainer)
-                        Text(text, style = MaterialTheme.typography.bodyLarge, color = onContainer,
+                        if (mentions.isEmpty()) Text(text, style = MaterialTheme.typography.bodyLarge, color = onContainer,
                             fontStyle = if (m.system) FontStyle.Italic else FontStyle.Normal)
+                        else UsernameText(text, mentions, MaterialTheme.typography.bodyLarge, onContainer, FontStyle.Normal, linkColor,
+                            spots, onUsername)
                         MessageMeta(time, status, color = if (m.outgoing) onContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.align(Alignment.End))
                     }
                 }
+                if (mentions.isNotEmpty()) UsernameLinkButtons(text, mentions, spots, onUsername, Modifier.matchParentSize())
                 menu()
             }
         }

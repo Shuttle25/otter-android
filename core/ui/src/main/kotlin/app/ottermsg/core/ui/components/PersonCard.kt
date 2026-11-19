@@ -1,4 +1,4 @@
-package app.ottermsg.feature.chats
+package app.ottermsg.core.ui.components
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -13,10 +13,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
-import app.ottermsg.core.ui.components.OtterAvatar
+import app.ottermsg.core.ui.R
 import app.ottermsg.core.ui.theme.Dimens
 
-/** A person found by `@username` (D137): avatar, name, `@username` and «Написать» (or «Открыть чат»). */
+/** A person found by `@username` (D137): avatar, name, `@username` and «Написать» (or «Открыть чат»). «Написать» and the chat use it. */
 @Composable
 fun PersonCard(displayName: String, username: String, userId: ByteArray, hasChat: Boolean, onWrite: () -> Unit,
                modifier: Modifier = Modifier) {
@@ -29,7 +29,7 @@ fun PersonCard(displayName: String, username: String, userId: ByteArray, hasChat
             color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
         Spacer(Modifier.height(Dimens.s24))
         Button(onClick = onWrite, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(if (hasChat) R.string.person_open_chat else R.string.person_write))
+            Text(stringResource(if (hasChat) R.string.ui_person_open_chat else R.string.ui_person_write))
         }
     }
 }

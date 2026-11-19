@@ -24,6 +24,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -213,5 +214,38 @@ class ConversationViewModelTest {
             v.startUpdate(u); advanceUntilIdle()
             assertEquals(UpdateUi.Error(msg), v.updateState.value)
         }
+    }
+
+    /** M9.5: a tapped `@username` opens the card or reports why not; «Написать» opens the direct chat. */
+    @Test fun mentionOpensTheCardOrSaysWhy() = runTest(dispatcher) {
+        val vera = app.ottermsg.core.database.entity.ContactEntity(ByteArray(16) { 3 }, "vera", "Вера", ByteArray(32), ByteArray(33),
+            verified = false, identityChanged = false, revoked = false, entryVersion = 1)
+        val asked = mutableListOf<String>()
+        val people = object : app.ottermsg.core.data.directory.PersonFinder {
+            override suspend fun find(typed: String): Pair<app.ottermsg.core.data.directory.FoundPerson?, app.ottermsg.core.data.directory.UsernameLookup.Result> {
+                asked += typed
+                return if (typed == "@vera") app.ottermsg.core.data.directory.FoundPerson(vera, hasChat = false) to
+                    app.ottermsg.core.data.directory.UsernameLookup.Result.Found(vera)
+                else null to app.ottermsg.core.data.directory.UsernameLookup.Result.Limited
+            }
+            override suspend fun chatWith(userId: ByteArray): Long = if (userId.contentEquals(vera.userId)) 9 else 7
+        }
+        val v = ConversationViewModel(store, photos, SavedStateHandle(mapOf("id" to 7L)), people = people)
+        val failed = mutableListOf<app.ottermsg.core.data.directory.UsernameLookup.Result>()
+        val job = launch { v.lookupFailed.collect { failed += it } }
+        runCurrent()
+        v.openUsername("@ivan"); advanceUntilIdle()
+        assertEquals(listOf(app.ottermsg.core.data.directory.UsernameLookup.Result.Limited), failed)
+        assertEquals(null, v.person.value)
+        v.openUsername("@vera"); advanceUntilIdle()
+        assertEquals("vera", v.person.value!!.contact.username)
+        val opened = mutableListOf<Long>()
+        v.writeTo(vera.userId) { opened += it }; advanceUntilIdle()
+        assertEquals(listOf(9L), opened)
+        assertEquals(null, v.person.value)
+        v.writeTo(ByteArray(16)) { opened += it }; advanceUntilIdle() // this very chat: nothing to open
+        assertEquals(listOf(9L), opened)
+        assertEquals(listOf("@ivan", "@vera"), asked)
+        job.cancel()
     }
 }

@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.ottermsg.core.data.directory.ContactRepository
 import app.ottermsg.core.data.directory.UsernameLookup
-import app.ottermsg.core.data.messaging.MessageRepository
+import app.ottermsg.core.data.directory.FoundPerson
+import app.ottermsg.core.data.directory.PersonFinder
+import app.ottermsg.core.ui.R as UiR
 import app.ottermsg.core.database.entity.ContactEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,22 +29,17 @@ fun findOffer(shown: List<ContactEntity>, query: String): String? {
     return q.takeIf { UsernameLookup.VALID.matches(it) && shown.none { c -> UsernameLookup.matches(c, it) } }
 }
 
-/** A found account for the person card; [hasChat] turns «Написать» into «Открыть чат». */
-data class FoundPerson(val contact: ContactEntity, val hasChat: Boolean)
-
 /** The text under the search field for a lookup that found nobody (null for none). */
 internal fun lookupMessage(r: UsernameLookup.Result?): Int? = when (r) {
-    UsernameLookup.Result.NotFound -> R.string.lookup_not_found
-    UsernameLookup.Result.Limited -> R.string.lookup_limited
-    UsernameLookup.Result.OldNode -> R.string.lookup_old_node
-    UsernameLookup.Result.Offline -> R.string.lookup_offline
+    UsernameLookup.Result.NotFound -> UiR.string.ui_lookup_not_found
+    UsernameLookup.Result.Limited -> UiR.string.ui_lookup_limited
+    UsernameLookup.Result.OldNode -> UiR.string.ui_lookup_old_node
+    UsernameLookup.Result.Offline -> UiR.string.ui_lookup_offline
     is UsernameLookup.Result.Found, null -> null
 }
 
 @HiltViewModel
-class NewChatViewModel @Inject constructor(
-    contacts: ContactRepository, private val messages: MessageRepository, private val lookup: UsernameLookup,
-) : ViewModel() {
+class NewChatViewModel @Inject constructor(contacts: ContactRepository, private val people: PersonFinder) : ViewModel() {
     val contacts: StateFlow<List<ContactEntity>?> = contacts.observeContacts().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query
@@ -66,10 +63,8 @@ class NewChatViewModel @Inject constructor(
         viewModelScope.launch {
             _searching.value = true
             try {
-                when (val r = lookup.find(q)) {
-                    is UsernameLookup.Result.Found -> _person.value = FoundPerson(r.contact, messages.hasConversationWith(r.contact.userId))
-                    else -> _failed.value = r
-                }
+                val (found, r) = people.find(q)
+                if (found != null) _person.value = found else _failed.value = r
             } finally { _searching.value = false }
         }
     }
@@ -77,6 +72,6 @@ class NewChatViewModel @Inject constructor(
     fun dismissPerson() { _person.value = null }
 
     fun open(userId: ByteArray, onOpened: (Long) -> Unit) {
-        viewModelScope.launch { onOpened(messages.conversationWith(userId)) }
+        viewModelScope.launch { onOpened(people.chatWith(userId)) }
     }
 }

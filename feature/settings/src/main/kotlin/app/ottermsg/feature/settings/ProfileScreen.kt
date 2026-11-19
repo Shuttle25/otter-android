@@ -16,6 +16,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.Badge
 import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.Share
+import android.content.Intent
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -44,11 +47,19 @@ import app.ottermsg.core.ui.theme.Dimens
 fun ProfileRoute(onBack: () -> Unit, onEditName: () -> Unit, vm: ProfileViewModel = hiltViewModel()) {
     val profile by vm.profile.collectAsStateWithLifecycle()
     val pending by vm.pending.collectAsStateWithLifecycle()
-    ProfileScreen(profile, pending, onBack, onEditName)
+    val context = LocalContext.current
+    val shareTitle = stringResource(R.string.profile_share_username)
+    ProfileScreen(profile, pending, onBack, onEditName, onShareUsername = {
+        // «Поделиться именем пользователя» (M9.5): "@name" through the system chooser, so others can find us exactly (D137)
+        profile?.let { me ->
+            val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "@${me.username}")
+            runCatching { context.startActivity(Intent.createChooser(send, shareTitle)) }
+        }
+    })
 }
 
 @Composable
-fun ProfileScreen(me: ProfileInfo?, pending: Boolean, onBack: () -> Unit, onEditName: () -> Unit) {
+fun ProfileScreen(me: ProfileInfo?, pending: Boolean, onBack: () -> Unit, onEditName: () -> Unit, onShareUsername: () -> Unit = {}) {
     Scaffold(containerColor = MaterialTheme.colorScheme.background,
         topBar = { OtterTopBar(stringResource(R.string.profile_title), onBack = onBack) }) { padding ->
         if (me == null) return@Scaffold
@@ -70,6 +81,7 @@ fun ProfileScreen(me: ProfileInfo?, pending: Boolean, onBack: () -> Unit, onEdit
                 onClick = onEditName)
             OtterSettingsRow(stringResource(R.string.profile_username),
                 subtitle = "@${me.username} · ${stringResource(R.string.profile_username_fixed)}", icon = Icons.Outlined.AlternateEmail)
+            OtterSettingsRow(stringResource(R.string.profile_share_username), icon = Icons.Outlined.Share, onClick = onShareUsername)
             AccountCodeRow(accountCode(me.userId))
         }
     }

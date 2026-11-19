@@ -35,4 +35,10 @@
     <string name="ui_pin_entered">%1$d of %2$d entered</string>
     <string name="ui_pin_erase">Erase</string>
     <string name="ui_pin_ok">OK</string>
+    <string name="ui_person_write">Message</string>
+    <string name="ui_person_open_chat">Open chat</string>
+    <string name="ui_lookup_not_found">User not found</string>
+    <string name="ui_lookup_limited">Too many searches, try again later</string>
+    <string name="ui_lookup_old_node">The server is out of date, try again later</string>
+    <string name="ui_lookup_offline">No connection</string>
 </resources>
