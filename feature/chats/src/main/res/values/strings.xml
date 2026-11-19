@@ -27,4 +27,12 @@
     <string name="chats_system_reset">%1$s восстановил(а) аккаунт</string>
     <string name="chats_system_key_changed">%1$s: ключ безопасности изменился</string>
     <string name="news_title">Новости Выдры</string>
+    <string name="newchat_search">Имя или @имя_пользователя</string>
+    <string name="newchat_find">Найти @%1$s</string>
+    <string name="person_write">Написать</string>
+    <string name="person_open_chat">Открыть чат</string>
+    <string name="lookup_not_found">Пользователь не найден</string>
+    <string name="lookup_limited">Слишком много поисков, попробуйте позже</string>
+    <string name="lookup_old_node">Сервер устарел, попробуйте позже</string>
+    <string name="lookup_offline">Нет подключения</string>
 </resources>

@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.Flow
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(c: ContactEntity)
     @Query("SELECT * FROM contacts WHERE user_id = :id") suspend fun get(id: ByteArray): ContactEntity?
     @Query("SELECT * FROM contacts WHERE username = :username LIMIT 1") suspend fun byUsername(username: String): ContactEntity?
+    /** Every stored account with this signed username (a clash tag tells them apart, D137). */
+    @Query("SELECT * FROM contacts WHERE username = :username") suspend fun allByUsername(username: String): List<ContactEntity>
     @Query("SELECT * FROM contacts") suspend fun all(): List<ContactEntity>
     @Query("UPDATE contacts SET reset_ms = :ms WHERE user_id = :id") suspend fun setResetMs(id: ByteArray, ms: Long)
     @Query("SELECT * FROM contacts WHERE revoked = 0 ORDER BY display_name COLLATE NOCASE") fun observeAll(): Flow<List<ContactEntity>>

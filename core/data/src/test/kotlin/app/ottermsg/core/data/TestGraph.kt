@@ -97,6 +97,7 @@ class TestGraph(
     @Volatile var session: FakeNode.Session? = null
     private var sessionScope: CoroutineScope? = null
     val invites = InviteRepository(accounts, settings, db.manifestDao(), { session }, clock)
+    val usernameLookup = app.ottermsg.core.data.directory.UsernameLookup(db.contactDao(), directory, { session })
     var connector: NodeConnector = object : NodeConnector {
         override suspend fun <T> withNode(candidates: List<app.ottermsg.core.network.Candidate>, block: suspend (NodeApi) -> T): T {
             if (candidates.isEmpty()) throw IOException("no endpoints")

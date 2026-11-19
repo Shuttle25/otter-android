@@ -108,6 +108,9 @@ class MessageRepository @Inject constructor(
     override fun observeRecipients(localId: Long): Flow<List<RecipientStatus>> = db.messageRecipientDao().observeRecipients(localId)
     override fun observeMessage(localId: Long): Flow<MessageEntity?> = messages.observeOne(localId)
 
+    /** True when a direct conversation with [userId] exists (the person card says «Открыть чат»). */
+    suspend fun hasConversationWith(userId: ByteArray): Boolean = conversations.byPeer(userId) != null
+
     /** The direct conversation with a family member (created on first use). */
     suspend fun conversationWith(userId: ByteArray): Long {
         val title = contacts.get(userId)?.displayName ?: ""
