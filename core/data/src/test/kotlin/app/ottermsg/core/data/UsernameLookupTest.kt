@@ -69,4 +69,48 @@ class UsernameLookupTest {
         assertTrue(lookup.find("vera") is Result.Found)
         assertTrue(UsernameLookup.VALID.matches("vera#1a2b3c4d"))
     }
+
+    @Test fun aPlainNameInAClashIsTheWinnersOnly() = runBlocking {
+        g.register(node.bootstrapLink(), "Я", "me_user").getOrThrow()
+        g.online()
+        node.putDirectoryEntry(f.member(9, "vera")) // registered first: the node's plain "vera" (D40)
+        node.putDirectoryEntry(f.member(7, "vera")) // the clash loser, `vera#<tag>` on the node
+        // the loser is stored first, so the first stored "vera" is the wrong one
+        g.directory.fetch(g.session!!, listOf(f.uid(7)))
+        g.directory.fetch(g.session!!, listOf(f.uid(9)))
+        assertEquals(2, g.db.contactDao().allByUsername("vera").size)
+        node.recordCalls()
+        val r = g.usernameLookup.find(g.session!!, "vera")
+        assertTrue(r is Result.Found && r.contact.userId.contentEquals(f.uid(9)))
+        assertEquals(listOf("directory.lookup"), node.calls.toList()) // two stored: the node decides
+        // the tag still names the loser locally, with no call
+        node.recordCalls()
+        val loser = g.usernameLookup.find(null, "vera#" + f.uid(7).hex().take(8))
+        assertTrue(loser is Result.Found && loser.contact.userId.contentEquals(f.uid(7)))
+        assertTrue(node.calls.isEmpty())
+    }
+
+    @Test fun anAncestorWithTheSameNameIsNotTheMatch() = runBlocking {
+        g.register(node.bootstrapLink(), "Я", "me_user").getOrThrow()
+        g.online()
+        node.putDirectoryEntry(f.member(5, "vera"))          // an ancestor that happens to share the name
+        node.putDirectoryEntry(f.member(7, "vera"))
+        node.putDirectoryEntry(f.invitedBy(5, 9, "vera"))   // invited by the first one
+        g.directory.fetch(g.session!!, listOf(f.uid(5), f.uid(7)))
+        // the answer: the match plus its ancestry, both named "vera"; the match is the one not stored before
+        node.lookupAnswer = { node.withAncestry(setOf(f.uid(9).hex())) }
+        val r = g.usernameLookup.find(g.session!!, "vera")
+        assertTrue(r is Result.Found && r.contact.userId.contentEquals(f.uid(9)))
+        // now all three are stored and the answer holds two of them: no way to tell, «not found»
+        assertEquals(Result.NotFound, g.usernameLookup.find(g.session!!, "vera"))
+    }
+
+    @Test fun ownUsernameIsSelf() = runBlocking {
+        g.register(node.bootstrapLink(), "Я", "me_user").getOrThrow()
+        g.online()
+        node.recordCalls()
+        assertEquals(Result.Self, g.usernameLookup.find(g.session!!, "@Me_User"))
+        assertEquals(Result.Self, g.usernameLookup.find(null, "me_user#" + g.me.userId.hex().take(8)))
+        assertTrue(node.calls.isEmpty())
+    }
 }

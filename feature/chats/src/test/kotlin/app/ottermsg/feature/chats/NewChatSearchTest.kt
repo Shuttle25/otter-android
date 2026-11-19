@@ -60,6 +60,14 @@ class NewChatSearchTest {
         compose.onNodeWithText("Слишком много поисков, попробуйте позже").assertExists()
     }
 
+    @Test fun ownUsernameSaysThatsYou() {
+        compose.setContent { OtterTheme {
+            NewChatScreen(emptyList(), "me_user", {}, onFind = {}, searching = false, failed = UsernameLookup.Result.Self,
+                onPick = {}, onBack = {}, onInvite = {}, onNewGroup = {})
+        } }
+        compose.onNodeWithText("Это вы").assertExists()
+    }
+
     @Test fun offerRules() {
         assertNull(findOffer(listOf(anna), "an")) // too short for a username
         assertNull(findOffer(listOf(anna), "@Anna"))

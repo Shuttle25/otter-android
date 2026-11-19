@@ -46,6 +46,7 @@ internal fun lookupMessage(r: UsernameLookup.Result): Int? = when (r) {
     UsernameLookup.Result.Limited -> UiR.string.ui_lookup_limited
     UsernameLookup.Result.OldNode -> UiR.string.ui_lookup_old_node
     UsernameLookup.Result.Offline -> UiR.string.ui_lookup_offline
+    UsernameLookup.Result.Self -> UiR.string.ui_lookup_self
     is UsernameLookup.Result.Found -> null
 }
 
