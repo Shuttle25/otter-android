@@ -299,7 +299,7 @@ internal fun SecurityRows(appLockOn: Boolean, onAppLock: () -> Unit, noScreensho
 }
 
 @Composable
-private fun SwitchRow(title: String, subtitle: String?, checked: Boolean, onChange: (Boolean) -> Unit, icon: ImageVector? = null) {
+internal fun SwitchRow(title: String, subtitle: String?, checked: Boolean, onChange: (Boolean) -> Unit, icon: ImageVector? = null) {
     Row(Modifier.fillMaxWidth().heightIn(min = if (subtitle == null) Dimens.settingsRowMin else Dimens.settingsRowWithCaptionMin)
         .toggleable(value = checked, onValueChange = onChange, role = Role.Switch)
         .padding(horizontal = Dimens.screenGutter, vertical = Dimens.s8), verticalAlignment = Alignment.CenterVertically) {

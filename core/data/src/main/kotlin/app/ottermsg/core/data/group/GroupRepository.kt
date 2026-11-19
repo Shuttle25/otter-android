@@ -52,7 +52,7 @@ class GroupRepository @Inject constructor(
     override fun observeGroup(groupId: ByteArray) = groups.observe(groupId)
     override fun observeMembers(groupId: ByteArray) = groups.observeMembers(groupId)
     override suspend fun conversationOf(groupId: ByteArray): Long? = db.conversationDao().byGroup(groupId)?.id
-    override fun observeContacts(): Flow<List<ContactEntity>> = db.contactDao().observeAll()
+    override fun observeContacts(): Flow<List<ContactEntity>> = db.contactDao().observeCatalog() // D136
     override suspend fun myId(): ByteArray = accounts.require().userId
     override suspend fun myName(): String = accounts.require().displayName
 

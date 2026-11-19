@@ -12,10 +12,12 @@ import app.ottermsg.core.data.settings.Settings
 import app.ottermsg.core.database.dao.AccountDao
 import app.ottermsg.core.database.dao.ContactDao
 import app.ottermsg.core.database.dao.ConversationDao
+import app.ottermsg.core.database.dao.GroupDao
 import app.ottermsg.core.database.dao.ManifestDao
 import app.ottermsg.core.database.dao.MessageDao
 import app.ottermsg.core.database.entity.ContactEntity
 import app.ottermsg.core.database.entity.MessageEntity
+import app.ottermsg.core.database.entity.RekeyEntity
 import app.ottermsg.core.database.model.MessageKind
 import app.ottermsg.core.database.model.MessageStatus
 import app.ottermsg.core.network.NodeApi
@@ -33,12 +35,16 @@ import java.util.logging.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Pulls the directory and upserts verified entries as contacts. */
+/**
+ * Pulls the caller's visible set (D135) plus chat and group partners by id (D137) and upserts verified entries as
+ * contacts; which of them «Написать» shows is decided here from signed data only (D136: `listed`, `related`).
+ */
 @Singleton
 class DirectorySync @Inject constructor(
     private val accounts: AccountRepository, private val contacts: ContactDao, private val conversations: ConversationDao,
     private val settings: Settings, private val accountDao: AccountDao, private val manifests: ManifestDao,
     private val messages: MessageDao, private val clock: Clock, private val rekeys: RekeyApplier,
+    private val groups: GroupDao,
 ) {
     private val rng = SecureRandom()
     private val mutex = Mutex()
@@ -46,9 +52,20 @@ class DirectorySync @Inject constructor(
     /** True once a directory sync has completed in this process (the chat list's empty state waits for it). */
     val synced: StateFlow<Boolean> = _synced
 
+    /** directory.list (an old node: directory.sync), then the chat and group partners by id (D137). */
     suspend fun sync(api: NodeApi) {
-        apply(api.directory())
+        apply(api.directoryList())
+        val partners = (conversations.peerIds() + groups.memberIds()).associateBy { it.hex() }.toMutableMap()
+        // a re-keyed partner's new account (D111): its chat and groups move to it once its entry is here
+        val next = rekeys.all().associate { it.oldUserId.hex() to it.newUserId }
+        partners.keys.toList().forEach { var cur = next[it]; var n = 0; while (cur != null && n++ < 16 && partners.put(cur.hex(), cur) == null) cur = next[cur.hex()] }
+        if (partners.isNotEmpty()) apply(api.directoryGet(partners.values.toList()))
         _synced.value = true
+    }
+
+    /** Ids not in the store (a sender, a group signer): fetch their entries with the invite ancestry (D137). */
+    suspend fun fetch(api: NodeApi, ids: List<ByteArray>) {
+        if (ids.isNotEmpty()) apply(api.directoryGet(ids.distinctBy { it.hex() }))
     }
 
     /**
@@ -126,6 +143,7 @@ class DirectorySync @Inject constructor(
             if (fresh.isEmpty() && next == disabled) break
             disabled = next
         }
+        val related = relatedIds(me, stored, inviters)
         val ignored = entries.size - accepted.size
         if (ignored > 0) log.info("$ignored directory entr(ies) without a verifiable invite ignored")
         for ((e, _) in accepted) {
@@ -143,6 +161,7 @@ class DirectorySync @Inject constructor(
                 verified = (old?.verified ?: false) && !changed,
                 identityChanged = (old?.identityChanged ?: false) || changed,
                 revoked = revoked, entryVersion = e.version, resetMs = old?.resetMs ?: 0,
+                listed = e.listed, related = (old?.related ?: false) || userId.hex() in related,
             ))
             if (old == null || old.displayName != e.displayName) conversations.setTitle(userId, e.displayName)
             if (revoked && old?.revoked != true && userId.hex() !in rekeyed) { // a re-key shows its own line
@@ -165,6 +184,24 @@ class DirectorySync @Inject constructor(
         val contactIds = contacts.all().map { it.userId.hex() }.toSet()
         settings.setContactInviters(inviters.filterKeys { it in contactIds })
         rekeys.applyPending(me.userId) // D111: chats move once the new account's entry is known
+    }
+
+    /**
+     * My direct inviter and invitees (D136), from signed data only: the author of my own invite record and the invite
+     * edges [inviters] verified above, across re-keys (D111) both ways: invitees of my older accounts count, and the
+     * newer accounts of a related one are related too (as the node's visible set, D135).
+     */
+    private suspend fun relatedIds(me: LocalAccount, stored: List<RekeyEntity>, inviters: Map<String, Set<String>>): Set<String> {
+        val mine = hashSetOf(me.userId.hex())
+        var grew = true
+        while (grew) grew = stored.filter { it.newUserId.hex() in mine }.map { mine.add(it.oldUserId.hex()) }.any { it }
+        val out = HashSet<String>()
+        settings.ownInvite()?.first?.let { runCatching { RecordBody.parseFrom(Record.parseFrom(it).body).author.toByteArray().hex() }.getOrNull() }
+            ?.let(out::add)
+        inviters.forEach { (u, by) -> if (by.any { it in mine }) out += u }
+        val next = stored.associate { it.oldUserId.hex() to it.newUserId.hex() }
+        out.toList().forEach { var cur = next[it]; var n = 0; while (cur != null && n++ < 16 && out.add(cur)) cur = next[cur] }
+        return out - mine
     }
 
     /**
@@ -255,7 +292,7 @@ class DirectorySync @Inject constructor(
 
     /**
      * Our own entry: follow its version (profile updates continue from it); when no local edit is pending, adopt
-     * its name (an edit made by another install of the account, or a restore).
+     * its name and its `listed` (an edit made by another install of the account, or a restore).
      */
     private suspend fun applyOwn(e: DirectoryEntry) {
         // a restored phone learns its invite chain from its own entry (signed by our key), D100
@@ -267,6 +304,9 @@ class DirectorySync @Inject constructor(
             accountDao.setDisplayName(e.displayName)
             accounts.reload()
         }
+        // D136: a restored phone keeps «Показывать меня в каталоге сети» in its next versions
+        if (!settings.profilePending() && e.version.toInt() >= settings.entryVersion() && e.listed != settings.catalogListed())
+            settings.setCatalogListed(e.listed)
     }
 
     companion object {

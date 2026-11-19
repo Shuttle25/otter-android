@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.ottermsg.core.crypto.Bip39
 import app.ottermsg.core.crypto.InviteLink
+import app.ottermsg.core.crypto.NetworkCode
 import app.ottermsg.core.data.backup.RestoreError
 import app.ottermsg.core.data.backup.Restorer
 import app.ottermsg.core.data.registration.Registrar
@@ -36,7 +37,8 @@ class OnboardingViewModel @Inject constructor(private val registration: Registra
             when {
                 b == null -> copy(linkError = R.string.onb_invite_invalid)
                 !b.hasInvite() -> copy(linkError = R.string.onb_err_invite_outdated) // made by 0.9.0 or older (D100)
-                else -> copy(inviterName = b.inviterName.ifEmpty { null }, step = OnboardingStep.PROFILE)
+                else -> copy(inviterName = b.inviterName.ifEmpty { null }, networkCode = NetworkCode.of(b.networkPub.toByteArray()),
+                    step = OnboardingStep.PROFILE)
             }
         }
     }

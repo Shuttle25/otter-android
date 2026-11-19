@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import app.ottermsg.core.crypto.RecordCodec
 import app.ottermsg.core.data.Clock
 import app.ottermsg.core.data.account.AccountRepository
+import app.ottermsg.core.data.directory.DirectorySync
 import app.ottermsg.core.data.account.LocalAccount
 import app.ottermsg.core.data.bs
 import app.ottermsg.core.data.signal.SignalService
@@ -35,7 +36,7 @@ class PermanentFailure(msg: String) : Exception(msg)
 @Singleton
 class Outbox @Inject constructor(
     private val db: OtterDatabase, private val accounts: AccountRepository, private val signal: SignalService, private val clock: Clock,
-    private val groupSender: GroupSender,
+    private val groupSender: GroupSender, private val directory: DirectorySync,
 ) {
     private val outbox = db.outboxDao()
     private val messages = db.messageDao()
@@ -127,7 +128,13 @@ class Outbox @Inject constructor(
         // D104: nothing more reaches a removed member, also an item encrypted before the removal
         if (contacts.get(item.recipientUserId)?.revoked == true) throw PermanentFailure("member removed")
         val record = item.recordBytes?.let { Record.parseFrom(it) } ?: run {
-            val contact = contacts.get(item.recipientUserId) ?: throw PermanentFailure("unknown contact")
+            // M9.5 (D137): a group member outside our visible set is fetched by id once before giving up
+            val contact = contacts.get(item.recipientUserId) ?: run {
+                try { directory.fetch(api, listOf(item.recipientUserId)) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+                    throw java.io.IOException("directory.get failed: ${e.message}", e)
+                }
+                contacts.get(item.recipientUserId)
+            } ?: throw PermanentFailure("unknown contact")
             // C23: keys known only from an invite link are not used until the directory confirms them (retried later).
             if (contact.entryVersion == 0L) throw java.io.IOException("contact not confirmed by the directory yet")
             val (kind, ct) = signal.withSessions { _, s ->

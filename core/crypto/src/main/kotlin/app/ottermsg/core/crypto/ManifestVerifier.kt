@@ -28,4 +28,22 @@ object ManifestVerifier {
             throw ManifestException("malformed: ${e.message}")
         }
     }
+
+    /**
+     * True when [raw] is a MANIFEST validly self-signed by the network key it names, and that key is not [ours] (D139):
+     * a node of another network. A broken signature, garbage or our own manifest is false (noise, not a network change).
+     * The signature context is the other network's own (its id; v1 or v2 accepted), as its admin signed it.
+     */
+    fun foreignNetwork(raw: ByteArray, ours: ByteArray): Boolean = try {
+        val rec = Record.parseFrom(raw)
+        val body = RecordBody.parseFrom(rec.body)
+        val theirs = Manifest.parseFrom(body.payload).networkPub.toByteArray()
+        theirs.size == 32 && !theirs.contentEquals(ours) && body.type == RecordType.MANIFEST &&
+            body.author.toByteArray().contentEquals(Ids.id16(theirs)) &&
+            RecordCodec.verify(rec, theirs, SigContext(Ids.id16(theirs), 0))
+    } catch (e: InvalidProtocolBufferException) {
+        false
+    } catch (e: IllegalArgumentException) {
+        false
+    }
 }

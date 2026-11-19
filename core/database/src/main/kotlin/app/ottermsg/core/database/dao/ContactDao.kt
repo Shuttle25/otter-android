@@ -10,9 +10,21 @@ import kotlinx.coroutines.flow.Flow
 @Dao interface ContactDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(c: ContactEntity)
     @Query("SELECT * FROM contacts WHERE user_id = :id") suspend fun get(id: ByteArray): ContactEntity?
+    @Query("SELECT * FROM contacts WHERE username = :username LIMIT 1") suspend fun byUsername(username: String): ContactEntity?
+    /** Every stored account with this signed username (a clash tag tells them apart, D137). */
+    @Query("SELECT * FROM contacts WHERE username = :username") suspend fun allByUsername(username: String): List<ContactEntity>
     @Query("SELECT * FROM contacts") suspend fun all(): List<ContactEntity>
     @Query("UPDATE contacts SET reset_ms = :ms WHERE user_id = :id") suspend fun setResetMs(id: ByteArray, ms: Long)
     @Query("SELECT * FROM contacts WHERE revoked = 0 ORDER BY display_name COLLATE NOCASE") fun observeAll(): Flow<List<ContactEntity>>
+    /**
+     * «Написать» and the group pickers (D136): only people this phone can justify from signed data or its own chats:
+     * listed, my direct inviter or invitee, a 1:1 chat partner or a group member. Ancestry entries stay out.
+     */
+    @Query("""SELECT * FROM contacts c WHERE c.revoked = 0 AND (c.listed = 1 OR c.related = 1
+        OR EXISTS (SELECT 1 FROM conversations v WHERE v.peer_user_id = c.user_id)
+        OR EXISTS (SELECT 1 FROM group_members m WHERE m.user_id = c.user_id))
+        ORDER BY c.display_name COLLATE NOCASE""")
+    fun observeCatalog(): Flow<List<ContactEntity>>
     /** Every account ever accepted, removed and re-keyed ones too: the authors of old messages keep their names. */
     @Query("SELECT * FROM contacts ORDER BY display_name COLLATE NOCASE") fun observeAllKnown(): Flow<List<ContactEntity>>
     /** Removed members (D104): their chats show «Участник удалён» instead of the composer. */

@@ -73,4 +73,5 @@
     <string name="conv_call_anyway">Call anyway</string>
     <string name="conv_call_unavailable">Calls unavailable: the server is not updated</string>
     <string name="conv_call_mic">Microphone access needed</string>
+    <string name="username_link_label">Open %1$s</string>
 </resources>

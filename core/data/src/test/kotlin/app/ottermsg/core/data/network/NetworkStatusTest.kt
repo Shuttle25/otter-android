@@ -46,6 +46,12 @@ class NetworkStatusTest {
         assertEquals(listOf("wss:8443", "ws:8080"), nodes.flatMap { n -> n.endpoints.map { it.name } })
     }
 
+    @Test fun versionFromTheLastLoginPerNodeLabel() = runBlocking {
+        val fi = cand(1, "fi", "h1", 443); val ru = cand(2, "ru", "h3", 27443)
+        val nodes = NetworkStatus({ listOf(fi, ru) }, FakeStats(emptyList()), { mapOf("fi" to "0.11.0", "gone" to "0.10.1") }).nodes()
+        assertEquals(listOf("0.11.0", null), nodes.map { it.version }) // ru never reached: no version
+    }
+
     @Test fun noManifestNoNodes() = runBlocking {
         assertEquals(emptyList<NodeRow>(), NetworkStatus({ emptyList() }, FakeStats(emptyList())).nodes())
     }

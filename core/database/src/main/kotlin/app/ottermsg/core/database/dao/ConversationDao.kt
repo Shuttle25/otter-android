@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao interface ConversationDao {
     @Query("SELECT * FROM conversations WHERE peer_user_id = :peer") suspend fun byPeer(peer: ByteArray): ConversationEntity?
+    /** Every 1:1 chat partner (M9.5: refreshed by id, D137). */
+    @Query("SELECT peer_user_id FROM conversations WHERE peer_user_id IS NOT NULL") suspend fun peerIds(): List<ByteArray>
     @Query("SELECT * FROM conversations WHERE id = :id") suspend fun get(id: Long): ConversationEntity?
     @Query("SELECT * FROM conversations ORDER BY id") suspend fun all(): List<ConversationEntity>
     @Query("SELECT * FROM conversations WHERE group_id = :groupId") suspend fun byGroup(groupId: ByteArray): ConversationEntity?

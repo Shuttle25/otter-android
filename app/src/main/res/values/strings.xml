@@ -9,6 +9,9 @@
     <string name="superseded_reclaim_no">Отмена</string>
     <string name="revoked_title">Аккаунт отключён</string>
     <string name="revoked_text">Администратор сети отключил этот аккаунт. Сообщения больше не отправляются и не приходят. Если это ошибка, свяжитесь с администратором.</string>
+    <string name="network_changed_title">Сеть изменилась</string>
+    <string name="network_changed_text">Не вводите пароли и обратитесь к администратору. Этот узел выдаёт себя за другую сеть.</string>
+    <string name="network_changed_ok">Понятно</string>
     <!-- notifications (D62) -->
     <string name="notif_channel_messages">Сообщения</string>
     <string name="notif_channel_groups">Группы</string>

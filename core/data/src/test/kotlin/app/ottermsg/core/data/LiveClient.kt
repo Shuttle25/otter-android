@@ -51,9 +51,9 @@ class LiveClient {
     val accounts = AccountRepository(db.accountDao(), settings, SeedVault(XorWrapper), manifests)
     val signal = SignalService(accounts, db.signalKvDao(), db.contactDao(), scope)
     val rekeys = app.ottermsg.core.data.directory.RekeyApplier(db, clock)
-    val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao(), settings, db.accountDao(), db.manifestDao(), db.messageDao(), clock, rekeys)
+    val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao(), settings, db.accountDao(), db.manifestDao(), db.messageDao(), clock, rekeys, db.groupDao())
     val profile = ProfileRepository(accounts, db, settings, clock)
-    val outbox = Outbox(db, accounts, signal, clock, GroupSender(db, signal, clock))
+    val outbox = Outbox(db, accounts, signal, clock, GroupSender(db, signal, clock), directory)
     private val clientId = java.util.UUID.randomUUID().toString()
     val files = object : MediaFiles(ApplicationProvider.getApplicationContext()) {
         override val mediaDir get() = java.io.File(ApplicationProvider.getApplicationContext<android.content.Context>().filesDir, "media-$clientId").also { it.mkdirs() }

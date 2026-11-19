@@ -14,6 +14,7 @@
     <string name="profile_name">Name</string>
     <string name="profile_username">Username</string>
     <string name="profile_username_fixed">can\'t be changed</string>
+    <string name="profile_share_username">Share username</string>
     <string name="profile_pending">Your name will update for others once you\'re online</string>
     <string name="profile_account_code">Account code</string>
     <string name="profile_account_code_hint">The admin needs it if a phone is lost</string>
@@ -80,6 +81,8 @@
     <string name="settings_app_lock_off">Off</string>
     <string name="settings_no_screenshots">Block screenshots</string>
     <string name="settings_no_screenshots_sub">Otter\'s screen won\'t appear in screenshots or recent apps</string>
+    <string name="settings_catalog_listed">Show me in the network directory</string>
+    <string name="settings_catalog_listed_sub">Nodes and the admin still see every member</string>
     <string name="app_lock_explain">Otter will ask for a PIN when opened. Calls can be answered without the PIN.</string>
     <string name="app_lock_enable">Turn on</string>
     <string name="app_lock_new_pin">Choose a PIN</string>
@@ -117,6 +120,8 @@
     <string name="network_other">Other network</string>
     <string name="network_none">No network</string>
     <string name="network_nodes">Nodes</string>
+    <string name="network_code">Network code</string>
+    <string name="network_node_version">Version %1$s</string>
     <string name="network_never">not connected yet</string>
     <string name="network_last_ok">ok %1$s</string>
     <string name="network_last_fail">failed %1$s</string>

@@ -30,6 +30,7 @@ class GroupRevocationTest {
             g.online()
         }
         for (g in gs) g.directory.sync(g.session!!)
+        for (g in gs) g.meet(*gs) // M9.5: unrelated (all bootstrap-invited), so they look each other up
         eventually(what = "everyone knows everyone") {
             gs.all { x -> gs.all { y -> x === y || x.db.contactDao().get(y.me.userId) != null } }
         }

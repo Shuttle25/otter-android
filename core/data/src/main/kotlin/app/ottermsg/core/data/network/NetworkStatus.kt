@@ -1,6 +1,7 @@
 package app.ottermsg.core.data.network
 
 import app.ottermsg.core.data.di.AllowPlaintext
+import app.ottermsg.core.data.settings.Settings
 import app.ottermsg.core.data.sync.ManifestUpdater
 import app.ottermsg.core.database.dao.EndpointStatDao
 import app.ottermsg.core.network.Candidate
@@ -18,7 +19,8 @@ data class EndpointRow(
     val neverTried: Boolean get() = lastSuccessMs == null && lastFailureMs == null
 }
 
-data class NodeRow(val label: String, val endpoints: List<EndpointRow>)
+/** [version] = the node's version from its last login answer on this phone (D139); null if never connected to it. */
+data class NodeRow(val label: String, val endpoints: List<EndpointRow>, val version: String? = null)
 
 /**
  * «Состояние сети» (D123): the manifest's nodes with this phone's own connection history (`endpoint_stats`), in
@@ -26,18 +28,21 @@ data class NodeRow(val label: String, val endpoints: List<EndpointRow>)
  */
 class NetworkStatus internal constructor(
     private val candidates: suspend () -> List<Candidate>, private val stats: EndpointStatDao,
+    private val versions: suspend () -> Map<String, String> = { emptyMap() },
 ) {
-    @Inject constructor(manifests: ManifestUpdater, stats: EndpointStatDao, @AllowPlaintext allowPlaintext: Boolean) :
-        this({ manifests.candidates(allowPlaintext) }, stats)
+    @Inject constructor(manifests: ManifestUpdater, stats: EndpointStatDao, @AllowPlaintext allowPlaintext: Boolean,
+                        settings: Settings) :
+        this({ manifests.candidates(allowPlaintext) }, stats, settings::nodeVersions)
 
     suspend fun nodes(): List<NodeRow> {
         val byKey = stats.all().associateBy { it.key }
+        val versions = versions()
         return candidates().groupBy { it.label }.map { (label, cs) ->
             NodeRow(label, cs.map { c ->
                 val s = byKey[c.key]
                 EndpointRow(c.key, c.url, name(c.url), c.viaCdn, s?.lastSuccessMs?.takeIf { it > 0 },
                     s?.lastFailureMs?.takeIf { it > 0 }, s?.rttMs?.takeIf { it > 0 }, s?.failures ?: 0, s?.demotedUntilMs ?: 0)
-            })
+            }, versions[label])
         }
     }
 

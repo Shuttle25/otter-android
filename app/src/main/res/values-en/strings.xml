@@ -9,6 +9,9 @@
     <string name="superseded_reclaim_no">Cancel</string>
     <string name="revoked_title">Account disabled</string>
     <string name="revoked_text">The network administrator disabled this account. Messages are no longer sent or received. If this is a mistake, contact the administrator.</string>
+    <string name="network_changed_title">The network changed</string>
+    <string name="network_changed_text">Do not enter passwords and contact the admin. This node claims to be a different network.</string>
+    <string name="network_changed_ok">OK</string>
     <!-- notifications (D62) -->
     <string name="notif_channel_messages">Messages</string>
     <string name="notif_channel_groups">Groups</string>

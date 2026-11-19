@@ -56,6 +56,8 @@ class FakeNode(private val clock: () -> Long, val nodeId: ByteArray = ByteArray(
      * whose account was disabled by `otter-admin user revoke` — or a hostile node lying it.
      */
     @Volatile var answerRevoked = false
+    /** `LoginResponse.server_version` (D139); "" = a node before 0.11.0. */
+    @Volatile var serverVersion = "0.11.0"
     val network = Ed25519.keyPairFromSeed(ByteArray(32) { 9 })
     /** The current manifest's sig_v1_until_ms (D109): set by [publish]; the node verifies and signs under it. */
     @Volatile var sigV1UntilMs = 0L; private set
@@ -239,6 +241,71 @@ class FakeNode(private val clock: () -> Long, val nodeId: ByteArray = ByteArray(
         return RecordCodec.sign(RecordCodec.body(RecordType.DIRECTORY_ENTRY, uid, e.toByteArray(), createdMs = now + 1), acc, sig)
     }
 
+    // ---- M9.5 visible set (D135/D137): the Go service's rules over [directoryRecords] ----
+    /** directory.lookup answers come from here when set (hostile node tests). */
+    @Volatile var lookupAnswer: ((String) -> List<Record>?)? = null
+    /** Directory method names the sessions served, in order (see [recordCalls]). */
+    val calls = java.util.concurrent.CopyOnWriteArrayList<String>()
+    /** Clears and returns the live list of directory calls. */
+    fun recordCalls(): List<String> = calls.also { it.clear() }
+    private val networkId16Hex get() = Ids.id16(network.publicKey).hex()
+    /** (user hex, entry) of every DIRECTORY_ENTRY in [directoryRecords]. */
+    fun entries(): List<Pair<String, DirectoryEntry>> = directoryRecords().mapNotNull { r ->
+        val b = body(r)
+        if (b.type != RecordType.DIRECTORY_ENTRY) null else b.author.hex() to DirectoryEntry.parseFrom(b.payload)
+    }
+    private fun inviteBody(e: DirectoryEntry): RecordBody? =
+        if (e.inviteRecord.isEmpty) null else runCatching { body(Record.parseFrom(e.inviteRecord)) }.getOrNull()
+    /** Inviter of an entry from its signed invite record (null for network invites and founding members). */
+    private fun inviterOf(e: DirectoryEntry): String? = inviteBody(e)?.author?.hex()?.takeIf { it != networkId16Hex }
+    private fun inviteIdOf(e: DirectoryEntry): String? =
+        inviteBody(e)?.let { runCatching { Invite.parseFrom(it.payload).inviteId.hex() }.getOrNull() }
+    /** old → new of every REKEY the node serves. */
+    private fun rekeys(): List<Pair<String, String>> = directoryRecords().map(::body).filter { it.type == RecordType.REKEY }
+        .map { app.ottermsg.proto.v1.Rekey.parseFrom(it.payload).let { k -> k.oldUserId.hex() to k.newUserId.hex() } }
+    private fun revokedIds(): Set<String> = directoryRecords().map(::body).filter { it.type == RecordType.REVOCATION }
+        .map { app.ottermsg.proto.v1.Revocation.parseFrom(it.payload).userId.hex() }.toSet()
+
+    /** Direct inviter and invitees of [user] and of its older accounts, each followed to its newest account (D135). */
+    private fun related(user: String, all: List<Pair<String, DirectoryEntry>>): Set<String> {
+        val rk = rekeys()
+        val lineage = HashSet<String>(); val todo = ArrayDeque(listOf(user))
+        while (todo.isNotEmpty()) { val id = todo.removeFirst(); if (lineage.add(id)) rk.filter { it.second == id }.forEach { todo += it.first } }
+        val byId = all.toMap()
+        val direct = lineage.flatMap { l -> listOfNotNull(byId[l]?.let(::inviterOf)) + all.filter { inviterOf(it.second) == l }.map { it.first } }
+        return direct.flatMap { id -> generateSequence(id) { cur -> rk.firstOrNull { it.first == cur }?.second }.take(16).toList() }.toSet()
+    }
+    /** [seeds] plus every invite ancestor, rival redemption (D102) and older account of a re-keyed one (D104, D135). */
+    private fun closure(seeds: Set<String>, all: List<Pair<String, DirectoryEntry>>): Set<String> {
+        val byId = all.toMap(); val rk = rekeys()
+        val keep = HashSet<String>(); val todo = ArrayDeque(seeds)
+        while (todo.isNotEmpty()) {
+            val id = todo.removeFirst(); if (!keep.add(id)) continue
+            val e = byId[id]
+            e?.let(::inviterOf)?.let(todo::add)
+            e?.let(::inviteIdOf)?.let { inv -> all.filter { it.first != id && inviteIdOf(it.second) == inv }.forEach { todo += it.first } }
+            rk.filter { it.second == id }.forEach { todo += it.first }
+        }
+        return keep
+    }
+    private fun entriesOf(keep: Set<String>): List<Record> =
+        directoryRecords().filter { r -> body(r).let { it.type == RecordType.DIRECTORY_ENTRY && it.author.hex() in keep } }
+    /** directory.get: those entries plus their ancestry (no membership records, like the Go service). */
+    fun withAncestry(ids: Set<String>): List<Record> = entriesOf(closure(ids, entries()))
+    /** directory.list (and directory.sync on a 0.11.0 node): own, listed, direct relations, their ancestry, membership. */
+    fun visibleFor(me: ByteArray): List<Record> {
+        val mine = me.hex(); val all = entries()
+        val seeds = related(mine, all) + mine + all.filter { it.second.listed }.map { it.first }
+        val membership = directoryRecords().filter { body(it).type != RecordType.DIRECTORY_ENTRY }
+        return entriesOf(closure(seeds, all)) + membership
+    }
+    /** directory.lookup: exact username (an optional "@", any case), revoked accounts not found. Clash tags not modelled. */
+    fun lookup(username: String): List<Record>? {
+        val q = username.trim().removePrefix("@").lowercase()
+        val id = entries().firstOrNull { it.second.username == q }?.first ?: return null
+        return if (id in revokedIds()) null else withAncestry(setOf(id))
+    }
+
     fun connect(): Session = Session().also { synchronized(lock) { sessions += it } }
 
     private fun sha(b: ByteArray) = MessageDigest.getInstance("SHA-256").digest(b)
@@ -332,6 +399,7 @@ class FakeNode(private val clock: () -> Long, val nodeId: ByteArray = ByteArray(
             val k = keys[userId.hex()]
             val b = LoginResponse.newBuilder().setRegistrationId(k?.registrationId ?: 0).setInstalledMs(lieInstalledMs ?: k?.installedMs ?: 0)
             (fakeInstall ?: installs[userId.hex()]?.first)?.let { b.setInstall(it) }
+            b.setServerVersion(serverVersion)
             return b.build()
         } }
 
@@ -348,7 +416,21 @@ class FakeNode(private val clock: () -> Long, val nodeId: ByteArray = ByteArray(
         } }
 
         override suspend fun manifest(): Record { check(); return manifest }
-        override suspend fun directory(): List<Record> { check(); me(); val d = directoryRecords(); return directoryAnswer?.invoke(d) ?: d }
+        /** The full answer of a node from before 0.11.0 (old-node tests); a 0.11.0 node would filter it like [directoryList]. */
+        override suspend fun directory(): List<Record> { check(); me(); calls += "directory.sync"; val d = directoryRecords(); return directoryAnswer?.invoke(d) ?: d }
+        override suspend fun directoryList(): List<Record> {
+            check(); calls += "directory.list"; val d = visibleFor(me()); return directoryAnswer?.invoke(d) ?: d
+        }
+        override suspend fun directoryGet(ids: List<ByteArray>): List<Record> {
+            check(); me(); calls += "directory.get"
+            if (ids.size > 256) fail(Status.STATUS_INVALID, "at most 256 ids")
+            val d = withAncestry(ids.map { it.hex() }.toSet()); return directoryAnswer?.invoke(d) ?: d
+        }
+        override suspend fun directoryLookup(username: String): List<Record>? {
+            check(); me(); calls += "directory.lookup"
+            lookupAnswer?.let { return it(username) }
+            return lookup(username)
+        }
 
         override suspend fun uploadPrekeys(record: Record) { check(); synchronized(lock) {
             val b = verifyUser(record)

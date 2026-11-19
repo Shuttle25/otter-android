@@ -10,6 +10,8 @@
     <string name="onb_invite_invalid">This invite was not recognised. Check the link or ask for a new one.</string>
     <string name="onb_camera_denied">Scanning needs camera access. You can paste the link instead.</string>
     <string name="onb_invite_from">Invited by %1$s</string>
+    <string name="onb_network_code">Network code: %1$s</string>
+    <string name="onb_network_code_hint">Check it with the person who invited you</string>
     <string name="onb_profile_title">What should we call you</string>
     <string name="onb_profile_name">Name</string>
     <string name="onb_profile_username">Username</string>

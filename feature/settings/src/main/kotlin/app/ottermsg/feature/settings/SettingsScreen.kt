@@ -15,6 +15,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
 import androidx.lifecycle.viewModelScope
 import app.ottermsg.core.data.account.LocalAccount
+import app.ottermsg.core.data.profile.ProfileRepository
+import androidx.compose.material.icons.outlined.TravelExplore
 import app.ottermsg.core.data.settings.Settings as AppSettings
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -74,10 +76,12 @@ class SettingsViewModel internal constructor(
     relayOnly: Flow<Boolean>, private val saveRelayOnly: suspend (Boolean) -> Unit,
     appLockOn: Flow<Boolean> = emptyFlow(), screenSecure: Flow<Boolean> = emptyFlow(),
     private val saveScreenSecure: suspend (Boolean) -> Unit = {}, themeMode: Flow<Int> = emptyFlow(),
+    listed: Flow<Boolean> = emptyFlow(), private val saveListed: suspend (Boolean) -> Unit = {},
 ) : ViewModel() {
-    @Inject constructor(accounts: AccountRepository, sync: SyncEngine, settings: AppSettings) :
+    @Inject constructor(accounts: AccountRepository, sync: SyncEngine, settings: AppSettings, profile: ProfileRepository) :
         this(accounts.account, sync.connection, settings.observeCallsRelayOnly(), { settings.setCallsRelayOnly(it) },
-            settings.observeAppLockOn(), settings.observeScreenSecure(), { settings.setScreenSecure(it) }, settings.observeThemeMode())
+            settings.observeAppLockOn(), settings.observeScreenSecure(), { settings.setScreenSecure(it) }, settings.observeThemeMode(),
+            settings.observeCatalogListed(), { profile.setListed(it) })
 
     /** «Звонки только через сервер» (D79), on by default. */
     val callsRelayOnly: StateFlow<Boolean> = relayOnly.stateIn(viewModelScope, SharingStarted.Eagerly, true)
@@ -91,6 +95,9 @@ class SettingsViewModel internal constructor(
     fun setScreenSecure(v: Boolean) { viewModelScope.launch { saveScreenSecure(v) } }
     /** «Оформление» subtitle (D124). */
     val themeMode: StateFlow<Int> = themeMode.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    /** «Показывать меня в каталоге сети» (D136): signed into our own entry, off by default. */
+    val catalogListed: StateFlow<Boolean> = listed.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    fun setCatalogListed(v: Boolean) { viewModelScope.launch { saveListed(v) } }
 }
 
 fun connectionLabel(state: ConnectionState): Int = when (state) {
@@ -110,6 +117,7 @@ fun SettingsRoute(onBack: () -> Unit, onInvite: () -> Unit, onProfile: () -> Uni
     val appLockOn by vm.appLockOn.collectAsStateWithLifecycle()
     val screenSecure by vm.screenSecure.collectAsStateWithLifecycle()
     val themeMode by vm.themeMode.collectAsStateWithLifecycle()
+    val catalogListed by vm.catalogListed.collectAsStateWithLifecycle()
     val context = LocalContext.current
     // Re-read on every resume: the member may come back from Android's settings with full-screen ringing allowed.
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
@@ -127,6 +135,8 @@ fun SettingsRoute(onBack: () -> Unit, onInvite: () -> Unit, onProfile: () -> Uni
                 icon = Icons.Outlined.Palette, onClick = onAppearance)
             OtterSettingsRow(stringResource(R.string.settings_photos), icon = Icons.Outlined.PhotoLibrary, onClick = onPhotos)
             SecurityRows(appLockOn, onAppLock, screenSecure, vm::setScreenSecure)
+            SwitchRow(stringResource(R.string.settings_catalog_listed), stringResource(R.string.settings_catalog_listed_sub),
+                catalogListed, vm::setCatalogListed, icon = Icons.Outlined.TravelExplore)
             OtterSettingsRow(stringResource(R.string.settings_backup), icon = Icons.Outlined.CloudDone, onClick = onBackup)
             OtterSettingsRow(stringResource(R.string.settings_phrase), icon = Icons.Outlined.Key, onClick = onPhrase)
             val online = connection as? ConnectionState.Online

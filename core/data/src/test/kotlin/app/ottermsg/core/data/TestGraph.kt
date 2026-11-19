@@ -70,9 +70,9 @@ class TestGraph(
     val accounts = AccountRepository(db.accountDao(), settings, SeedVault(XorWrapper), manifests)
     val signal = SignalService(accounts, db.signalKvDao(), db.contactDao(), scope)
     val rekeys = app.ottermsg.core.data.directory.RekeyApplier(db, clock)
-    val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao(), settings, db.accountDao(), db.manifestDao(), db.messageDao(), clock, rekeys)
+    val directory = DirectorySync(accounts, db.contactDao(), db.conversationDao(), settings, db.accountDao(), db.manifestDao(), db.messageDao(), clock, rekeys, db.groupDao())
     val profile = ProfileRepository(accounts, db, settings, clock)
-    val outbox = Outbox(db, accounts, signal, clock, GroupSender(db, signal, clock))
+    val outbox = Outbox(db, accounts, signal, clock, GroupSender(db, signal, clock), directory)
     val files = object : MediaFiles(ApplicationProvider.getApplicationContext()) {
         override val mediaDir get() = java.io.File(ApplicationProvider.getApplicationContext<android.content.Context>().filesDir, "media-$graphId").also { it.mkdirs() }
     }
@@ -97,6 +97,7 @@ class TestGraph(
     @Volatile var session: FakeNode.Session? = null
     private var sessionScope: CoroutineScope? = null
     val invites = InviteRepository(accounts, settings, db.manifestDao(), { session }, clock)
+    val usernameLookup = app.ottermsg.core.data.directory.UsernameLookup(db.contactDao(), directory, { session }, accounts)
     var connector: NodeConnector = object : NodeConnector {
         override suspend fun <T> withNode(candidates: List<app.ottermsg.core.network.Candidate>, block: suspend (NodeApi) -> T): T {
             if (candidates.isEmpty()) throw IOException("no endpoints")
@@ -137,6 +138,13 @@ class TestGraph(
         session = s; sessionScope = sc
         engine.runSession(s, sc)
     }
+
+    /**
+     * M9.5 (D135/D137): unrelated members are not in each other's visible set; [others] are fetched by id as an exact
+     * @username lookup would find them (stored, not in the catalog until a chat or group exists).
+     */
+    suspend fun meet(vararg others: TestGraph) =
+        directory.fetch(session!!, others.filter { it !== this }.map { it.me.userId })
 
     fun offline() {
         sessionScope?.cancel(); sessionScope = null

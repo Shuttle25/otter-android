@@ -75,4 +75,5 @@
     <string name="conv_call_anyway">Позвонить</string>
     <string name="conv_call_unavailable">Звонки недоступны: сервер не обновлён</string>
     <string name="conv_call_mic">Нужен доступ к микрофону</string>
+    <string name="username_link_label">Открыть %1$s</string>
 </resources>

@@ -117,7 +117,8 @@ fun AppNavHost(hasAccount: Boolean, account: StateFlow<LocalAccount?>,
             val context = LocalContext.current
             ConversationRoute(onBack = { nav.popBackStack() }, onOpenGroupInfo = { nav.navigate(Routes.groupInfo(it)) },
                 onMessageInfo = { nav.navigate(Routes.messageInfo(it)) }, onOpenPhoto = { nav.navigate(Routes.photo(it)) },
-                onCallStarted = { context.startActivity(CallActivity.outgoing(context)) })
+                onCallStarted = { context.startActivity(CallActivity.outgoing(context)) },
+                onOpenConversation = { id -> nav.navigate(Routes.conversation(id)) { popUpTo(Routes.CHATS) } })
         }
         composable(Routes.MESSAGE_INFO, arguments = listOf(navArgument(MessageInfoViewModel.ARG_LOCAL_ID) { type = NavType.LongType })) {
             MessageInfoRoute(onBack = { nav.popBackStack() })

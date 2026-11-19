@@ -14,6 +14,7 @@
     <string name="profile_name">Имя</string>
     <string name="profile_username">Имя пользователя</string>
     <string name="profile_username_fixed">нельзя изменить</string>
+    <string name="profile_share_username">Поделиться именем пользователя</string>
     <string name="profile_pending">Имя обновится у близких, когда появится подключение</string>
     <string name="profile_account_code">Код аккаунта</string>
     <string name="profile_account_code_hint">Нужен администратору, если телефон потерян</string>
@@ -80,6 +81,8 @@
     <string name="settings_app_lock_off">Выключена</string>
     <string name="settings_no_screenshots">Запрет скриншотов</string>
     <string name="settings_no_screenshots_sub">Экран Otter не попадёт на снимки и в список недавних приложений</string>
+    <string name="settings_catalog_listed">Показывать меня в каталоге сети</string>
+    <string name="settings_catalog_listed_sub">Узлы и администратор всё равно видят всех участников</string>
     <string name="app_lock_explain">Otter будет спрашивать PIN при открытии. Звонки можно принять без PIN.</string>
     <string name="app_lock_enable">Включить</string>
     <string name="app_lock_new_pin">Придумайте PIN</string>
@@ -117,6 +120,8 @@
     <string name="network_other">Другая сеть</string>
     <string name="network_none">Нет сети</string>
     <string name="network_nodes">Узлы</string>
+    <string name="network_code">Код сети</string>
+    <string name="network_node_version">Версия %1$s</string>
     <string name="network_never">ещё не подключались</string>
     <string name="network_last_ok">удачно %1$s</string>
     <string name="network_last_fail">сбой %1$s</string>

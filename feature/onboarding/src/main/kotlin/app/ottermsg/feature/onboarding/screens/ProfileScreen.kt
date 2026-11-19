@@ -8,9 +8,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import app.ottermsg.core.crypto.NetworkCode
 import app.ottermsg.feature.onboarding.OnboardingUiState
 import app.ottermsg.feature.onboarding.R
 
@@ -23,6 +26,13 @@ fun ProfileScreen(state: OnboardingUiState, onName: (String) -> Unit, onUsername
         bottom = { PrimaryButton(stringResource(R.string.onb_invite_continue), onSubmit) },
     ) {
         state.inviterName?.let { Text(stringResource(R.string.onb_invite_from, it), style = MaterialTheme.typography.bodyLarge) }
+        state.networkCode?.let { code ->
+            val spoken = stringResource(R.string.onb_network_code, NetworkCode.spoken(code))
+            Text(stringResource(R.string.onb_network_code, code), style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.semantics { contentDescription = spoken })
+            Text(stringResource(R.string.onb_network_code_hint), style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         OutlinedTextField(
             value = state.displayName, onValueChange = onName, singleLine = true,
             label = { Text(stringResource(R.string.onb_profile_name)) },

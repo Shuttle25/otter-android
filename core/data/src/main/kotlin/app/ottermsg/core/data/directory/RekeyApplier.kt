@@ -51,6 +51,9 @@ class RekeyApplier @Inject constructor(private val db: OtterDatabase, private va
     }
 
     /** Moves the chat of every winning REKEY not applied yet whose new account is a contact (or us). */
+    /** Every stored winning REKEY (D111). */
+    suspend fun all(): List<RekeyEntity> = db.rekeyDao().all()
+
     suspend fun applyPending(me: ByteArray) {
         for (p in db.rekeyDao().pending()) {
             if (p.newUserId.contentEquals(me) || p.oldUserId.contentEquals(me)) { // our own re-key: nothing to move

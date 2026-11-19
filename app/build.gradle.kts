@@ -34,7 +34,7 @@ android {
     defaultConfig {
         applicationId = "app.ottermsg"
         minSdk = 26; targetSdk = 36
-        versionCode = 14; versionName = "0.10.1"
+        versionCode = 15; versionName = "0.11.0"
         buildConfigField("String", "GIT_HASH", "\"${gitHash.get()}\"")
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") } // phones (D80); x86_64 only for emulator builds
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -122,6 +122,7 @@ dependencies {
     implementation(libs.androidx.hilt.work); ksp(libs.androidx.hilt.compiler)
     testImplementation(libs.junit); testImplementation(libs.robolectric); testImplementation(libs.androidx.test.core)
     testImplementation(libs.coroutines.test); testImplementation(libs.androidx.work.testing)
+    testImplementation(libs.compose.ui.test.junit4); testImplementation(libs.compose.ui.test.manifest)
     "testDebugImplementation"(files(coreDataDebugTestJar))
     "testReleaseImplementation"(files(coreDataReleaseTestJar)); "testStagingImplementation"(files(coreDataReleaseTestJar))
     androidTestImplementation(libs.junit); androidTestImplementation(libs.androidx.test.runner)
