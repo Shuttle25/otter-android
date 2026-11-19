@@ -151,6 +151,7 @@ class SyncEngine @Inject constructor(
             ManifestUpdater.Result.STORED -> news.purgeRevoked() // a news key may have been revoked (D65)
             ManifestUpdater.Result.IGNORED -> {}
         }
+        recordNodeVersion(api, login.serverVersion)
         // any later request answered REVOKED (the node then closes the session)
         session.launch { api.awaitRevokedAnswer(); if (!answeredRevoked(api)) reconnect() }
         directory.sync(api)
@@ -167,6 +168,19 @@ class SyncEngine @Inject constructor(
         session.launch { outbox.run(api) }
         session.launch { backups.runIfDue(api) }
         session.launch { reprobeLoop(api) }
+    }
+
+    /**
+     * D139: the version the node told us in its login answer, keyed by its manifest label (the connection state is
+     * still Connecting here: the manager sets Online after this session's setup). Never ends the session.
+     */
+    private suspend fun recordNodeVersion(api: NodeApi, version: String) {
+        if (version.isEmpty()) return // a node before 0.11.0
+        try {
+            val label = manifests.nodeLabel(api.endpointNodeId ?: api.hello().nodeId.toByteArray()) ?: return
+            settings.setNodeVersion(label, version)
+        } catch (e: CancellationException) { throw e }
+        catch (e: Exception) { log.log(Level.WARNING, "node version not recorded", e) }
     }
 
     /**

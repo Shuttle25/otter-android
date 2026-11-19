@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +19,7 @@ import androidx.compose.material.icons.outlined.BatterySaver
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.SettingsApplications
 import androidx.compose.material.icons.outlined.SignalCellularAlt
+import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material.icons.outlined.WifiOff
 import androidx.compose.material3.MaterialTheme
@@ -30,12 +32,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.currentStateAsState
 import androidx.lifecycle.viewModelScope
+import app.ottermsg.core.crypto.NetworkCode
 import app.ottermsg.core.data.Clock
 import app.ottermsg.core.data.network.CurrentNetwork
 import app.ottermsg.core.data.network.EndpointRow
@@ -72,6 +77,8 @@ data class NetworkStatusUi(
     val nodes: List<NodeRow>,
     val pushMode: PushMode, val googleWake: Boolean, val lastWakeMs: Long,
     val nowMs: Long,
+    /** D139: the 15-digit network code (`ddddd ddddd ddddd`); empty before registration. */
+    val networkCode: String = "",
 )
 
 /** «WSS» / «WS» from the connected URL: the screens name the node by label and transport, never by address. */
@@ -85,12 +92,13 @@ fun transportOf(url: String): String = url.substringBefore("://").uppercase()
 class NetworkStatusViewModel internal constructor(
     connection: StateFlow<ConnectionState>, nodes: suspend () -> List<NodeRow>, network: () -> Pair<String, String>,
     mode: Flow<PushMode>, googleWake: Flow<Boolean>, lastWake: suspend () -> Long, now: () -> Long,
-    tickMs: Long = TICK_MS,
+    tickMs: Long = TICK_MS, networkCode: suspend () -> String = { "" },
 ) : ViewModel() {
     @Inject constructor(status: NetworkStatus, sync: SyncEngine, net: CurrentNetwork, push: PushMonitor,
                         settings: AppSettings, clock: Clock) :
         this(sync.connection, status::nodes, net::current, push.observeMode(), settings.observeGoogleWake(),
-            settings::pushLastWakeMs, clock::now)
+            settings::pushLastWakeMs, clock::now,
+            networkCode = { kotlin.runCatching { NetworkCode.of(settings.networkPub()) }.getOrDefault("") })
 
     private val ticks = flow { while (true) { emit(Unit); delay(tickMs) } }
 
@@ -100,7 +108,7 @@ class NetworkStatusViewModel internal constructor(
             rows.flatMap { it.endpoints }.firstOrNull { it.url == on.url }?.lastSuccessMs
         }
         val (type, operator) = network()
-        NetworkStatusUi(c, since, type, operator, rows, m, w, lastWake(), now())
+        NetworkStatusUi(c, since, type, operator, rows, m, w, lastWake(), now(), networkCode())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private companion object { const val TICK_MS = 10_000L }
@@ -145,6 +153,12 @@ fun NetworkStatusContent(
         val u = ui ?: return@Scaffold
         val time = TimeText(zone, u.nowMs)
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())) {
+            if (u.networkCode.isNotEmpty()) {
+                val spoken = stringResource(R.string.network_code) + ": " + NetworkCode.spoken(u.networkCode)
+                Box(Modifier.semantics(mergeDescendants = true) { contentDescription = spoken }) {
+                    OtterSettingsRow(stringResource(R.string.network_code), subtitle = u.networkCode, icon = Icons.Outlined.VerifiedUser)
+                }
+            }
             Section(stringResource(R.string.network_now))
             NowRow(u, time)
             Section(stringResource(R.string.network_phone))
@@ -218,6 +232,10 @@ private fun NowRow(u: NetworkStatusUi, time: TimeText) {
 private fun NodeCard(node: NodeRow, time: TimeText, nowMs: Long) {
     Column(Modifier.fillMaxWidth().padding(horizontal = Dimens.screenGutter, vertical = Dimens.s8)) {
         Text(node.label, style = MaterialTheme.typography.titleMedium)
+        node.version?.let {
+            Text(stringResource(R.string.network_node_version, it), style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         node.endpoints.forEach { e ->
             Text(endpointLine(e, time, nowMs), style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)

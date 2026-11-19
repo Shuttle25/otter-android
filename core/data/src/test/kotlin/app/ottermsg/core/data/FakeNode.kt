@@ -56,6 +56,8 @@ class FakeNode(private val clock: () -> Long, val nodeId: ByteArray = ByteArray(
      * whose account was disabled by `otter-admin user revoke` — or a hostile node lying it.
      */
     @Volatile var answerRevoked = false
+    /** `LoginResponse.server_version` (D139); "" = a node before 0.11.0. */
+    @Volatile var serverVersion = "0.11.0"
     val network = Ed25519.keyPairFromSeed(ByteArray(32) { 9 })
     /** The current manifest's sig_v1_until_ms (D109): set by [publish]; the node verifies and signs under it. */
     @Volatile var sigV1UntilMs = 0L; private set
@@ -397,6 +399,7 @@ class FakeNode(private val clock: () -> Long, val nodeId: ByteArray = ByteArray(
             val k = keys[userId.hex()]
             val b = LoginResponse.newBuilder().setRegistrationId(k?.registrationId ?: 0).setInstalledMs(lieInstalledMs ?: k?.installedMs ?: 0)
             (fakeInstall ?: installs[userId.hex()]?.first)?.let { b.setInstall(it) }
+            b.setServerVersion(serverVersion)
             return b.build()
         } }
 

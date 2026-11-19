@@ -10,6 +10,8 @@
     <string name="onb_invite_invalid">Приглашение не распознано. Проверьте ссылку или попросите новую.</string>
     <string name="onb_camera_denied">Для сканирования нужен доступ к камере. Можно вставить ссылку вручную.</string>
     <string name="onb_invite_from">Вас приглашает %1$s</string>
+    <string name="onb_network_code">Код сети: %1$s</string>
+    <string name="onb_network_code_hint">Сверьте его с тем, кто вас пригласил</string>
     <string name="onb_profile_title">Как вас называть</string>
     <string name="onb_profile_name">Имя</string>
     <string name="onb_profile_username">Имя пользователя</string>

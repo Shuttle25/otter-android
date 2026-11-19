@@ -2,6 +2,7 @@ package app.ottermsg.feature.settings
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -34,10 +35,11 @@ class NetworkStatusScreenTest {
         connection = ConnectionState.Waiting(noon + 5_000, "failed to connect to /203.0.113.7 (port 443)"),
         sinceMs = null, network = "mobile", operator = "Оператор",
         nodes = listOf(
-            NodeRow("fi", listOf(ep("wss:443", success = now - 60_000), ep("wss:443", cdn = true))),
+            NodeRow("fi", listOf(ep("wss:443", success = now - 60_000), ep("wss:443", cdn = true)), version = "0.11.0"),
             NodeRow("ru", listOf(ep("wss:27443", failure = now - 120_000, demoted = noon))),
         ),
         pushMode = PushMode.FAST, googleWake = true, lastWakeMs = now - 300_000, nowMs = now,
+        networkCode = "92144 18366 54483",
     )
 
     private fun show(u: NetworkStatusUi, restricted: Boolean, onBattery: () -> Unit = {}, onAppDetails: () -> Unit = {},
@@ -88,6 +90,20 @@ class NetworkStatusScreenTest {
         compose.onNodeWithText("Нет сети").assertIsDisplayed()
         compose.onNodeWithText("Журнал подключений").performScrollTo().performClick()
         assertTrue(opened)
+    }
+
+    @Test fun networkCodeOnTopAndVersionOnlyForReachedNodes() {
+        show(ui, restricted = false)
+        compose.onNodeWithText("Код сети").assertIsDisplayed()
+        compose.onNodeWithText("92144 18366 54483").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Код сети: 9 2 1 4 4 1 8 3 6 6 5 4 4 8 3").assertExists()
+        compose.onNodeWithText("Версия 0.11.0").performScrollTo().assertIsDisplayed()
+        assertEquals(1, compose.onAllNodesWithTextCount("Версия", substring = true)) // ru was never reached
+    }
+
+    @Test fun noCodeRowWithoutANetworkKey() {
+        show(ui.copy(networkCode = ""), restricted = false)
+        assertEquals(0, compose.onAllNodesWithTextCount("Код сети"))
     }
 
     @Test fun transportIsNamedFromTheUrlScheme() {

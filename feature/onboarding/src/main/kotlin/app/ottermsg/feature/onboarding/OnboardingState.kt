@@ -8,6 +8,8 @@ enum class OnboardingStep {
 data class OnboardingUiState(
     val step: OnboardingStep = OnboardingStep.WELCOME,
     val link: String = "", val linkError: Int? = null, val inviterName: String? = null,
+    /** D139: the 15-digit code of the network the link leads to, checked with the inviter. */
+    val networkCode: String? = null,
     val displayName: String = "", val username: String = "", val profileError: Int? = null,
     val words: List<String> = emptyList(), val confirmPositions: List<Int> = emptyList(),
     val confirmInputs: List<String> = listOf("", "", ""), val confirmError: Boolean = false,

@@ -212,6 +212,19 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
     suspend fun fullScreenIntentAsked(): Boolean = (int(FSI_ASKED) ?: 0) != 0
     suspend fun setFullScreenIntentAsked() = putInt(FSI_ASKED, 1)
 
+    // ---- node versions (D139) ----
+    /** Last `LoginResponse.server_version` per node label (manifest label → version), stored as "label=version" lines. */
+    suspend fun nodeVersions(): Map<String, String> = dao.get(NODE_VERSIONS)?.decodeToString().orEmpty()
+        .lines().filter { '=' in it }.associate { it.substringBefore('=') to it.substringAfter('=') }
+    /** Records [version] for [label]; an empty version (a node before 0.11.0) or a line break in either is ignored. */
+    suspend fun setNodeVersion(label: String, version: String) {
+        if (label.isEmpty() || version.isEmpty() || '=' in label || '\n' in label + version) return
+        val cur = nodeVersions()
+        if (cur[label] == version) return
+        val m = cur + (label to version)
+        dao.put(SettingEntity(NODE_VERSIONS, m.entries.joinToString("\n") { "${it.key}=${it.value}" }.encodeToByteArray()))
+    }
+
     // ---- app lock (D121), screenshots, appearance (D124) ----
     /** salt ‖ Argon2id(PIN) (PinHash); null = app lock off. */
     suspend fun appLockHash(): ByteArray? = dao.get(APP_LOCK_HASH)
@@ -237,6 +250,7 @@ class Settings @Inject constructor(private val dao: SettingsDao) {
     suspend fun setThemeMode(v: Int) = putInt(THEME_MODE, v)
 
     companion object {
+        const val NODE_VERSIONS = "node_versions"
         const val APP_LOCK_HASH = "app_lock_hash"
         const val APP_LOCK_BIO = "app_lock_biometric"
         const val APP_LOCK_TIMEOUT = "app_lock_timeout_ms"

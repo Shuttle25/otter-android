@@ -91,6 +91,13 @@ class ManifestUpdater @Inject constructor(
         return parse(latest.raw, settings.networkPub())?.nodesList?.map { it.nodeId.toByteArray() } ?: emptyList()
     }
 
+    /** Manifest label of [nodeId] in the latest stored manifest; null if it is not listed. */
+    suspend fun nodeLabel(nodeId: ByteArray): String? {
+        val latest = manifests.latest() ?: return null
+        return parse(latest.raw, settings.networkPub())?.nodesList
+            ?.firstOrNull { it.nodeId.toByteArray().contentEquals(nodeId) }?.label?.ifEmpty { null }
+    }
+
     /** News keys of the latest stored manifest (D65); empty if there is none. */
     override suspend fun newsKeys(): List<ByteArray> {
         val latest = manifests.latest() ?: return emptyList()

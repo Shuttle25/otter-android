@@ -37,4 +37,17 @@ class SyncEngineManifestTest {
         assertEquals(5L, a.db.manifestDao().latest()!!.version)
         assertEquals(1, reconnects.get()) // the node we logged in to is no longer listed
     }
+
+    @Test fun loginRecordsTheNodeVersionByItsManifestLabel() = runBlocking {
+        a.register(node.bootstrapLink(), "Мама", "mama").getOrThrow()
+        node.serverVersion = ""   // a node before 0.11.0 sends none
+        a.online()
+        assertEquals(emptyMap<String, String>(), a.settings.nodeVersions())
+        node.serverVersion = "0.11.0"
+        a.online()
+        assertEquals(mapOf("fake" to "0.11.0"), a.settings.nodeVersions())
+        node.serverVersion = "0.11.1"
+        a.online()
+        assertEquals(mapOf("fake" to "0.11.1"), a.settings.nodeVersions())
+    }
 }

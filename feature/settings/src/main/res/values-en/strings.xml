@@ -120,6 +120,8 @@
     <string name="network_other">Other network</string>
     <string name="network_none">No network</string>
     <string name="network_nodes">Nodes</string>
+    <string name="network_code">Network code</string>
+    <string name="network_node_version">Version %1$s</string>
     <string name="network_never">not connected yet</string>
     <string name="network_last_ok">ok %1$s</string>
     <string name="network_last_fail">failed %1$s</string>

@@ -120,6 +120,8 @@
     <string name="network_other">Другая сеть</string>
     <string name="network_none">Нет сети</string>
     <string name="network_nodes">Узлы</string>
+    <string name="network_code">Код сети</string>
+    <string name="network_node_version">Версия %1$s</string>
     <string name="network_never">ещё не подключались</string>
     <string name="network_last_ok">удачно %1$s</string>
     <string name="network_last_fail">сбой %1$s</string>
