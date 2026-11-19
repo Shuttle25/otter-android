@@ -54,7 +54,7 @@ class MailboxReceiver @Inject constructor(
         val ctx = accounts.sigContext() // D109: v2 for this network, v1 only before the cut-over
         groups.expirePending()
         val acks = mutableListOf<ByteArray>()
-        var directorySynced = false
+        var directoryFetched = false
         for (rec in records) {
             val body = runCatching { RecordBody.parseFrom(rec.body) }.getOrNull() ?: continue
             if (body.type != RecordType.ENVELOPE) continue
@@ -63,9 +63,13 @@ class MailboxReceiver @Inject constructor(
             if (seen.exists(key)) { acks += key; continue }
             // a link-only contact (C23) is not trusted to sign envelopes
             var sender = contacts.get(body.author.toByteArray())?.takeIf { it.entryVersion > 0 }
-            if (sender == null && !directorySynced) {
-                directorySynced = true
-                runCatching { directory.sync(api) }.onFailure { if (it is CancellationException) throw it }
+            if (sender == null && !directoryFetched) {
+                directoryFetched = true
+                // M9.5 (D137): the sender by id with its invite ancestry, not the whole visible set
+                val unknown = records.mapNotNull { r -> runCatching { RecordBody.parseFrom(r.body) }.getOrNull()
+                    ?.takeIf { it.type == RecordType.ENVELOPE }?.author?.toByteArray() }
+                    .filter { contacts.get(it)?.takeIf { c -> c.entryVersion > 0 } == null }
+                runCatching { directory.fetch(api, unknown) }.onFailure { if (it is CancellationException) throw it }
                 sender = contacts.get(body.author.toByteArray())?.takeIf { it.entryVersion > 0 }
             }
             if (sender == null) continue // keep it on the node; retry on a later delivery

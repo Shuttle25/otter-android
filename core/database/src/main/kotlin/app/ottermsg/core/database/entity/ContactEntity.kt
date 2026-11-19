@@ -16,4 +16,8 @@ data class ContactEntity(
     val revoked: Boolean,
     @ColumnInfo(name = "entry_version") val entryVersion: Long,
     @ColumnInfo(name = "reset_ms", defaultValue = "0") val resetMs: Long = 0, // last SessionReset we sent (D53)
+    /** The signed «Показывать меня в каталоге сети» of the entry (D136); a node cannot set it. */
+    @ColumnInfo(defaultValue = "0") val listed: Boolean = false,
+    /** My direct inviter or invitee, from the signed invite chain (D136). */
+    @ColumnInfo(defaultValue = "0") val related: Boolean = false,
 )

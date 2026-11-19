@@ -42,8 +42,9 @@ class GroupFlowTest {
             g.register(a.invites.create().link, names[i].first, names[i].second).getOrThrow()
             g.online()
         }
-        eventually(what = "everyone knows everyone") {
-            gs.all { x -> gs.all { y -> x === y || x.db.contactDao().get(y.me.userId) != null } }
+        // M9.5 (D135): A and each invitee know each other; siblings learn each other from a group (fetched by id)
+        eventually(what = "inviter and invitees know each other") {
+            gs.drop(1).all { y -> a.db.contactDao().get(y.me.userId) != null && y.db.contactDao().get(a.me.userId)?.entryVersion?.let { it > 0 } == true }
         }
     }
 
@@ -267,6 +268,7 @@ class GroupFlowTest {
      */
     @Test fun soleAdminIsSwappedByTheLowestMember() = runBlocking {
         family(a, b, c, d)
+        c.meet(b) // M9.5: siblings; C looks B up (@username) before putting B in a group
         val gid = checkNotNull(c.db.conversationDao().get(c.groups.create("Дача", false, listOf(a.me.userId, b.me.userId)))!!.groupId)
         for (g in listOf(a, b)) eventually(what = "v1") { g.version(gid) == 1L }
         c.goOffline()

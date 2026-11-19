@@ -28,6 +28,8 @@ import kotlinx.coroutines.flow.Flow
     @Query("SELECT COUNT(*) FROM group_members WHERE group_id = :groupId AND user_id = :userId") suspend fun isMember(groupId: ByteArray, userId: ByteArray): Int
     @Query("DELETE FROM group_members WHERE group_id = :groupId") suspend fun clearMembers(groupId: ByteArray)
     @Query("SELECT group_id FROM group_members WHERE user_id = :userId") suspend fun groupsWithMember(userId: ByteArray): List<ByteArray>
+    /** Every member of every group this phone knows (M9.5: refreshed by id, D137). */
+    @Query("SELECT DISTINCT user_id FROM group_members") suspend fun memberIds(): List<ByteArray>
     @Insert suspend fun insertMembers(m: List<GroupMemberEntity>)
     @Transaction suspend fun replaceMembers(groupId: ByteArray, m: List<GroupMemberEntity>) { clearMembers(groupId); insertMembers(m) }
 

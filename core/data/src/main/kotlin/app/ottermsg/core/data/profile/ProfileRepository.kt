@@ -90,7 +90,7 @@ class ProfileRepository @Inject constructor(
                 if (!_pending.value) return@withLock
             } catch (e: RpcException) {
                 if (e.status != Status.STATUS_CONFLICT) throw e
-                val mine = api.directory().mapNotNull { ownVersion(it, me.userId) }.maxOrNull() ?: throw e
+                val mine = api.directoryList().mapNotNull { ownVersion(it, me.userId) }.maxOrNull() ?: throw e
                 settings.setEntryVersion(maxOf(mine, settings.entryVersion()))
             }
         }
@@ -103,7 +103,7 @@ class ProfileRepository @Inject constructor(
     private suspend fun ownInvite(api: NodeApi, me: ByteArray): Pair<ByteArray, ByteArray>? {
         settings.ownInvite()?.let { return it }
         val ctx = accounts.sigContext()
-        val e = api.directory().mapNotNull { DirectorySync.verifyEntry(it, ctx) }
+        val e = api.directoryList().mapNotNull { DirectorySync.verifyEntry(it, ctx) }
             .filter { it.userId.toByteArray().contentEquals(me) && !it.inviteRecord.isEmpty }
             .maxByOrNull { it.version } ?: return null
         settings.setOwnInvite(e.inviteRecord.toByteArray(), e.inviteProof.toByteArray())

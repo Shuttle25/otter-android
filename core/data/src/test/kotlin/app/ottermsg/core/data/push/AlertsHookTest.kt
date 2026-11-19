@@ -40,8 +40,9 @@ class AlertsHookTest {
         b.online()
         c.register(a.invites.create().link, "Вера", "vera").getOrThrow()
         c.online()
-        eventually(what = "everyone knows everyone") {
-            listOf(a, b, c).all { x -> listOf(a, b, c).all { y -> x === y || x.db.contactDao().get(y.me.userId) != null } }
+        // M9.5 (D135): B and C are siblings (both invited by A): they learn each other from the group below
+        eventually(what = "inviter and invitees know each other") {
+            listOf(b, c).all { y -> a.db.contactDao().get(y.me.userId) != null && y.db.contactDao().get(a.me.userId)?.entryVersion?.let { it > 0 } == true }
         }
 
         // Direct: A → B "hi"

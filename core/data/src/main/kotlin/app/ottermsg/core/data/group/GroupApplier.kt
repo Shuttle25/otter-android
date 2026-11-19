@@ -106,6 +106,7 @@ class GroupApplier @Inject constructor(
         if (verdict == Verdict.Accept) {
             accepted += gid
             retryParked(gid)
+            if (api != null) fetchUnknownMembers(gid, api)
         }
         if (verdict != Verdict.Accept) log.fine("group update ${verdict}")
         return Result(verdict, gid, accepted)
@@ -129,8 +130,22 @@ class GroupApplier @Inject constructor(
         }
         known()?.let { return it }
         if (api == null) return SignerKey.Unknown
-        try { directory.sync(api) } catch (e: CancellationException) { throw e } catch (e: Exception) { return SignerKey.Unknown }
+        try { directory.fetch(api, listOf(signer)) } catch (e: CancellationException) { throw e } catch (e: Exception) { return SignerKey.Unknown }
         return known() ?: SignerKey.Unknown
+    }
+
+    /**
+     * M9.5 (D137): members this phone has no entry for (not in its visible set) are fetched by id, so their keys are
+     * known before anything is sent to the group; a failure waits for the next directory sync (it refreshes members).
+     */
+    private suspend fun fetchUnknownMembers(gid: ByteArray, api: NodeApi) {
+        val me = accounts.require().userId
+        val unknown = groups.members(gid).map { it.userId }
+            .filter { !it.contentEquals(me) && contacts.get(it)?.takeIf { c -> c.entryVersion > 0 } == null }
+        if (unknown.isEmpty()) return
+        try { directory.fetch(api, unknown) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            log.fine("group members not fetched: ${e.message}")
+        }
     }
 
     /** Revoked on this phone: REVOCATION or duplicate-invite loser (sticky `revoked` flag), or the old side of a verified REKEY. */

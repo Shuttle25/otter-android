@@ -102,4 +102,16 @@ class MigrationTest {
             db.query("SELECT COUNT(*) FROM outbox WHERE expires_ms = 0").use { c -> c.moveToFirst(); assertEquals(1, c.getInt(0)) }
         }
     }
+
+    @Test fun migrate9To10AddsListedAndRelated() {
+        helper.createDatabase("m10.db", 9).use {
+            it.execSQL("""INSERT INTO contacts(user_id, username, display_name, account_pub, identity_pub, verified, identity_changed, revoked, entry_version, reset_ms)
+                          VALUES (x'01', 'anna', 'Анна', x'02', x'03', 1, 0, 0, 1, 0)""")
+        }
+        helper.runMigrationsAndValidate("m10.db", 10, true).use { db ->
+            db.query("SELECT username, listed, related FROM contacts").use { c ->
+                c.moveToFirst(); assertEquals("anna", c.getString(0)); assertEquals(0, c.getInt(1)); assertEquals(0, c.getInt(2))
+            }
+        }
+    }
 }

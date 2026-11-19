@@ -149,7 +149,8 @@ class Registration @Inject constructor(
             if (!bundle.inviterUserId.isEmpty && inviterPub.size == 32 &&
                 bundle.inviterUserId.toByteArray().contentEquals(Ids.id16(inviterPub))) db.contactDao().upsert(ContactEntity(
                 bundle.inviterUserId.toByteArray(), "", bundle.inviterName, inviterPub,
-                bundle.inviterIdentityPub.toByteArray(), verified = false, identityChanged = false, revoked = false, entryVersion = 0))
+                bundle.inviterIdentityPub.toByteArray(), verified = false, identityChanged = false, revoked = false, entryVersion = 0,
+                related = true)) // my inviter (D136): in «Написать» from the start
         }
         accounts.load()
     }
