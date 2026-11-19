@@ -48,6 +48,10 @@ class MainViewModel @Inject constructor(
     /** The network administrator disabled this account (verified, C2): the app only says so. */
     val revoked: StateFlow<Boolean> = settings.observeAccountRevoked().stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    /** A node sent a manifest of another network (D139): «Сеть изменилась» until dismissed; in memory only. */
+    val networkChanged: StateFlow<Boolean> = engine.networkChanged
+    fun dismissNetworkChanged() = engine.dismissNetworkChanged()
+
     /** «Запрет скриншотов» (D121): FLAG_SECURE on this window while on. */
     val screenSecure: StateFlow<Boolean> = settings.observeScreenSecure().stateIn(viewModelScope, SharingStarted.Eagerly, false)
     /** «Оформление» (D124): ThemeMode ordinal; 0 = as the system. */
@@ -82,6 +86,7 @@ class MainActivity : FragmentActivity() {
                     // Blank themed surface while the local account and the lock state load (local and fast).
                     val superseded by vm.superseded.collectAsStateWithLifecycle()
                     val revoked by vm.revoked.collectAsStateWithLifecycle()
+                    val networkChanged by vm.networkChanged.collectAsStateWithLifecycle()
                     val lockReady by appLock.initialized.collectAsStateWithLifecycle()
                     val locked by appLock.locked.collectAsStateWithLifecycle()
                     val lockOn by appLock.enabled.collectAsStateWithLifecycle()
@@ -94,6 +99,7 @@ class MainActivity : FragmentActivity() {
                     when {
                         !lockReady -> Unit
                         locked -> LockScreen(appLock, this@MainActivity) // before «Этот телефон снова главный» too
+                        networkChanged -> NetworkChangedScreen(onDismiss = vm::dismissNetworkChanged)
                         revoked -> RevokedScreen()
                         superseded -> SupersededScreen(onReclaim = vm::reclaim)
                         else -> hasAccount?.let { has ->

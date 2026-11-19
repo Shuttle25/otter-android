@@ -40,6 +40,26 @@ class ManifestUpdaterTest {
         assertTrue(g.db.manifestDao().latest()!!.receivedMs > 0)
     }
 
+    /** A manifest of another network: validly signed by its own key (D139). */
+    private fun foreignManifest(version: Long): app.ottermsg.proto.v1.Record {
+        val k = app.ottermsg.core.crypto.Ed25519.keyPairFromSeed(ByteArray(32) { 7 })
+        val m = Manifest.newBuilder().setVersion(version).setIssuedMs(version).setNetworkPub(bs(k.publicKey))
+            .addNodes(nodeInfo(1, "evil", "evil", ByteArray(32) { 5 })).build()
+        return RecordCodec.sign(RecordCodec.body(RecordType.MANIFEST, Ids.id16(k.publicKey), m.toByteArray(), createdMs = version), k,
+            app.ottermsg.core.crypto.SigContext(Ids.id16(k.publicKey), 0))
+    }
+
+    @Test fun foreignManifestIsReportedAndNotStored() = runBlocking {
+        g.register(node.bootstrapLink(), "Мама", "mama").getOrThrow() // stores v1
+        val foreign = foreignManifest(9)
+        assertEquals(Result.FOREIGN, m.offer(foreign.toByteArray(), node.nodeId))
+        assertEquals(1L, g.db.manifestDao().latest()!!.version)
+        assertEquals(listOf("fake"), m.candidates(true).map { it.label })
+        // a broken signature is noise, not a network change
+        val broken = foreign.toBuilder().setSignature(bs(foreign.signature.toByteArray().also { it[3] = (it[3] + 1).toByte() })).build()
+        assertEquals(Result.IGNORED, m.offer(broken.toByteArray(), node.nodeId))
+    }
+
     private fun nodeInfo(id: Int, label: String, host: String, pin: ByteArray): NodeInfo =
         NodeInfo.newBuilder().setNodeId(bs(ByteArray(16) { id.toByte() })).setLabel(label)
             .addEndpoints(Endpoint.newBuilder().setKind(Endpoint.Kind.WSS).setHost(host).setPort(443).setPath("/p")

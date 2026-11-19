@@ -33,7 +33,8 @@ interface SigContexts {
 class ManifestUpdater @Inject constructor(
     private val manifests: ManifestDao, private val settings: Settings, private val clock: Clock,
 ) : NewsKeys, SigContexts {
-    enum class Result { IGNORED, STORED, STORED_NODE_REMOVED }
+    /** [FOREIGN]: validly signed by another network's key (D139): nothing stored, the app warns «Сеть изменилась». */
+    enum class Result { IGNORED, STORED, STORED_NODE_REMOVED, FOREIGN }
 
     private val mutex = Mutex()
 
@@ -44,6 +45,10 @@ class ManifestUpdater @Inject constructor(
             // a cut-over manifest is v2-signed, which is always accepted; after it a v1 manifest is not (D109)
             ManifestVerifier.verify(raw, settings.networkPub(), current, sigContext().v1UntilMs)
         } catch (e: ManifestException) {
+            if (ManifestVerifier.foreignNetwork(raw, settings.networkPub())) {
+                log.warning("manifest of another network: not stored")
+                return@withLock Result.FOREIGN
+            }
             log.info("manifest ignored: ${e.message}")
             return@withLock Result.IGNORED
         }

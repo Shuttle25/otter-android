@@ -35,6 +35,7 @@ import app.ottermsg.proto.v1.RecordBatch
 import app.ottermsg.proto.v1.RecordBody
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -86,6 +87,20 @@ class SyncEngine @Inject constructor(
     fun startWake() { manager.nextHeadStartMs = WAKE_HEAD_START_MS; acquire(WAKE) }
 
     suspend fun outboxHasDue(): Boolean = outbox.hasDue()
+
+    private val _networkChanged = MutableStateFlow(false)
+    /**
+     * D139: a node sent a manifest validly signed by another network's key. In memory only (one hostile node must not
+     * lock the app on every start); the app shows «Сеть изменилась» while true, and «Понятно» clears it until restart.
+     */
+    val networkChanged: StateFlow<Boolean> = _networkChanged
+    fun dismissNetworkChanged() { networkChangedDismissed = true; _networkChanged.value = false }
+    @Volatile private var networkChangedDismissed = false
+
+    private fun foreignManifest() {
+        log.warning("manifest of another network from this node")
+        if (!networkChangedDismissed) _networkChanged.value = true
+    }
 
     /** Set once another phone restored this account (D52): the engine never connects again. */
     @Volatile private var superseded = false
@@ -150,6 +165,7 @@ class SyncEngine @Inject constructor(
             }
             ManifestUpdater.Result.STORED -> news.purgeRevoked() // a news key may have been revoked (D65)
             ManifestUpdater.Result.IGNORED -> {}
+            ManifestUpdater.Result.FOREIGN -> foreignManifest()
         }
         recordNodeVersion(api, login.serverVersion)
         // any later request answered REVOKED (the node then closes the session)
@@ -263,6 +279,7 @@ class SyncEngine @Inject constructor(
                         ManifestUpdater.Result.STORED_NODE_REMOVED -> { news.purgeRevoked(); reconnect() }
                         ManifestUpdater.Result.STORED -> news.purgeRevoked()
                         ManifestUpdater.Result.IGNORED -> {}
+                        ManifestUpdater.Result.FOREIGN -> foreignManifest()
                     }
                 }
             }

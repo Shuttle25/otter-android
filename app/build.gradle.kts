@@ -122,6 +122,7 @@ dependencies {
     implementation(libs.androidx.hilt.work); ksp(libs.androidx.hilt.compiler)
     testImplementation(libs.junit); testImplementation(libs.robolectric); testImplementation(libs.androidx.test.core)
     testImplementation(libs.coroutines.test); testImplementation(libs.androidx.work.testing)
+    testImplementation(libs.compose.ui.test.junit4); testImplementation(libs.compose.ui.test.manifest)
     "testDebugImplementation"(files(coreDataDebugTestJar))
     "testReleaseImplementation"(files(coreDataReleaseTestJar)); "testStagingImplementation"(files(coreDataReleaseTestJar))
     androidTestImplementation(libs.junit); androidTestImplementation(libs.androidx.test.runner)
