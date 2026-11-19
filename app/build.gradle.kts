@@ -34,7 +34,7 @@ android {
     defaultConfig {
         applicationId = "app.ottermsg"
         minSdk = 26; targetSdk = 36
-        versionCode = 14; versionName = "0.10.1"
+        versionCode = 15; versionName = "0.11.0"
         buildConfigField("String", "GIT_HASH", "\"${gitHash.get()}\"")
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") } // phones (D80); x86_64 only for emulator builds
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
